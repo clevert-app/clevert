@@ -1,5 +1,5 @@
 pub mod cui;
-mod task_types;
+mod order_types;
 mod toml_helper;
 use cui::print_log;
 use std::convert::TryInto;
@@ -47,7 +47,7 @@ impl Foundry {
             console.stderr.file = './stderr.log' # TODO: log file
 
             [presets.cwebp]
-            type = 'file-process.from-folder'
+            type = 'file_processing.from_folder'
             program = 'cwebp.exe'
             args.template = '{switches} {input.file_path} -o {output.file_path}' # TODO: trope "{{" to real "{"
             args.switches = '-m 6'
@@ -59,9 +59,9 @@ impl Foundry {
             preset = 'cwebp'
             args.switches = '-lossless -m 6 -noalpha -sharp_yuv -metadata none'
 
-            [[tasks]]
+            [[orders]]
             preset = 'cwebp_lossless'
-            program = 'D:\Library\libwebp\libwebp_1.0.0\bin\1cwebp.exe'
+            program = 'D:\Library\libwebp\libwebp_1.0.0\bin\cwebp.exe'
             input.folder = 'D:\Temp\foundry_test\source'
             output.folder = 'D:\Temp\foundry_test\target'
             output.file_name.prefix = 'out_'
@@ -84,8 +84,8 @@ impl Foundry {
 
     fn load_config_str(cfg: Value) -> Result<Foundry, String> {
         let presets = cfg.seek("presets")?;
-        let mut tasks = Vec::new();
-        for task_cfg in cfg.seek_array("tasks")? {
+        let mut orders = Vec::new();
+        for order_cfg in cfg.seek_array("orders")? {
             fn fill_vacancy(src: &mut Value, default: &Value) -> Option<()> {
                 let src_table = src.as_table_mut()?;
                 for (key, value) in default.as_table()? {
@@ -115,44 +115,44 @@ impl Foundry {
                 Ok(())
             }
 
-            let task_cfg = &mut task_cfg.clone();
-            if let Ok(preset_name) = task_cfg.seek_str("preset") {
+            let order_cfg = &mut order_cfg.clone();
+            if let Ok(preset_name) = order_cfg.seek_str("preset") {
                 let preset_name = preset_name.to_string();
-                inherit_fill(task_cfg, presets, &preset_name, 0)?;
+                inherit_fill(order_cfg, presets, &preset_name, 0)?;
             }
-            fill_vacancy(task_cfg, presets.seek("default")?);
+            fill_vacancy(order_cfg, presets.seek("default")?);
 
-            let commands = {
-                use task_types::*;
-                match task_cfg.seek_str("type")? {
-                    "file-process.from-folder" => file_process::from_folder(task_cfg)?,
-                    // "file-process.process-args" => file_process::from_process_args(task_cfg)?,
-                    _ => return Err("unknown task type".into()),
+            let tasks = {
+                use order_types::*;
+                match order_cfg.seek_str("type")? {
+                    "file_processing.from_folder" => file_processing::from_folder(order_cfg)?,
+                    // "file_processing.from_args" => file_processing::from_args(order_cfg)?,
+                    _ => return Err("unknown order type".into()),
                 }
             };
 
-            if commands.is_empty() {
+            if tasks.is_empty() {
                 continue;
             }
 
-            let console_cfg = task_cfg.seek("console")?;
+            let console_cfg = order_cfg.seek("console")?;
             let msg_cfg = console_cfg.seek("msg")?;
             let stdout_cfg = console_cfg.seek("stdout")?;
             let stderr_cfg = console_cfg.seek("stderr")?;
-            let threads_cfg = task_cfg.seek("threads")?;
+            let threads_cfg = order_cfg.seek("threads")?;
             // let threads_priority = threads_cfg.seek_as_str("priority")?; // unable to cross platform?
 
-            tasks.push(Order {
+            orders.push(Order {
                 threads_count: threads_cfg.seek_i32("count")?,
                 print_progress_msg: msg_cfg.seek_bool("progress")?,
-                commands,
+                tasks,
                 stdout: match stdout_cfg.seek_str("type")? {
                     "normal" => OrderStdio::Normal,
                     "ignore" => OrderStdio::Ignore,
                     "file" => return Err("log file io function is still developing".into()),
                     // let path_str = stdout_cfg.get("file")?.as_str()?;
                     // let mut file = File::open(path_str).unwrap();
-                    // AutoCommanderTaskStdIo::File(file)
+                    // OrderStdIo::File(file)
                     _ => return Err("unknown stdout type".into()),
                 },
                 stderr: match stderr_cfg.seek_str("type")? {
@@ -164,27 +164,27 @@ impl Foundry {
             });
         }
 
-        if tasks.is_empty() {
+        if orders.is_empty() {
             return Err("tasks' count is less than 1".into());
         }
 
-        Ok(Foundry { tasks })
+        Ok(Foundry { orders })
     }
 }
 
 struct Foundry {
-    tasks: Vec<Order>,
+    orders: Vec<Order>,
 }
 
 impl Foundry {
     fn new() -> Result<Foundry, String> {
         Foundry::from_local_config_file()
-        // AutoCommander::_from_test_config_str()
+        // Foundry::_from_test_config_str()
     }
 
     fn start(&self) -> Result<(), String> {
-        for task in &self.tasks {
-            task.execute()?;
+        for order in &self.orders {
+            order.execute()?;
         }
         Ok(())
     }
@@ -199,7 +199,7 @@ enum OrderStdio {
 struct Order {
     threads_count: i32,
     print_progress_msg: bool,
-    commands: Vec<OrderItem>,
+    tasks: Vec<Task>,
     stdout: OrderStdio,
     stderr: OrderStdio,
 }
@@ -210,8 +210,8 @@ impl Order {
         let iter = commands.into_iter();
         let iter_mutex = Arc::new(Mutex::new(iter));
         if self.print_progress_msg {
-            let commands_count: i32 = self.commands.len().try_into().unwrap();
-            let commands_count: f64 = commands_count.into();
+            let amount: i32 = self.tasks.len().try_into().unwrap();
+            let amount: f64 = amount.into();
             let iter_mutex = Arc::clone(&iter_mutex);
             thread::spawn(move || loop {
                 let remaining = {
@@ -223,12 +223,12 @@ impl Order {
                 }
                 let remaining: i32 = remaining.try_into().unwrap();
                 let remaining: f64 = remaining.into();
-                let completed_count = commands_count - remaining;
+                let completed = amount - remaining;
                 print_log::info(format!(
                     "progress: {} / {} ({:.0}%)",
-                    completed_count,
-                    commands_count,
-                    completed_count / commands_count * 100.0
+                    completed,
+                    amount,
+                    completed / amount * 100.0
                 ));
                 thread::sleep(time::Duration::from_secs(1));
             });
@@ -250,8 +250,8 @@ impl Order {
 
     fn prepare(&self) -> Vec<Command> {
         let mut commands = Vec::new();
-        for auto_command in &self.commands {
-            let mut command = auto_command.generate();
+        for task in &self.tasks {
+            let mut command = task.generate();
             {
                 use OrderStdio::*;
                 match &self.stdout {
@@ -294,12 +294,12 @@ impl Order {
     }
 }
 
-pub struct OrderItem {
+pub struct Task {
     program: String,
     args: Vec<String>,
 }
 
-impl OrderItem {
+impl Task {
     fn generate(&self) -> Command {
         let mut command = Command::new(&self.program);
         command.args(&self.args);

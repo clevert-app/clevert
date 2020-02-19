@@ -1,18 +1,18 @@
 use crate::toml_helper::Seek;
-use crate::OrderItem;
+use crate::Task;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use toml::Value;
 
-pub mod file_process {
+pub mod file_processing {
     use super::*;
 
     fn generate_output_file_path(
-        task_cfg: &Value,
+        order_cfg: &Value,
         input_file_path: &PathBuf,
     ) -> Result<PathBuf, String> {
-        let output_cfg = task_cfg.seek("output")?;
+        let output_cfg = order_cfg.seek("output")?;
         let folder_path = if let Ok(folder) = output_cfg.seek_str("folder") {
             PathBuf::from(folder)
         } else {
@@ -43,17 +43,14 @@ pub mod file_process {
         Ok(file_path)
     }
 
-    fn from_files_list(
-        task_cfg: &Value,
-        input_files: Vec<PathBuf>,
-    ) -> Result<Vec<OrderItem>, String> {
-        let program = task_cfg.seek_str("program")?;
-        let args_cfg = task_cfg.seek("args")?;
+    fn from_files_list(order_cfg: &Value, input_files: Vec<PathBuf>) -> Result<Vec<Task>, String> {
+        let program = order_cfg.seek_str("program")?;
+        let args_cfg = order_cfg.seek("args")?;
         let args_template = args_cfg.seek_str("template")?;
         let args_switches = args_cfg.seek_str("switches")?;
-        let mut commands = Vec::new();
+        let mut tasks = Vec::new();
         for input_file_path in input_files {
-            let output_file_path = generate_output_file_path(task_cfg, &input_file_path)?;
+            let output_file_path = generate_output_file_path(order_cfg, &input_file_path)?;
             let mut args = Vec::new();
             for item in split_args(args_template) {
                 match item.as_str() {
@@ -81,16 +78,16 @@ pub mod file_process {
                     _ => args.push(item),
                 };
             }
-            commands.push(OrderItem {
+            tasks.push(Task {
                 program: program.to_string(),
                 args,
             });
         }
-        Ok(commands)
+        Ok(tasks)
     }
 
-    pub fn from_folder(task_cfg: &Value) -> Result<Vec<OrderItem>, String> {
-        let input_cfg = task_cfg.seek("input")?;
+    pub fn from_folder(order_cfg: &Value) -> Result<Vec<Task>, String> {
+        let input_cfg = order_cfg.seek("input")?;
         let input_folder_path = PathBuf::from(input_cfg.seek_str("folder")?);
         let mut input_files = Vec::new();
         for entry in fs::read_dir(input_folder_path).or(Err("read folder failed"))? {
@@ -99,10 +96,10 @@ pub mod file_process {
                 input_files.push(input_file_path);
             }
         }
-        from_files_list(task_cfg, input_files)
+        from_files_list(order_cfg, input_files)
     }
 
-    pub fn _from_process_args(task_cfg: &Value) -> Result<Vec<OrderItem>, String> {
+    pub fn _from_args(order_cfg: &Value) -> Result<Vec<Task>, String> {
         let process_args: Vec<String> = env::args().collect();
         let files = &process_args[1..];
         let files: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
@@ -112,7 +109,7 @@ pub mod file_process {
                 input_files.push(file_path);
             }
         }
-        from_files_list(task_cfg, input_files)
+        from_files_list(order_cfg, input_files)
     }
 }
 
