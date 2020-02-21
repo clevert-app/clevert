@@ -7,7 +7,4 @@ edition = "2018"
 license = "Unlicense"
 
 [dependencies]
-toml = "0.5.5"
-
-[profile.release]
-panic = "abort"
+toml = "0.5.6"

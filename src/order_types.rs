@@ -8,6 +8,19 @@ use toml::Value;
 pub mod file_processing {
     use super::*;
 
+    fn recurse_dir(dir: PathBuf) -> Result<Vec<PathBuf>, String> {
+        let mut files = Vec::new();
+        for entry in fs::read_dir(dir).or_else(|e| Err(format!("{}", e)))? {
+            let entry = entry.unwrap().path();
+            if entry.is_dir() {
+                files.append(&mut recurse_dir(entry)?);
+            } else {
+                files.push(entry);
+            }
+        }
+        Ok(files)
+    }
+
     fn generate_output_file_path(
         order_cfg: &Value,
         input_file_path: &PathBuf,
@@ -50,7 +63,7 @@ pub mod file_processing {
         let args_switches = args_cfg.seek_str("switches")?;
         let mut tasks = Vec::new();
         for input_file_path in input_files {
-            let output_file_path = generate_output_file_path(order_cfg, &input_file_path)?;
+            let output_file_path = generate_output_file_path(order_cfg, &input_file_path)?; // Flat dir struct always
             let mut args = Vec::new();
             for item in split_args(args_template) {
                 match item.as_str() {
@@ -88,25 +101,21 @@ pub mod file_processing {
 
     pub fn from_folder(order_cfg: &Value) -> Result<Vec<Task>, String> {
         let input_cfg = order_cfg.seek("input")?;
-        let input_folder_path = PathBuf::from(input_cfg.seek_str("folder")?);
-        let mut input_files = Vec::new();
-        for entry in fs::read_dir(input_folder_path).or(Err("read folder failed"))? {
-            let input_file_path = entry.or(Err("illegal entry in folder"))?.path();
-            if input_file_path.is_file() {
-                input_files.push(input_file_path);
-            }
-        }
+        let input_folder = PathBuf::from(input_cfg.seek_str("folder")?);
+        let input_files = recurse_dir(input_folder)?;
         from_files_list(order_cfg, input_files)
     }
 
-    pub fn _from_args(order_cfg: &Value) -> Result<Vec<Task>, String> {
+    pub fn from_args(order_cfg: &Value) -> Result<Vec<Task>, String> {
         let process_args: Vec<String> = env::args().collect();
-        let files = &process_args[1..];
-        let files: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
+        let input_list = &process_args[1..];
+        let input_list: Vec<PathBuf> = input_list.iter().map(PathBuf::from).collect();
         let mut input_files = Vec::new();
-        for file_path in files {
-            if file_path.is_file() {
-                input_files.push(file_path);
+        for entry in input_list {
+            if entry.is_dir() {
+                input_files.append(&mut recurse_dir(entry)?);
+            } else {
+                input_files.push(entry);
             }
         }
         from_files_list(order_cfg, input_files)

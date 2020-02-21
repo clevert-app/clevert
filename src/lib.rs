@@ -22,7 +22,7 @@ pub fn run() -> Result<(), String> {
 impl Foundry {
     fn from_config_file(config_file_path: PathBuf) -> Result<Foundry, String> {
         let config_str = fs::read_to_string(config_file_path)
-            .or_else(|e| Err(format!("open config file failed, error = `{}`", e)))?;
+            .or_else(|e| Err(format!("open config file failed, error = {}", e)))?;
         Foundry::from_config_str(config_str)
     }
 
@@ -37,7 +37,8 @@ impl Foundry {
 
             [presets.default]
             threads.count = 1
-            threads.priority = 'normal' # TODO: priority, may windows only?
+            process.priority = 'normal' # TODO: priority, may windows only?
+            process.simulate_terminal = false # TODO
             console.msg.default = true # TODO
             console.msg.info = true # TODO
             console.msg.progress = true
@@ -72,49 +73,45 @@ impl Foundry {
     }
 
     fn from_config_str(cfg_str: String) -> Result<Foundry, String> {
-        let e_msg = |content| format!("load config failed: {}", content);
-        let cfg: Value = cfg_str.parse().or_else(|e| {
-            Err(e_msg(format!(
-                "not a standard toml document, error = `{}`",
-                e
-            )))
-        })?;
-        Foundry::load_config_str(cfg).or_else(|e| Err(e_msg(e)))
+        Foundry::load_config_str(cfg_str).or_else(|e| Err(format!("load config failed: {}", e)))
     }
 
-    fn load_config_str(cfg: Value) -> Result<Foundry, String> {
+    fn load_config_str(cfg_str: String) -> Result<Foundry, String> {
+        fn fill_vacancy(src: &mut Value, default: &Value) -> Option<()> {
+            let src_table = src.as_table_mut()?;
+            for (key, value) in default.as_table()? {
+                if let Some(child_src) = src_table.get_mut(key) {
+                    fill_vacancy(child_src, value);
+                } else {
+                    src_table.entry(key).or_insert(value.clone());
+                }
+            }
+            Some(())
+        }
+
+        fn inherit_fill(
+            src: &mut Value,
+            presets: &Value,
+            preset_name: &str,
+            stack_deep: i32,
+        ) -> Result<(), String> {
+            if stack_deep > 64 {
+                return Err("preset reference depth must small than 64".into());
+            }
+            let preset = presets.seek(preset_name)?;
+            fill_vacancy(src, preset);
+            if let Ok(parent_preset_name) = preset.seek_str("preset") {
+                inherit_fill(src, presets, parent_preset_name, stack_deep + 1)?;
+            }
+            Ok(())
+        }
+
+        let cfg: Value = cfg_str
+            .parse()
+            .or_else(|e| Err(format!("not a standard toml document, error = {}", e)))?;
         let presets = cfg.seek("presets")?;
         let mut orders = Vec::new();
         for order_cfg in cfg.seek_array("orders")? {
-            fn fill_vacancy(src: &mut Value, default: &Value) -> Option<()> {
-                let src_table = src.as_table_mut()?;
-                for (key, value) in default.as_table()? {
-                    if let Some(child_src) = src_table.get_mut(key) {
-                        fill_vacancy(child_src, value);
-                    } else {
-                        src_table.entry(key).or_insert(value.clone());
-                    }
-                }
-                Some(())
-            }
-
-            fn inherit_fill(
-                src: &mut Value,
-                presets: &Value,
-                preset_name: &str,
-                stack_deep: i32,
-            ) -> Result<(), String> {
-                if stack_deep > 64 {
-                    return Err("preset reference depth must small than 64".into());
-                }
-                let preset = presets.seek(preset_name)?;
-                fill_vacancy(src, preset);
-                if let Ok(parent_preset_name) = preset.seek_str("preset") {
-                    inherit_fill(src, presets, parent_preset_name, stack_deep + 1)?;
-                }
-                Ok(())
-            }
-
             let order_cfg = &mut order_cfg.clone();
             if let Ok(preset_name) = order_cfg.seek_str("preset") {
                 let preset_name = preset_name.to_string();
@@ -126,7 +123,7 @@ impl Foundry {
                 use order_types::*;
                 match order_cfg.seek_str("type")? {
                     "file_processing.from_folder" => file_processing::from_folder(order_cfg)?,
-                    // "file_processing.from_args" => file_processing::from_args(order_cfg)?,
+                    "file_processing.from_args" => file_processing::from_args(order_cfg)?,
                     _ => return Err("unknown order type".into()),
                 }
             };
@@ -193,7 +190,7 @@ impl Foundry {
 enum OrderStdio {
     Normal,
     Ignore,
-    ToFile(File),
+    _ToFile(File),
 }
 
 struct Order {
@@ -259,7 +256,7 @@ impl Order {
                     Ignore => {
                         command.stdout(Stdio::null());
                     }
-                    ToFile(_file) => {
+                    _ToFile(_file) => {
                         // let file = File::open("foo.txt").unwrap();
                         // command.stdout(file);
                     }
@@ -269,7 +266,7 @@ impl Order {
                     Ignore => {
                         command.stderr(Stdio::null());
                     }
-                    ToFile(_file) => {
+                    _ToFile(_file) => {
                         // command.stdout(stdio);
                     }
                 };
