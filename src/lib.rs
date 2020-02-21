@@ -206,11 +206,11 @@ impl Order {
         let commands = self.prepare();
         let iter = commands.into_iter();
         let iter_mutex = Arc::new(Mutex::new(iter));
-        if self.print_progress_msg {
+        let monitor_handle = if self.print_progress_msg {
             let amount: i32 = self.tasks.len().try_into().unwrap();
             let amount: f64 = amount.into();
             let iter_mutex = Arc::clone(&iter_mutex);
-            thread::spawn(move || loop {
+            Some(thread::spawn(move || loop {
                 let remaining = {
                     let iter = iter_mutex.lock().unwrap();
                     iter.size_hint().0
@@ -228,8 +228,10 @@ impl Order {
                     completed / amount * 100.0
                 ));
                 thread::sleep(time::Duration::from_secs(1));
-            });
-        }
+            }))
+        } else {
+            None
+        };
         let mut handles = Vec::new();
         for _ in 0..self.threads_count {
             let iter_mutex = Arc::clone(&iter_mutex);
@@ -237,10 +239,16 @@ impl Order {
             handles.push(handle);
         }
         for handle in handles {
-            handle
-                .join()
-                .unwrap()
-                .or_else(|e| Err(format!("a thread panic, error = `{}`", e)))?;
+            if let Err(e) = handle.join().unwrap() {
+                if let Some(monitor_handle) = monitor_handle {
+                    {
+                        let mut iter = iter_mutex.lock().unwrap();
+                        iter.nth(self.tasks.len() - 1);
+                    }
+                    monitor_handle.join().unwrap();
+                }
+                return Err(format!("a thread panic, error = {}", e));
+            }
         }
         Ok(())
     }
