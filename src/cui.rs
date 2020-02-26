@@ -12,6 +12,6 @@ pub mod print_log {
     }
 
     fn msg(log_type: &str, content: impl std::fmt::Display) -> String {
-        format!("[ foundry - {} ]  {}", log_type, content)
+        format!("[ foundry : {} ] {}", log_type, content)
     }
 }

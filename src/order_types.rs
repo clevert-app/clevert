@@ -59,15 +59,15 @@ pub mod file_processing {
     fn from_files_list(order_cfg: &Value, input_files: Vec<PathBuf>) -> Result<Vec<Task>, String> {
         let program = order_cfg.seek_str("program")?;
         let args_cfg = order_cfg.seek("args")?;
-        let args_template = args_cfg.seek_str("template")?;
-        let args_switches = args_cfg.seek_str("switches")?;
+        let args_template = split_args(args_cfg.seek_str("template")?);
+        let args_switches = split_args(args_cfg.seek_str("switches")?);
         let mut tasks = Vec::new();
         for input_file_path in input_files {
             let output_file_path = generate_output_file_path(order_cfg, &input_file_path)?; // Flat dir struct always
             let mut args = Vec::new();
-            for item in split_args(args_template) {
+            for item in &args_template {
                 match item.as_str() {
-                    "{switches}" => args.append(&mut split_args(args_switches)),
+                    "{switches}" => args.append(&mut args_switches.clone()),
                     "{input.file_path}" => args.push(input_file_path.to_str().unwrap().to_string()),
                     "{input.file_extension}" => args.push(
                         input_file_path
@@ -88,7 +88,7 @@ pub mod file_processing {
                             .unwrap()
                             .to_string(),
                     ),
-                    _ => args.push(item),
+                    _ => args.push(item.to_string()),
                 };
             }
             tasks.push(Task {
@@ -119,6 +119,35 @@ pub mod file_processing {
             }
         }
         from_files_list(order_cfg, input_files)
+    }
+}
+
+pub mod repeating {
+    use super::*;
+
+    pub fn from_count(order_cfg: &Value) -> Result<Vec<Task>, String> {
+        let count = order_cfg.seek_i32("count")?;
+        let program = order_cfg.seek_str("program")?;
+        let args_cfg = order_cfg.seek("args")?;
+        let args_template = split_args(args_cfg.seek_str("template")?);
+        let args_switches = split_args(args_cfg.seek_str("switches")?);
+        let mut tasks = Vec::new();
+        for index in 0..count {
+            let mut args = Vec::new();
+            for item in &args_template {
+                match item.as_str() {
+                    "{switches}" => args.append(&mut args_switches.clone()),
+                    "{index}" => args.push(index.to_string()),
+                    "{position}" => args.push((index + 1).to_string()),
+                    _ => args.push(item.to_string()),
+                };
+            }
+            tasks.push(Task {
+                program: program.to_string(),
+                args,
+            });
+        }
+        Ok(tasks)
     }
 }
 

@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::vec::IntoIter;
 use std::{thread, time};
 use toml::Value;
+use toml::de::Error;
 use toml_helper::Seek;
 
 pub fn run() -> Result<(), String> {
@@ -36,7 +37,7 @@ impl Foundry {
         let test_config_str = r#"
 
             [presets.default]
-            threads.count = 1
+            threads.count = 4
             process.priority = 'normal' # TODO: priority, may windows only?
             process.simulate_terminal = false # TODO
             console.msg.default = true # TODO
@@ -59,6 +60,16 @@ impl Foundry {
             [presets.cwebp_lossless]
             preset = 'cwebp'
             args.switches = '-lossless -m 6 -noalpha -sharp_yuv -metadata none'
+
+            [presets.clock]
+            type = 'repeating.from_count'
+            count = 10
+            program = 'cmd'
+            args.template = '/c echo {switches} ; {index} ; {position} && timeout /t 1 > nul' # TODO: trope "{{" to real "{"
+            args.switches = 'time: %time%'
+            threads.count = 1
+            console.msg.progress = false
+            console.stdout.type = 'normal'
 
             [[orders]]
             preset = 'cwebp_lossless'
@@ -124,6 +135,7 @@ impl Foundry {
                 match order_cfg.seek_str("type")? {
                     "file_processing.from_folder" => file_processing::from_folder(order_cfg)?,
                     "file_processing.from_args" => file_processing::from_args(order_cfg)?,
+                    "repeating.from_count" => repeating::from_count(order_cfg)?,
                     _ => return Err("unknown order type".into()),
                 }
             };
@@ -206,32 +218,30 @@ impl Order {
         let commands = self.prepare();
         let iter = commands.into_iter();
         let iter_mutex = Arc::new(Mutex::new(iter));
-        let monitor_handle = if self.print_progress_msg {
+        if self.print_progress_msg {
             let amount: i32 = self.tasks.len().try_into().unwrap();
             let amount: f64 = amount.into();
             let iter_mutex = Arc::clone(&iter_mutex);
-            Some(thread::spawn(move || loop {
-                let remaining = {
+            thread::spawn(move || loop {
+                {
                     let iter = iter_mutex.lock().unwrap();
-                    iter.size_hint().0
-                };
-                if remaining == 0 {
-                    break;
+                    let remaining = iter.size_hint().0;
+                    if remaining == 0 {
+                        break;
+                    }
+                    let remaining: i32 = remaining.try_into().unwrap();
+                    let remaining: f64 = remaining.into();
+                    let completed = amount - remaining;
+                    print_log::info(format!(
+                        "progress: {} / {} ({:.0}%)",
+                        completed,
+                        amount,
+                        completed / amount * 100.0
+                    ));
                 }
-                let remaining: i32 = remaining.try_into().unwrap();
-                let remaining: f64 = remaining.into();
-                let completed = amount - remaining;
-                print_log::info(format!(
-                    "progress: {} / {} ({:.0}%)",
-                    completed,
-                    amount,
-                    completed / amount * 100.0
-                ));
                 thread::sleep(time::Duration::from_secs(1));
-            }))
-        } else {
-            None
-        };
+            });
+        }
         let mut handles = Vec::new();
         for _ in 0..self.threads_count {
             let iter_mutex = Arc::clone(&iter_mutex);
@@ -240,12 +250,9 @@ impl Order {
         }
         for handle in handles {
             if let Err(e) = handle.join().unwrap() {
-                if let Some(monitor_handle) = monitor_handle {
-                    {
-                        let mut iter = iter_mutex.lock().unwrap();
-                        iter.nth(self.tasks.len() - 1);
-                    }
-                    monitor_handle.join().unwrap();
+                if self.print_progress_msg {
+                    let mut iter = iter_mutex.lock().unwrap();
+                    iter.nth(self.tasks.len() - 1);
                 }
                 return Err(format!("a thread panic, error = {}", e));
             }
@@ -287,7 +294,7 @@ impl Order {
     fn spawn(
         iter_mutex: Arc<Mutex<IntoIter<Command>>>,
     ) -> thread::JoinHandle<Result<(), io::Error>> {
-        thread::spawn(move || -> Result<(), io::Error> {
+        thread::spawn(move || {
             while let Some(mut command) = {
                 let mut iter = iter_mutex.lock().unwrap();
                 iter.next()

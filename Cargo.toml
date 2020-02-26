@@ -1,8 +1,8 @@
 [package]
 name = "foundry"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["kkocdko <kkocdko@163.com>"]
-description = "Generate and execute commands automatically by templates."
+description = "Automatically generate and execute commands from templates."
 edition = "2018"
 license = "Unlicense"
 
