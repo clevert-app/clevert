@@ -2,18 +2,19 @@ use crate::toml_helper::Seek;
 use crate::Task;
 use std::env;
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 use toml::Value;
 
 pub mod file_processing {
     use super::*;
 
-    fn recurse_dir(dir: PathBuf) -> Result<Vec<PathBuf>, String> {
+    fn read_dir_recurse(dir: PathBuf) -> Result<Vec<PathBuf>, io::Error> {
         let mut files = Vec::new();
-        for entry in fs::read_dir(dir).or_else(|e| Err(format!("{}", e)))? {
-            let entry = entry.unwrap().path();
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?.path();
             if entry.is_dir() {
-                files.append(&mut recurse_dir(entry)?);
+                files.append(&mut read_dir_recurse(entry)?);
             } else {
                 files.push(entry);
             }
@@ -21,56 +22,74 @@ pub mod file_processing {
         Ok(files)
     }
 
-    fn generate_output_file_path(
-        order_cfg: &Value,
-        input_file_path: &PathBuf,
-    ) -> Result<PathBuf, String> {
-        let output_cfg = order_cfg.seek("output")?;
-        let folder_path = if let Ok(folder) = output_cfg.seek_str("folder") {
-            PathBuf::from(folder)
-        } else {
-            // Default output to source folder
-            input_file_path.parent().unwrap().to_path_buf()
-        };
-        let file_name_cfg = output_cfg.seek("file_name")?;
-        let mut file_name = input_file_path
-            .file_stem()
-            .ok_or("input file has no stem name")?
-            .to_str()
-            .unwrap()
-            .to_string();
-        if let Ok(prefix) = file_name_cfg.seek_str("prefix") {
-            file_name.insert_str(0, prefix);
+    fn read_dir_foreach(dir: PathBuf) -> Result<Vec<PathBuf>, io::Error> {
+        let mut files = Vec::new();
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?.path();
+            if entry.is_file() {
+                files.push(entry);
+            }
         }
-        if let Ok(suffix) = file_name_cfg.seek_str("suffix") {
-            file_name.push_str(suffix);
-        }
-        let mut file_path = folder_path;
-        file_path.push(file_name);
-        if let Ok(extension) = file_name_cfg.seek_str("extension") {
-            file_path.set_extension(extension);
-        } else if let Some(extension) = input_file_path.extension() {
-            file_path.set_extension(extension);
-        }
-        // Print tips for overriding?
-        Ok(file_path)
+        Ok(files)
     }
 
     fn from_files_list(order_cfg: &Value, input_files: Vec<PathBuf>) -> Result<Vec<Task>, String> {
+        let input_cfg = order_cfg.seek("input")?;
+        let output_cfg = order_cfg.seek("output")?;
+        let output_file_name_cfg = output_cfg.seek("file_name")?;
+        let generate_output_path = |input_file_path: &PathBuf| -> Result<PathBuf, String> {
+            // Default output to source dir
+            let mut target_dir_path = input_file_path.parent().unwrap().to_path_buf(); // performance?
+            if let Ok(output_dir_cfg) = output_cfg.seek("dir") {
+                if let Ok(output_dir_path) = output_dir_cfg.seek_str("path") {
+                    target_dir_path = PathBuf::from(output_dir_path);
+                }
+            }
+            let mut file_name = input_file_path
+                .file_stem()
+                .ok_or("input file has no stem name")?
+                .to_str()
+                .unwrap()
+                .to_string();
+            let mut relative_path = PathBuf::from(&file_name);
+            if let Ok(input_dir_cfg) = input_cfg.seek("dir") {
+                if let Ok(input_dir_path) = input_dir_cfg.seek_str("path") {
+                    relative_path = input_file_path
+                        .strip_prefix(input_dir_path)
+                        .or_else(|e| Err(format!("{}", e)))?
+                        .to_path_buf();
+                }
+            }
+            if let Ok(prefix) = output_file_name_cfg.seek_str("prefix") {
+                file_name.insert_str(0, prefix);
+            }
+            if let Ok(suffix) = output_file_name_cfg.seek_str("suffix") {
+                file_name.push_str(suffix);
+            }
+            relative_path.set_file_name(file_name);
+            if let Ok(extension) = output_file_name_cfg.seek_str("extension") {
+                relative_path.set_extension(extension);
+            } else if let Some(extension) = input_file_path.extension() {
+                relative_path.set_extension(extension);
+            }
+            // Print tips for overriding?
+            Ok(target_dir_path.join(relative_path))
+        };
+
         let program = order_cfg.seek_str("program")?;
         let args_cfg = order_cfg.seek("args")?;
-        let args_template = split_args(args_cfg.seek_str("template")?);
-        let args_switches = split_args(args_cfg.seek_str("switches")?);
+        let args_template = split_args(args_cfg.seek_str("template")?)?;
+        let args_switches = split_args(args_cfg.seek_str("switches")?)?;
         let mut tasks = Vec::new();
-        for input_file_path in input_files {
-            let output_file_path = generate_output_file_path(order_cfg, &input_file_path)?; // Flat dir struct always
+        for file_path in input_files {
+            let output_file_path = generate_output_path(&file_path)?;
             let mut args = Vec::new();
             for item in &args_template {
                 match item.as_str() {
                     "{switches}" => args.append(&mut args_switches.clone()),
-                    "{input.file_path}" => args.push(input_file_path.to_str().unwrap().to_string()),
+                    "{input.file_path}" => args.push(file_path.to_str().unwrap().to_string()),
                     "{input.file_extension}" => args.push(
-                        input_file_path
+                        file_path
                             .extension()
                             .ok_or("input file has no extension")?
                             .to_str()
@@ -80,7 +99,7 @@ pub mod file_processing {
                     "{output.file_path}" => {
                         args.push(output_file_path.to_str().unwrap().to_string())
                     }
-                    "{output.folder_path}" => args.push(
+                    "{output.dir_path}" => args.push(
                         output_file_path
                             .parent()
                             .unwrap()
@@ -99,21 +118,32 @@ pub mod file_processing {
         Ok(tasks)
     }
 
-    pub fn from_folder(order_cfg: &Value) -> Result<Vec<Task>, String> {
-        let input_cfg = order_cfg.seek("input")?;
-        let input_folder = PathBuf::from(input_cfg.seek_str("folder")?);
-        let input_files = recurse_dir(input_folder)?;
+    pub fn from_dir(order_cfg: &Value) -> Result<Vec<Task>, String> {
+        let input_dir_cfg = order_cfg.seek("input")?.seek("dir")?;
+        let input_dir = PathBuf::from(input_dir_cfg.seek_str("path")?);
+        let input_files = if input_dir_cfg.seek_bool("deep")? {
+            read_dir_recurse(input_dir)
+        } else {
+            read_dir_foreach(input_dir)
+        }
+        .or_else(|e| Err(format!("{}", e)))?;
         from_files_list(order_cfg, input_files)
     }
 
     pub fn from_args(order_cfg: &Value) -> Result<Vec<Task>, String> {
+        let input_dir_deep = order_cfg.seek("input")?.seek("dir")?.seek_bool("deep")?;
         let process_args: Vec<String> = env::args().collect();
         let input_list = &process_args[1..];
         let input_list: Vec<PathBuf> = input_list.iter().map(PathBuf::from).collect();
         let mut input_files = Vec::new();
         for entry in input_list {
             if entry.is_dir() {
-                input_files.append(&mut recurse_dir(entry)?);
+                if input_dir_deep {
+                    read_dir_recurse(entry)
+                } else {
+                    read_dir_foreach(entry)
+                }
+                .or_else(|e| Err(format!("{}", e)))?;
             } else {
                 input_files.push(entry);
             }
@@ -129,8 +159,8 @@ pub mod repeating {
         let count = order_cfg.seek_i32("count")?;
         let program = order_cfg.seek_str("program")?;
         let args_cfg = order_cfg.seek("args")?;
-        let args_template = split_args(args_cfg.seek_str("template")?);
-        let args_switches = split_args(args_cfg.seek_str("switches")?);
+        let args_template = split_args(args_cfg.seek_str("template")?)?;
+        let args_switches = split_args(args_cfg.seek_str("switches")?)?;
         let mut tasks = Vec::new();
         for index in 0..count {
             let mut args = Vec::new();
@@ -151,7 +181,7 @@ pub mod repeating {
     }
 }
 
-fn split_args(args_src: &str) -> Vec<String> {
+fn split_args(args_src: &str) -> Result<Vec<String>, String> {
     let mut args = Vec::new();
     let mut is_in_quotation_mask = true;
     for entry in args_src.split('"') {
@@ -165,7 +195,8 @@ fn split_args(args_src: &str) -> Vec<String> {
         }
     }
     if is_in_quotation_mask {
-        panic!("args' quotation mask is not closed");
+        Err("args' quotation mask is not closed".to_string())
+    } else {
+        Ok(args)
     }
-    args
 }
