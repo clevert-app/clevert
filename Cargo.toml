@@ -6,5 +6,8 @@ description = "Automatically generate and execute commands from templates."
 edition = "2018"
 license = "Unlicense"
 
+[profile.release]
+panic = "abort"
+
 [dependencies]
 toml = "0.5.6"
