@@ -8,11 +8,12 @@ use std::error;
 use std::fmt;
 use std::fs;
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::io;
+use std::io::prelude::*;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::vec::IntoIter;
 use std::{thread, time};
 use toml::Value;
 use toml_helper::Seek;
@@ -40,16 +41,12 @@ impl Foundry {
     fn get_build_in_config_str() -> &'static str {
         r#"
             [presets.build_in]
-            threads.count = 4
-            process.priority = 'normal' # TODO: priority, may windows only?
+            threads.count = 1
             process.simulate_terminal = false # TODO
-            console.msg.default = true # TODO
-            console.msg.info = true # TODO
+            console.msg.all = true # TODO
             console.msg.progress = true
-            console.msg.error = true # TODO
             console.stdout.type = 'ignore' # ignore | normal | file
             console.stderr.type = 'ignore'
-            console.stderr.file = './stderr.log' # TODO: log file
             input.dir.deep = true
             output.dir.keep_struct = true
         "#
@@ -59,6 +56,8 @@ impl Foundry {
         Foundry::from_config_str(r#"
             [presets.default]
             threads.count = 4
+            console.stderr.type = 'file'
+            console.stderr.file = 'D:\Temp\foundry_test\log.txt' # TODO: log file
 
             [presets.cwebp]
             type = 'file_processing.from_dir'
@@ -75,7 +74,7 @@ impl Foundry {
             type = 'repeating.from_count'
             count = 10
             program = 'cmd'
-            args.template = '/c echo {switches} ; {index} ; {position} && timeout /t 1 > nul' # TODO: trope "{{" to real "{"
+            args.template = '/c echo {switches} ; {index} ; {position} && timeout /t 1 > nul'
             args.switches = 'time: %time%'
             threads.count = 1
             console.msg.progress = false
@@ -98,14 +97,14 @@ impl Foundry {
                 kind: ErrorKind::ConfigTomlIllegal(e),
             })
         })?;
-        Foundry::load_config_str(cfg).or_else(|e| {
+        Foundry::load_config(cfg).or_else(|e| {
             Err(Error {
                 kind: ErrorKind::ConfigIllogical(e),
             })
         })
     }
 
-    fn load_config_str(cfg: Value) -> Result<Foundry, String> {
+    fn load_config(cfg: Value) -> Result<Foundry, String> {
         fn fill_vacancy(src: &mut Value, default: &Value) -> Option<()> {
             let src_table = src.as_table_mut()?;
             for (key, value) in default.as_table()? {
@@ -170,22 +169,35 @@ impl Foundry {
             orders.push(Order {
                 threads_count: threads_cfg.seek_i32("count")?,
                 print_progress_msg: msg_cfg.seek_bool("progress")?,
-                tasks,
                 stdout: match stdout_cfg.seek_str("type")? {
                     "normal" => OrderStdio::Normal,
                     "ignore" => OrderStdio::Ignore,
-                    "file" => return Err("log file io function is still developing".into()),
-                    // let path_str = stdout_cfg.get("file")?.as_str()?;
-                    // let mut file = File::open(path_str).unwrap();
-                    // OrderStdIo::File(file)
+                    "file" => OrderStdio::ToFile(
+                        OpenOptions::new()
+                            .write(true)
+                            .append(true)
+                            .create(true)
+                            .open(stdout_cfg.seek_str("file")?)
+                            .or_else(|e| Err(format!("open log file failed, error = {}", e)))?,
+                    ),
                     _ => return Err("unknown stdout type".into()),
                 },
                 stderr: match stderr_cfg.seek_str("type")? {
                     "normal" => OrderStdio::Normal,
                     "ignore" => OrderStdio::Ignore,
-                    "file" => return Err("log file io function is still developing".into()),
+                    "file" => OrderStdio::ToFile(
+                        OpenOptions::new()
+                            .write(true)
+                            .append(true)
+                            .create(true)
+                            .open(stderr_cfg.seek_str("file")?)
+                            .or_else(|e| Err(format!("open log file failed, error = {}", e)))?,
+                    ),
                     _ => return Err("unknown stderr type".into()),
                 },
+                tasks,
+                current_commands_iter: None,
+                current_processes: None,
             });
         }
 
@@ -207,9 +219,20 @@ impl Foundry {
         // Foundry::_from_test_config_str()
     }
 
-    fn start(&self) -> Result<(), Error> {
-        for order in &self.orders {
+    fn start(&mut self) -> Result<(), Error> {
+        for order in &mut self.orders {
             order.execute().or_else(|e| {
+                Err(Error {
+                    kind: ErrorKind::ExeculatePanic(e),
+                })
+            })?;
+        }
+        Ok(())
+    }
+
+    fn stop(&mut self) -> Result<(), Error> {
+        for order in &mut self.orders {
+            order.stop().or_else(|e| {
                 Err(Error {
                     kind: ErrorKind::ExeculatePanic(e),
                 })
@@ -237,31 +260,6 @@ impl fmt::Display for Error {
             CanNotReadConfigFile(e) => write!(f, "read config file failed, error = {}", e),
             _CanNotWriteLogFile(e) => write!(f, "write log file failed, error = {}", e),
             ExeculatePanic(e) => write!(f, "execulate panic, error = {}", e),
-            // ErrorKind::UnexpectedEof => "unexpected eof encountered".fmt(f)?,
-            // ErrorKind::InvalidCharInString(c) => write!(
-            //     f,
-            //     "invalid character in string: `{}`",
-            //     c.escape_default().collect::<String>()
-            // )?,
-            // ErrorKind::InvalidEscape(c) => write!(
-            //     f,
-            //     "invalid escape character in string: `{}`",
-            //     c.escape_default().collect::<String>()
-            // )?,
-            // ErrorKind::InvalidHexEscape(c) => write!(
-            //     f,
-            //     "invalid hex escape character in string: `{}`",
-            //     c.escape_default().collect::<String>()
-            // )?,
-            // ErrorKind::UnexpectedKeys {
-            //     ref keys,
-            //     available,
-            // } => write!(
-            //     f,
-            //     "unexpected keys in table: `{:?}`, available keys: `{:?}`",
-            //     keys, available
-            // )?,
-            // ErrorKind::__Nonexhaustive => panic!(),
         }
     }
 }
@@ -280,29 +278,54 @@ enum ErrorKind {
 enum OrderStdio {
     Normal,
     Ignore,
-    _ToFile(File),
+    ToFile(File),
 }
 
 struct Order {
     threads_count: i32,
     print_progress_msg: bool,
-    tasks: Vec<Task>,
     stdout: OrderStdio,
     stderr: OrderStdio,
+    tasks: Vec<Task>,
+    current_commands_iter: Option<Arc<Mutex<std::vec::IntoIter<std::process::Command>>>>,
+    current_processes: Option<Arc<Mutex<Vec<std::process::Child>>>>,
 }
 
 impl Order {
-    fn execute(&self) -> Result<(), io::Error> {
+    fn prepare(&self) -> Vec<Command> {
+        let mut commands = Vec::new();
+        for task in &self.tasks {
+            let mut command = task.generate();
+            {
+                use OrderStdio::*;
+                command.stdout(match &self.stdout {
+                    Normal => Stdio::inherit(),
+                    Ignore => Stdio::null(),
+                    ToFile(_) => Stdio::piped(),
+                });
+                command.stderr(match &self.stderr {
+                    Normal => Stdio::inherit(),
+                    Ignore => Stdio::null(),
+                    ToFile(_) => Stdio::piped(),
+                });
+            }
+            commands.push(command);
+        }
+        commands
+    }
+
+    fn execute(&mut self) -> Result<(), io::Error> {
         let commands = self.prepare();
         let iter = commands.into_iter();
-        let iter_mutex = Arc::new(Mutex::new(iter));
+        self.current_commands_iter = Some(Arc::new(Mutex::new(iter)));
+        self.current_processes = Some(Arc::new(Mutex::new(Vec::new())));
         if self.print_progress_msg {
             let amount: i32 = self.tasks.len().try_into().unwrap();
             let amount: f64 = amount.into();
-            let iter_mutex = Arc::clone(&iter_mutex);
+            let commands_iter_mutex = Arc::clone(self.current_commands_iter.as_ref().unwrap());
             thread::spawn(move || loop {
                 {
-                    let iter = iter_mutex.lock().unwrap();
+                    let iter = commands_iter_mutex.lock().unwrap();
                     let remaining = iter.size_hint().0;
                     if remaining == 0 {
                         break;
@@ -322,62 +345,59 @@ impl Order {
         }
         let mut handles = Vec::new();
         for _ in 0..self.threads_count {
-            let iter_mutex = Arc::clone(&iter_mutex);
-            let handle = Order::spawn(iter_mutex);
+            let handle = self.spawn();
             handles.push(handle);
         }
         for handle in handles {
             if let Err(e) = handle.join().unwrap() {
                 if self.print_progress_msg {
-                    let mut iter = iter_mutex.lock().unwrap();
+                    let mut iter = self.current_commands_iter.as_ref().unwrap().lock().unwrap();
                     iter.nth(self.tasks.len() - 1);
                 }
                 return Err(e);
             }
         }
+        self.stop()?;
         Ok(())
     }
 
-    fn prepare(&self) -> Vec<Command> {
-        let mut commands = Vec::new();
-        for task in &self.tasks {
-            let mut command = task.generate();
-            {
-                use OrderStdio::*;
-                match &self.stdout {
-                    Normal => {}
-                    Ignore => {
-                        command.stdout(Stdio::null());
-                    }
-                    _ToFile(_file) => {
-                        // let file = File::open("foo.txt").unwrap();
-                        // command.stdout(file);
-                    }
-                };
-                match &self.stderr {
-                    Normal => {}
-                    Ignore => {
-                        command.stderr(Stdio::null());
-                    }
-                    _ToFile(_file) => {
-                        // command.stdout(stdio);
-                    }
-                };
-            }
-            commands.push(command);
+    fn stop(&mut self) -> Result<(), io::Error> {
+        let mutex = self.current_processes.as_mut().unwrap();
+        let mut mutex_guard = mutex.lock().unwrap();
+        let childs: &mut Vec<std::process::Child> = mutex_guard.as_mut();
+        for child in childs.iter_mut() {
+            let _ = child.kill();
         }
-        commands
+        if let OrderStdio::ToFile(file) = &mut self.stdout {
+            for child in childs.iter_mut() {
+                let mut stdout = Vec::<u8>::new();
+                child.stdout.as_mut().unwrap().read_to_end(&mut stdout)?;
+                file.write(&stdout)?;
+            }
+        }
+        if let OrderStdio::ToFile(file) = &mut self.stderr {
+            for child in childs.iter_mut() {
+                let mut stderr = Vec::<u8>::new();
+                child.stderr.as_mut().unwrap().read_to_end(&mut stderr)?;
+                file.write(&stderr)?;
+            }
+        }
+        drop(mutex_guard);
+        self.current_processes = None;
+        Ok(())
     }
 
-    fn spawn(
-        iter_mutex: Arc<Mutex<IntoIter<Command>>>,
-    ) -> thread::JoinHandle<Result<(), io::Error>> {
+    fn spawn(&mut self) -> thread::JoinHandle<Result<(), io::Error>> {
+        let commands_iter_mutex = Arc::clone(self.current_commands_iter.as_ref().unwrap());
+        let processes_mutex = Arc::clone(self.current_processes.as_ref().unwrap());
         thread::spawn(move || {
             while let Some(mut command) = {
-                let mut iter = iter_mutex.lock().unwrap();
+                let mut iter = commands_iter_mutex.lock().unwrap();
                 iter.next()
             } {
-                command.spawn()?.wait()?;
+                let mut child = command.spawn()?;
+                child.wait()?;
+                processes_mutex.lock().unwrap().push(child);
             }
             Ok(())
         })
