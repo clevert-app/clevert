@@ -9,3 +9,10 @@
 ## Warning
 
 This is an unstable version, still developing.
+
+## ToDo List
+
+* Help document
+* CUI
+* More careful error handling
+* Intro

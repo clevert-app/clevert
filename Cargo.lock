@@ -2,7 +2,7 @@
 # It is not intended for manual editing.
 [[package]]
 name = "foundry"
-version = "0.0.2"
+version = "0.1.0"
 dependencies = [
  "toml 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
