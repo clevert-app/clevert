@@ -13,6 +13,6 @@ This is an unstable version, still developing.
 ## ToDo List
 
 * Help document
-* CUI
+* GUI or CUI
 * More careful error handling
 * Intro
