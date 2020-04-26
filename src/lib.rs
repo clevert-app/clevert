@@ -7,13 +7,17 @@ use std::error;
 use std::fmt;
 use std::fs;
 use std::fs::File;
-use std::fs::OpenOptions;
 use std::io;
 use std::io::prelude::*;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
-use std::{thread, time};
+use std::process::Child;
+use std::process::Command;
+use std::process::Stdio;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::thread;
+use std::time;
+use std::vec::IntoIter;
 
 pub fn run() -> Result<(), Error> {
     Foundry::new(Config::new()?)?.start()
@@ -52,9 +56,9 @@ impl Foundry {
             for entry in args_src.split('"') {
                 is_in_quotation_mask = !is_in_quotation_mask;
                 if is_in_quotation_mask {
-                    args.push(entry.to_string());
+                    args.push(String::from(entry));
                 } else {
-                    let entry_split = entry.split_whitespace().map(|s| s.to_string());
+                    let entry_split = entry.split_whitespace().map(String::from);
                     let mut entry_split: Vec<String> = entry_split.collect();
                     args.append(&mut entry_split);
                 }
@@ -111,8 +115,17 @@ impl Foundry {
                 }
                 let mut file_name = input_file_path
                     .file_stem()
-                    .ok_or("input file has no stem name")
-                    .unwrap() //ER
+                    .ok_or(Err(()))
+                    .or_else(|_: Result<(), ()>| {
+                        Err(Error {
+                            kind: ErrorKind::ConfigIllegal,
+                            inner: None,
+                            message: Some(format!(
+                                "input file have not stem name, path = {}",
+                                input_file_path.to_str().unwrap()
+                            )),
+                        })
+                    })?
                     .to_str()
                     .unwrap()
                     .to_string();
@@ -120,8 +133,16 @@ impl Foundry {
                 if let Some(input_dir_path) = &order.input_dir_path {
                     relative_path = input_file_path
                         .strip_prefix(input_dir_path)
-                        .or_else(|e| Err(format!("{}", e)))
-                        .unwrap() // ER
+                        .or_else(|e| {
+                            Err(Error {
+                                kind: ErrorKind::ConfigIllegal,
+                                inner: Some(Box::new(e)),
+                                message: Some(format!(
+                                    "strip path prefix failed, path = {}",
+                                    input_file_path.to_str().unwrap()
+                                )),
+                            })
+                        })?
                         .to_path_buf();
                 }
                 if let Some(prefix) = &order.output_file_name_prefix {
@@ -139,19 +160,28 @@ impl Foundry {
                 // Print tips for overriding?
                 let output_file_path = target_dir_path.join(relative_path);
 
-                let mut args = Vec::new();
                 for index in 0..order.repeat_count.unwrap() {
+                    let mut args = Vec::new();
                     for item in &args_template {
                         match item.as_str() {
-                            "{switches}" => args.append(&mut args_switches.clone()),
+                            "{args.switches}" => args.append(&mut args_switches.clone()),
                             "{input.file_path}" => {
                                 args.push(input_file_path.to_str().unwrap().to_string())
                             }
                             "{input.file_extension}" => args.push(
                                 input_file_path
                                     .extension()
-                                    .ok_or("input file has no extension")
-                                    .unwrap() //Er
+                                    .ok_or(Err(()))
+                                    .or_else(|_: Result<(), ()>| {
+                                        Err(Error {
+                                            kind: ErrorKind::ConfigIllegal,
+                                            inner: None,
+                                            message: Some(format!(
+                                                "input file has no extension name, path = {}",
+                                                input_file_path.to_str().unwrap()
+                                            )),
+                                        })
+                                    })?
                                     .to_str()
                                     .unwrap()
                                     .to_string(),
@@ -167,14 +197,14 @@ impl Foundry {
                                     .unwrap()
                                     .to_string(),
                             ),
-                            "{index}" => args.push(index.to_string()),
-                            "{position}" => args.push((index + 1).to_string()),
+                            "{repeat.index}" => args.push(index.to_string()),
+                            "{repeat.position}" => args.push((index + 1).to_string()),
                             _ => args.push(item.to_string()),
                         };
                     }
                     tasks.push(Task {
                         program: order.program.as_ref().unwrap().clone(),
-                        args: args.clone(),
+                        args,
                     });
                 }
             }
@@ -186,31 +216,71 @@ impl Foundry {
                     "normal" => OrderStdio::Normal,
                     "ignore" => OrderStdio::Ignore,
                     "file" => OrderStdio::ToFile(
-                        OpenOptions::new()
+                        fs::OpenOptions::new()
                             .write(true)
                             .append(true)
                             .create(true)
-                            .open(order.stdout_file_path.as_ref().unwrap())
-                            .or_else(|e| Err(format!("open log file failed, error = {}", e)))
-                            .unwrap(), //ER
+                            .open(order.stdout_file_path.as_ref().ok_or(Err(())).or_else(
+                                |_: Result<(), ()>| {
+                                    Err(Error {
+                                        kind: ErrorKind::ConfigIllegal,
+                                        inner: None,
+                                        message: Some(String::from(
+                                            "stdout log file path not specified",
+                                        )),
+                                    })
+                                },
+                            )?)
+                            .or_else(|e| {
+                                Err(Error {
+                                    kind: ErrorKind::CanNotWriteLogFile,
+                                    inner: Some(Box::new(e)),
+                                    message: None,
+                                })
+                            })?,
                     ),
-                    // _ => return Err("unknown stdout type".into()),
-                    _ => panic!(1),
+                    _ => {
+                        return Err(Error {
+                            kind: ErrorKind::ConfigIllegal,
+                            inner: None,
+                            message: Some(String::from("unknown stdout type")),
+                        });
+                    }
                 },
                 stderr: match order.stderr_type.as_ref().unwrap().as_str() {
                     "normal" => OrderStdio::Normal,
                     "ignore" => OrderStdio::Ignore,
                     "file" => OrderStdio::ToFile(
-                        OpenOptions::new()
+                        fs::OpenOptions::new()
                             .write(true)
                             .append(true)
                             .create(true)
-                            .open(order.stderr_file_path.as_ref().unwrap())
-                            .or_else(|e| Err(format!("open log file failed, error = {}", e)))
-                            .unwrap(), //ER
+                            .open(order.stderr_file_path.as_ref().ok_or(Err(())).or_else(
+                                |_: Result<(), ()>| {
+                                    Err(Error {
+                                        kind: ErrorKind::ConfigIllegal,
+                                        inner: None,
+                                        message: Some(String::from(
+                                            "stderr log file path not specified",
+                                        )),
+                                    })
+                                },
+                            )?)
+                            .or_else(|e| {
+                                Err(Error {
+                                    kind: ErrorKind::CanNotWriteLogFile,
+                                    inner: Some(Box::new(e)),
+                                    message: None,
+                                })
+                            })?,
                     ),
-                    // _ => return Err("unknown stderr type".into()),
-                    _ => panic!(1),
+                    _ => {
+                        return Err(Error {
+                            kind: ErrorKind::ConfigIllegal,
+                            inner: None,
+                            message: Some(String::from("unknown stderr type")),
+                        });
+                    }
                 },
                 tasks,
                 current_commands_iter: None,
@@ -265,9 +335,9 @@ impl fmt::Display for Error {
         use ErrorKind::*;
         let mut content = match &self.kind {
             ConfigTomlIllegal => "config isn not a legal toml document",
-            ConfigIllegal => "config isn not a legal toml document",
+            ConfigIllegal => "config isn illegal",
             ConfigFileCanNotRead => "read config file failed",
-            // _CanNotWriteLogFile => "write log file failed",
+            CanNotWriteLogFile => "write log file failed",
             ExecutePanic => "task process panic",
         }
         .to_string();
@@ -288,12 +358,8 @@ enum ErrorKind {
     ConfigTomlIllegal,
     ConfigIllegal,
     ConfigFileCanNotRead,
+    CanNotWriteLogFile,
     ExecutePanic,
-    // ConfigTomlIllegal(toml::de::Error),
-    // ConfigIllegal(),
-    // CanNotReadConfigFile(io::Error),
-    // // _CanNotWriteLogFile(io::Error),
-    // ExecutePanic(io::Error),
 }
 
 enum OrderStdio {
@@ -308,8 +374,8 @@ struct Order {
     stdout: OrderStdio,
     stderr: OrderStdio,
     tasks: Vec<Task>,
-    current_commands_iter: Option<Arc<Mutex<std::vec::IntoIter<std::process::Command>>>>,
-    current_processes: Option<Arc<Mutex<Vec<std::process::Child>>>>,
+    current_commands_iter: Option<Arc<Mutex<IntoIter<Command>>>>,
+    current_processes: Option<Arc<Mutex<Vec<Child>>>>,
 }
 
 impl Order {
@@ -345,22 +411,21 @@ impl Order {
             let amount: f64 = amount.into();
             let commands_iter_mutex = Arc::clone(self.current_commands_iter.as_ref().unwrap());
             thread::spawn(move || loop {
-                {
-                    let iter = commands_iter_mutex.lock().unwrap();
-                    let remaining = iter.size_hint().0;
-                    if remaining == 0 {
-                        break;
-                    }
-                    let remaining: i32 = remaining.try_into().unwrap();
-                    let remaining: f64 = remaining.into();
-                    let completed = amount - remaining;
-                    print_log::info(format!(
-                        "progress: {} / {} ({:.0}%)",
-                        completed,
-                        amount,
-                        completed / amount * 100.0
-                    ));
+                let iter = commands_iter_mutex.lock().unwrap();
+                let remaining = iter.size_hint().0;
+                if remaining == 0 {
+                    break;
                 }
+                let remaining: i32 = remaining.try_into().unwrap();
+                let remaining: f64 = remaining.into();
+                let completed = amount - remaining;
+                print_log::info(format!(
+                    "progress: {} / {} ({:.0}%)",
+                    completed,
+                    amount,
+                    completed / amount * 100.0
+                ));
+                drop(iter);
                 thread::sleep(time::Duration::from_secs(1));
             });
         }
@@ -387,20 +452,20 @@ impl Order {
         let mut mutex_guard = mutex.lock().unwrap();
         let childs: &mut Vec<std::process::Child> = mutex_guard.as_mut();
         for child in childs.iter_mut() {
-            let _ = child.kill();
+            let _ = child.kill(); // error handling
         }
         if let OrderStdio::ToFile(file) = &mut self.stdout {
             for child in childs.iter_mut() {
                 let mut stdout = Vec::<u8>::new();
                 child.stdout.as_mut().unwrap().read_to_end(&mut stdout)?;
-                file.write(&stdout)?;
+                file.write_all(&stdout)?;
             }
         }
         if let OrderStdio::ToFile(file) = &mut self.stderr {
             for child in childs.iter_mut() {
                 let mut stderr = Vec::<u8>::new();
                 child.stderr.as_mut().unwrap().read_to_end(&mut stderr)?;
-                file.write(&stderr)?;
+                file.write_all(&stderr)?;
             }
         }
         drop(mutex_guard);

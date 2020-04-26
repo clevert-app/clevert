@@ -21,7 +21,7 @@ pub struct Proposal {
     pub program: Option<String>,
     pub args_template: Option<String>,
     pub args_switches: Option<String>,
-    pub input_list_from_args: Option<Vec<String>>, // TODO: Override "input_dir"
+    pub input_list_from_args: Option<Vec<String>>, // Override "input_dir"
     pub input_dir_path: Option<String>,
     pub input_dir_deep: Option<bool>,
     pub output_file_path: Option<String>, // TODO: Override "output_file_name_extension" an others
@@ -109,7 +109,7 @@ impl Config {
 
     pub fn _from_toml_test() -> Result<Config, Error> {
         Config::from_toml(String::from(
-            r#"            
+            r#"
             [presets.default]
             message.progress = true
             message.info = true
@@ -121,26 +121,27 @@ impl Config {
             stdio.stdout.file.path = './target/test-stdout.log'
             stdio.stderr.type = 'file'
             stdio.stderr.file.path = './target/test-stderr.log'
-            
+
             [presets.cwebp]
             program = 'cwebp.exe'
-            args.template = '{switches} {input.file_path} -o {output.file_path}' # TODO: trope "{{" to real "{"
+            args.template = '{args.switches} {input.file_path} -o {output.file_path}' # TODO: trope "{{" to real "{"
             args.switches = '-m 6'
             output.file_name.extension = 'webp'
-            
+
             [presets.cwebp_lossless]
             preset = 'cwebp'
             args.switches = '-lossless -m 6 -noalpha -sharp_yuv -metadata none'
-            
+
             [presets.clock]
             repeat.count = 10
             program = 'cmd'
-            args.template = '/c echo {switches} ; {index} ; {position} && timeout /t 1 > nul'
+            args.template = '/c echo {args.switches} ; {repeat.index} ; {repeat.position} && timeout /t 1 > nul'
             args.switches = 'time: %time%'
             threads.count = 1
             message.progress = false
             stdio.stdout.type = 'normal'
-            
+            stdio.stderr.type = 'normal'
+
             [[orders]]
             preset = 'cwebp_lossless'
             program = 'D:\Library\libwebp\libwebp_1.0.0\bin\cwebp.exe'
@@ -248,7 +249,16 @@ impl Config {
                         .try_into()
                         .ok()
                 })(),
-                input_list_from_args: None, // TODO
+                input_list_from_args: {
+                    let args: Vec<String> = env::args().collect();
+                    let input_list = &args[1..];
+                    let input_list = input_list.to_owned();
+                    if input_list.len() > 1 {
+                        Some(input_list)
+                    } else {
+                        None
+                    }
+                },
                 input_dir_path: (|| {
                     toml_value
                         .get("input")?
@@ -341,10 +351,10 @@ impl Config {
         for order in &mut cfg.orders {
             if let Some(preset_name) = &order.preset_name {
                 let first_preset_name = preset_name.clone();
-                inherit_fill(order, &first_preset_name, &mut cfg.presets, 1);
+                inherit_fill(order, &first_preset_name, &cfg.presets, 1);
             };
             // You can use [default] -> [other preset you want]
-            inherit_fill(order, "default", &mut cfg.presets, 1);
+            inherit_fill(order, "default", &cfg.presets, 1);
             // But can not [build_in] -> [other preset]
             order.complement(&Proposal {
                 preset_name: Some(String::from("build_in")),
