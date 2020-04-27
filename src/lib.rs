@@ -336,8 +336,17 @@ impl Foundry {
                 } else if let Some(extension) = input_file_path.extension() {
                     relative_path.set_extension(extension);
                 }
-                // Print tips for overriding?
                 let output_file_path = target_dir_path.join(relative_path);
+                if !order.output_file_override.unwrap() && fs::metadata(&output_file_path).is_ok() {
+                    return Err(Error {
+                        kind: ErrorKind::ConfigIllegal,
+                        inner: None,
+                        message: Some(format!(
+                            "output target is already exists, path = {}",
+                            output_file_path.to_str().unwrap()
+                        )),
+                    });
+                }
 
                 for index in 0..order.repeat_count.unwrap() {
                     let mut args = Vec::new();

@@ -6,13 +6,15 @@
 <img src="https://flat.badgen.net/github/license/kkocdko/foundry?color=4caf50">
 </div>
 
-## Warning
+### Warning
 
 This is an unstable version, still developing.
 
-## ToDo List
+### ToDo List
 
 * Help document
 * GUI or CUI
 * More careful error handling
+* StdIn
+* Args to provide input & output file path
 * Intro

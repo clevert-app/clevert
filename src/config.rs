@@ -25,6 +25,7 @@ pub struct Proposal {
     pub input_dir_path: Option<String>,
     pub input_dir_deep: Option<bool>,
     pub output_file_path: Option<String>, // TODO: Override "output_file_name_extension" an others
+    pub output_file_override: Option<bool>,
     pub output_dir_path: Option<String>,
     pub output_dir_keep_struct: Option<bool>,
     pub output_file_name_extension: Option<String>,
@@ -61,6 +62,10 @@ impl Proposal {
         complement_option(&mut self.input_dir_path, &default.input_dir_path);
         complement_option(&mut self.input_dir_deep, &default.input_dir_deep);
         complement_option(&mut self.output_file_path, &default.output_file_path);
+        complement_option(
+            &mut self.output_file_override,
+            &default.output_file_override,
+        );
         complement_option(&mut self.output_dir_path, &default.output_dir_path);
         complement_option(
             &mut self.output_dir_keep_struct,
@@ -269,7 +274,22 @@ impl Config {
                         .ok()
                 })(),
                 input_dir_deep: (|| toml_value.get("input")?.get("dir")?.get("deep")?.as_bool())(),
-                output_file_path: None, // TODO
+                output_file_path: (|| {
+                    toml_value
+                        .get("output")?
+                        .get("file")?
+                        .get("path")?
+                        .as_str()?
+                        .try_into()
+                        .ok()
+                })(),
+                output_file_override: (|| {
+                    toml_value
+                        .get("output")?
+                        .get("file")?
+                        .get("path")?
+                        .as_bool()
+                })(),
                 output_dir_path: (|| {
                     toml_value
                         .get("output")?
@@ -374,6 +394,7 @@ impl Config {
                 input_dir_path: None,
                 input_dir_deep: Some(false),
                 output_file_path: None,
+                output_file_override: Some(true),
                 output_dir_path: None,
                 output_dir_keep_struct: Some(false),
                 output_file_name_extension: None,
