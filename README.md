@@ -14,7 +14,5 @@ This project is still developing.
 
 * Help document
 * GUI or CUI
-* More careful error handling
 * StdIn
-* Args to provide input & output file path
 * Intro

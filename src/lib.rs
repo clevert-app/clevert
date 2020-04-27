@@ -270,7 +270,7 @@ impl Foundry {
                     })
                 })
             };
-            if let Some(input_list) = &order.input_list_from_args {
+            if let Some(input_list) = &order.input_list {
                 let input_list: Vec<PathBuf> = input_list.iter().map(PathBuf::from).collect();
                 for entry in input_list {
                     if entry.is_dir() {
@@ -288,65 +288,72 @@ impl Foundry {
             let args_template = split_args(order.args_template.as_ref().unwrap())?;
             let args_switches = split_args(order.args_switches.as_ref().unwrap())?;
             for input_file_path in input_files {
-                let mut target_dir_path = input_file_path.parent().unwrap().to_path_buf(); // Performance?
-                if let Some(output_dir_path) = &order.output_dir_path {
-                    target_dir_path = PathBuf::from(output_dir_path);
-                }
-                let mut file_name = input_file_path
-                    .file_stem()
-                    .ok_or(Err(()))
-                    .or_else(|_: Result<(), ()>| {
-                        Err(Error {
-                            kind: ErrorKind::ConfigIllegal,
-                            inner: None,
-                            message: Some(format!(
-                                "input file have not stem name, path = {}",
-                                input_file_path.to_str().unwrap()
-                            )),
-                        })
-                    })?
-                    .to_str()
-                    .unwrap()
-                    .to_string();
-                let mut relative_path = PathBuf::from(&file_name);
-                if let Some(input_dir_path) = &order.input_dir_path {
-                    relative_path = input_file_path
-                        .strip_prefix(input_dir_path)
-                        .or_else(|e| {
+                let output_file_path = if let Some(output_file_path) = &order.output_file_path {
+                    PathBuf::from(output_file_path)
+                } else {
+                    let target_dir_path = match &order.output_dir_path {
+                        Some(path) => PathBuf::from(path),
+                        None => input_file_path.parent().unwrap().to_path_buf(),
+                    };
+                    let mut file_name = input_file_path
+                        .file_stem()
+                        .ok_or(Err(()))
+                        .or_else(|_: Result<(), ()>| {
                             Err(Error {
                                 kind: ErrorKind::ConfigIllegal,
-                                inner: Some(Box::new(e)),
+                                inner: None,
                                 message: Some(format!(
-                                    "strip path prefix failed, path = {}",
+                                    "input file have not stem name, path = {}",
                                     input_file_path.to_str().unwrap()
                                 )),
                             })
                         })?
-                        .to_path_buf();
-                }
-                if let Some(prefix) = &order.output_file_name_prefix {
-                    file_name.insert_str(0, &prefix);
-                }
-                if let Some(suffix) = &order.output_file_name_suffix {
-                    file_name.push_str(&suffix);
-                }
-                relative_path.set_file_name(file_name);
-                if let Some(extension) = &order.output_file_name_extension {
-                    relative_path.set_extension(extension);
-                } else if let Some(extension) = input_file_path.extension() {
-                    relative_path.set_extension(extension);
-                }
-                let output_file_path = target_dir_path.join(relative_path);
-                if !order.output_file_override.unwrap() && fs::metadata(&output_file_path).is_ok() {
-                    return Err(Error {
-                        kind: ErrorKind::ConfigIllegal,
-                        inner: None,
-                        message: Some(format!(
-                            "output target is already exists, path = {}",
-                            output_file_path.to_str().unwrap()
-                        )),
-                    });
-                }
+                        .to_str()
+                        .unwrap()
+                        .to_string();
+                    let mut relative_path = match &order.input_dir_path {
+                        Some(input_dir_path) => input_file_path
+                            .strip_prefix(input_dir_path)
+                            .or_else(|e| {
+                                Err(Error {
+                                    kind: ErrorKind::ConfigIllegal,
+                                    inner: Some(Box::new(e)),
+                                    message: Some(format!(
+                                        "strip path prefix failed, path = {}",
+                                        input_file_path.to_str().unwrap()
+                                    )),
+                                })
+                            })?
+                            .to_path_buf(),
+                        None => PathBuf::from(&file_name),
+                    };
+                    if let Some(prefix) = &order.output_file_name_prefix {
+                        file_name.insert_str(0, &prefix);
+                    }
+                    if let Some(suffix) = &order.output_file_name_suffix {
+                        file_name.push_str(&suffix);
+                    }
+                    relative_path.set_file_name(file_name);
+                    if let Some(extension) = &order.output_file_name_extension {
+                        relative_path.set_extension(extension);
+                    } else if let Some(extension) = input_file_path.extension() {
+                        relative_path.set_extension(extension);
+                    }
+                    let output_file_path = target_dir_path.join(relative_path);
+                    if !order.output_file_override.unwrap()
+                        && fs::metadata(&output_file_path).is_ok()
+                    {
+                        return Err(Error {
+                            kind: ErrorKind::ConfigIllegal,
+                            inner: None,
+                            message: Some(format!(
+                                "output target is already exists, path = {}",
+                                output_file_path.to_str().unwrap()
+                            )),
+                        });
+                    }
+                    output_file_path
+                };
 
                 for index in 0..order.repeat_count.unwrap() {
                     let mut args = Vec::new();

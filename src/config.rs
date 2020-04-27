@@ -21,10 +21,10 @@ pub struct Proposal {
     pub program: Option<String>,
     pub args_template: Option<String>,
     pub args_switches: Option<String>,
-    pub input_list_from_args: Option<Vec<String>>, // Override "input_dir"
+    pub input_list: Option<Vec<String>>, // Priority: config file's "input.list" > process args > "input_dir_path" and others
     pub input_dir_path: Option<String>,
     pub input_dir_deep: Option<bool>,
-    pub output_file_path: Option<String>, // TODO: Override "output_file_name_extension" an others
+    pub output_file_path: Option<String>, // Almost like "input_list"
     pub output_file_override: Option<bool>,
     pub output_dir_path: Option<String>,
     pub output_dir_keep_struct: Option<bool>,
@@ -55,10 +55,7 @@ impl Proposal {
         complement_option(&mut self.program, &default.program);
         complement_option(&mut self.args_template, &default.args_template);
         complement_option(&mut self.args_switches, &default.args_switches);
-        complement_option(
-            &mut self.input_list_from_args,
-            &default.input_list_from_args,
-        );
+        complement_option(&mut self.input_list, &default.input_list);
         complement_option(&mut self.input_dir_path, &default.input_dir_path);
         complement_option(&mut self.input_dir_deep, &default.input_dir_deep);
         complement_option(&mut self.output_file_path, &default.output_file_path);
@@ -254,16 +251,13 @@ impl Config {
                         .try_into()
                         .ok()
                 })(),
-                input_list_from_args: {
-                    let args: Vec<String> = env::args().collect();
-                    let input_list = &args[1..];
-                    let input_list = input_list.to_owned();
-                    if input_list.len() > 1 {
-                        Some(input_list)
-                    } else {
-                        None
+                input_list: (|| {
+                    let mut list = Vec::new();
+                    for v in toml_value.get("input")?.get("list")?.as_array()? {
+                        list.push(v.as_str()?.to_owned())
                     }
-                },
+                    Some(list)
+                })(),
                 input_dir_path: (|| {
                     toml_value
                         .get("input")?
@@ -344,13 +338,13 @@ impl Config {
             let order = toml_value_to_proposal(toml_value);
             cfg.orders.push(order);
         }
-        Config::fix(&mut cfg);
+        Config::fix(&mut cfg)?;
         Ok(cfg)
     }
 
     // fn from_json() -> Config {}
 
-    fn fix(cfg: &mut Config) {
+    fn fix(cfg: &mut Config) -> Result<(), Error> {
         fn inherit_fill(
             order: &mut Proposal,
             current_preset_name: &str,
@@ -365,6 +359,37 @@ impl Config {
                 if let Some(next_preset_name) = &preset.preset_name {
                     inherit_fill(order, next_preset_name, presets, stack_deep + 1);
                 }
+            }
+        }
+
+        let mut args = env::args();
+        args.next();
+        let mut input_list = Vec::new();
+        let mut output_file_path = String::new();
+        let mut is_output_item = false;
+        for arg in args {
+            if is_output_item {
+                if output_file_path.is_empty() {
+                    output_file_path = arg;
+                } else {
+                    return Err(Error {
+                        kind: ErrorKind::ConfigIllegal,
+                        inner: None,
+                        message: Some(String::from("too many output path in process arguments")),
+                    });
+                }
+            } else if arg.starts_with('-') {
+                if arg == "-o" || arg == "--output" {
+                    is_output_item = true;
+                } else {
+                    return Err(Error {
+                        kind: ErrorKind::ConfigIllegal,
+                        inner: None,
+                        message: Some(format!("unknown switch `{}` in process arguments", arg)),
+                    });
+                }
+            } else {
+                input_list.push(arg);
             }
         }
 
@@ -390,10 +415,18 @@ impl Config {
                 program: None,
                 args_template: Some(String::from("")),
                 args_switches: Some(String::from("")),
-                input_list_from_args: None,
+                input_list: if input_list.is_empty() {
+                    None
+                } else {
+                    Some(input_list.to_owned())
+                },
                 input_dir_path: None,
                 input_dir_deep: Some(false),
-                output_file_path: None,
+                output_file_path: if output_file_path.is_empty() {
+                    None
+                } else {
+                    Some(output_file_path.to_owned())
+                },
                 output_file_override: Some(true),
                 output_dir_path: None,
                 output_dir_keep_struct: Some(false),
@@ -402,5 +435,7 @@ impl Config {
                 output_file_name_suffix: None,
             });
         }
+
+        Ok(())
     }
 }
