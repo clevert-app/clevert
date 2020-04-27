@@ -98,12 +98,12 @@ impl Config {
         file_path.set_extension("toml");
         if let Ok(toml_str) = fs::read_to_string(&file_path) {
             return Config::from_toml(toml_str);
-        };
+        }
 
         // file_path.set_extension("json");
         // if let Ok(json_str) = fs::read_to_string(&file_path) {
         //     return Config::from_json(json_str);
-        // };
+        // }
 
         Err(Error {
             kind: ErrorKind::ConfigFileCanNotRead,
@@ -364,15 +364,15 @@ impl Config {
                 order.complement(preset);
                 if let Some(next_preset_name) = &preset.preset_name {
                     inherit_fill(order, next_preset_name, presets, stack_deep + 1);
-                };
-            };
+                }
+            }
         }
 
         for order in &mut cfg.orders {
             if let Some(preset_name) = &order.preset_name {
                 let first_preset_name = preset_name.clone();
                 inherit_fill(order, &first_preset_name, &cfg.presets, 1);
-            };
+            }
             // You can use [default] -> [other preset you want]
             inherit_fill(order, "default", &cfg.presets, 1);
             // But can not [build_in] -> [other preset]

@@ -8,7 +8,7 @@
 
 ### Warning
 
-This is an unstable version, still developing.
+This project is still developing.
 
 ### ToDo List
 

@@ -50,10 +50,10 @@ impl fmt::Display for Error {
         .to_string();
         if let Some(message) = &self.message {
             content += &format!(", message = {}", message);
-        };
+        }
         if let Some(inner) = &self.inner {
             content += &format!(", error = {}", inner);
-        };
+        }
         f.write_str(&content)
     }
 }
