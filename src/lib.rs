@@ -16,7 +16,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
-use std::time;
+use std::time::Duration;
 use std::vec::IntoIter;
 
 #[derive(Debug)]
@@ -40,7 +40,7 @@ impl error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use ErrorKind::*;
-        let mut content = match &self.kind {
+        let mut content = match self.kind {
             ConfigTomlIllegal => "config isn not a legal toml document",
             ConfigIllegal => "config isn illegal",
             ConfigFileCanNotRead => "read config file failed",
@@ -48,16 +48,17 @@ impl fmt::Display for Error {
             ExecutePanic => "task process panic",
         }
         .to_string();
-        if let Some(message) = &self.message {
+        if let Some(ref message) = self.message {
             content += &format!(", message = {}", message);
         }
-        if let Some(inner) = &self.inner {
+        if let Some(ref inner) = self.inner {
             content += &format!(", error = {}", inner);
         }
         f.write_str(&content)
     }
 }
 
+#[derive(Debug)]
 struct Task {
     program: String,
     args: Vec<String>,
@@ -85,6 +86,7 @@ struct Order {
     tasks: Vec<Task>,
     current_commands_iter: Option<Arc<Mutex<IntoIter<Command>>>>,
     current_processes: Option<Arc<Mutex<Vec<Child>>>>,
+    current_threads: Option<Vec<thread::JoinHandle<Result<(), io::Error>>>>,
 }
 
 impl Order {
@@ -110,32 +112,53 @@ impl Order {
         commands
     }
 
-    fn execute(&mut self) -> Result<(), io::Error> {
+    fn calc_progress(proc_mutex: &Arc<Mutex<Vec<Child>>>, amount: usize) -> (i32, i32, f64) {
+        let completed = proc_mutex.lock().unwrap().len();
+        let completed: i32 = completed.try_into().unwrap();
+        let completed_f64: f64 = completed.into();
+        let amount: i32 = amount.try_into().unwrap();
+        let amount_f64: f64 = amount.into();
+        let proportion = completed_f64 / amount_f64;
+        (completed, amount, proportion)
+    }
+
+    /// Returns execute progress.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let (completed, amount, proportion) = self.progress();
+    /// println!(
+    ///     "completed = {}, amount = {}, proportion = {}",
+    ///     completed, amount, proportion
+    /// );
+    /// ```
+    fn _progress(&self) -> (i32, i32, f64) {
+        let mutex = Arc::clone(self.current_processes.as_ref().unwrap());
+        let amount = self.tasks.len();
+        Order::calc_progress(&mutex, amount)
+    }
+
+    fn start(&mut self) -> Result<(), io::Error> {
         let commands = self.prepare();
         let iter = commands.into_iter();
         self.current_commands_iter = Some(Arc::new(Mutex::new(iter)));
         self.current_processes = Some(Arc::new(Mutex::new(Vec::new())));
         if self.print_progress_msg {
-            let amount: i32 = self.tasks.len().try_into().unwrap();
-            let amount: f64 = amount.into();
-            let commands_iter_mutex = Arc::clone(self.current_commands_iter.as_ref().unwrap());
+            let mutex = Arc::clone(self.current_processes.as_ref().unwrap());
+            let amount = self.tasks.len();
             thread::spawn(move || loop {
-                let iter = commands_iter_mutex.lock().unwrap();
-                let remaining = iter.size_hint().0;
-                if remaining == 0 {
-                    break;
-                }
-                let remaining: i32 = remaining.try_into().unwrap();
-                let remaining: f64 = remaining.into();
-                let completed = amount - remaining;
+                let (completed, amount, proportion) = Order::calc_progress(&mutex, amount);
                 print_log::info(format!(
-                    "progress: {} / {} ({:.0}%)",
+                    "current order progress: {} / {} tasks ({:.0}%)",
                     completed,
                     amount,
-                    completed / amount * 100.0
+                    proportion * 100.0
                 ));
-                drop(iter);
-                thread::sleep(time::Duration::from_secs(1));
+                if proportion == 1.0 {
+                    break;
+                }
+                thread::sleep(Duration::from_secs(1));
             });
         }
         let mut handles = Vec::new();
@@ -143,6 +166,12 @@ impl Order {
             let handle = self.spawn();
             handles.push(handle);
         }
+        self.current_threads = Some(handles);
+        Ok(())
+    }
+
+    fn wait(&mut self) -> Result<(), io::Error> {
+        let handles = self.current_threads.take().unwrap();
         for handle in handles {
             if let Err(e) = handle.join().unwrap() {
                 if self.print_progress_msg {
@@ -152,25 +181,33 @@ impl Order {
                 return Err(e);
             }
         }
-        self.stop()?;
+        self.terminate()?;
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<(), io::Error> {
+    fn stop(&mut self, kill_processes: bool) -> Result<(), io::Error> {
         let mutex = self.current_processes.as_mut().unwrap();
         let mut mutex_guard = mutex.lock().unwrap();
         let childs: &mut Vec<std::process::Child> = mutex_guard.as_mut();
-        for child in childs.iter_mut() {
-            let _ = child.kill(); // error handling
+        if kill_processes {
+            for child in childs.iter_mut() {
+                let _ = child.kill();
+                match child.try_wait()? {
+                    Some(_) => {} // already exited
+                    None => {
+                        child.kill()?;
+                    }
+                }
+            }
         }
-        if let OrderStdio::ToFile(file) = &mut self.stdout {
+        if let OrderStdio::ToFile(ref mut file) = self.stdout {
             for child in childs.iter_mut() {
                 let mut stdout = Vec::<u8>::new();
                 child.stdout.as_mut().unwrap().read_to_end(&mut stdout)?;
                 file.write_all(&stdout)?;
             }
         }
-        if let OrderStdio::ToFile(file) = &mut self.stderr {
+        if let OrderStdio::ToFile(ref mut file) = self.stderr {
             for child in childs.iter_mut() {
                 let mut stderr = Vec::<u8>::new();
                 child.stderr.as_mut().unwrap().read_to_end(&mut stderr)?;
@@ -178,8 +215,18 @@ impl Order {
             }
         }
         drop(mutex_guard);
+        self.current_commands_iter = None;
         self.current_processes = None;
+        self.current_threads = None;
         Ok(())
+    }
+
+    fn cease(&mut self) -> Result<(), io::Error> {
+        self.stop(false)
+    }
+
+    fn terminate(&mut self) -> Result<(), io::Error> {
+        self.stop(true)
     }
 
     fn spawn(&mut self) -> thread::JoinHandle<Result<(), io::Error>> {
@@ -255,7 +302,6 @@ impl Foundry {
 
         let mut orders = Vec::new();
         for order in &cfg.orders {
-            let mut input_files = Vec::new();
             let read_dir = |dir| {
                 if order.input_dir_deep.unwrap() {
                     read_dir_recurse(dir)
@@ -270,7 +316,8 @@ impl Foundry {
                     })
                 })
             };
-            if let Some(input_list) = &order.input_list {
+            let mut input_files = Vec::new();
+            if let Some(ref input_list) = order.input_list {
                 let input_list: Vec<PathBuf> = input_list.iter().map(PathBuf::from).collect();
                 for entry in input_list {
                     if entry.is_dir() {
@@ -279,20 +326,19 @@ impl Foundry {
                         input_files.push(entry);
                     }
                 }
-            } else if let Some(input_dir) = &order.input_dir_path {
+            } else if let Some(ref input_dir) = order.input_dir_path {
                 let input_dir = PathBuf::from(input_dir);
                 input_files.append(&mut read_dir(input_dir)?);
             }
-
             let mut tasks = Vec::new();
             let args_template = split_args(order.args_template.as_ref().unwrap())?;
             let args_switches = split_args(order.args_switches.as_ref().unwrap())?;
             for input_file_path in input_files {
-                let output_file_path = if let Some(output_file_path) = &order.output_file_path {
+                let output_file_path = if let Some(ref output_file_path) = order.output_file_path {
                     PathBuf::from(output_file_path)
                 } else {
-                    let target_dir_path = match &order.output_dir_path {
-                        Some(path) => PathBuf::from(path),
+                    let target_dir_path = match order.output_dir_path {
+                        Some(ref path) => PathBuf::from(path),
                         None => input_file_path.parent().unwrap().to_path_buf(),
                     };
                     let mut file_name = input_file_path
@@ -311,8 +357,8 @@ impl Foundry {
                         .to_str()
                         .unwrap()
                         .to_string();
-                    let mut relative_path = match &order.input_dir_path {
-                        Some(input_dir_path) => input_file_path
+                    let mut relative_path = match order.input_dir_path {
+                        Some(ref input_dir_path) => input_file_path
                             .strip_prefix(input_dir_path)
                             .or_else(|e| {
                                 Err(Error {
@@ -327,22 +373,23 @@ impl Foundry {
                             .to_path_buf(),
                         None => PathBuf::from(&file_name),
                     };
-                    if let Some(prefix) = &order.output_file_name_prefix {
+                    if let Some(ref prefix) = order.output_file_name_prefix {
                         file_name.insert_str(0, &prefix);
                     }
-                    if let Some(suffix) = &order.output_file_name_suffix {
+                    if let Some(ref suffix) = order.output_file_name_suffix {
                         file_name.push_str(&suffix);
                     }
                     relative_path.set_file_name(file_name);
-                    if let Some(extension) = &order.output_file_name_extension {
+                    if let Some(ref extension) = order.output_file_name_extension {
                         relative_path.set_extension(extension);
                     } else if let Some(extension) = input_file_path.extension() {
                         relative_path.set_extension(extension);
                     }
                     let output_file_path = target_dir_path.join(relative_path);
-                    if !order.output_file_override.unwrap()
+                    if !order.output_file_overwrite.unwrap()
                         && fs::metadata(&output_file_path).is_ok()
                     {
+                        // Unable to detect overwriting during executing!
                         return Err(Error {
                             kind: ErrorKind::ConfigIllegal,
                             inner: None,
@@ -402,6 +449,15 @@ impl Foundry {
                         args,
                     });
                 }
+            }
+
+            if tasks.is_empty() {
+                return Err(Error {
+                    kind: ErrorKind::ConfigIllegal,
+                    inner: None,
+                    message: Some(String::from("current order generated no task")),
+                    // message: Some(format!("order[{}] generated no task", order_index)),
+                });
             }
 
             orders.push(Order {
@@ -480,6 +536,7 @@ impl Foundry {
                 tasks,
                 current_commands_iter: None,
                 current_processes: None,
+                current_threads: None,
             });
         }
         Ok(Foundry { orders })
@@ -487,7 +544,7 @@ impl Foundry {
 
     pub fn start(&mut self) -> Result<(), Error> {
         for order in &mut self.orders {
-            order.execute().or_else(|e| {
+            order.start().or_else(|e| {
                 Err(Error {
                     kind: ErrorKind::ExecutePanic,
                     inner: Some(Box::new(e)),
@@ -498,13 +555,76 @@ impl Foundry {
         Ok(())
     }
 
-    pub fn _stop(&mut self) -> Result<(), Error> {
+    /// Returns execute progress.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let (completed, amount, proportion) = self.progress();
+    /// println!(
+    ///     "completed = {}, amount = {}, proportion = {}",
+    ///     completed, amount, proportion
+    /// );
+    /// ```
+    // pub fn progress(&self) -> Result<(i32, i32, f64), Error> {
+    //     let mut completed = 0;
+    //     let mut amount = 0;
+    //     let mut proportion = 0.0;
+    //     for order in &self.orders {
+    //         let (cur_completed, cur_amount, cur_proportion) = order.progress();
+    //         completed += cur_completed;
+    //         amount += cur_amount;
+    //         proportion += cur_proportion;
+    //     }
+    //     Ok((completed, amount, proportion))
+    // }
+
+    pub fn wait(&mut self) -> Result<(), Error> {
         for order in &mut self.orders {
-            order.stop().or_else(|e| {
+            order.wait().or_else(|e| {
                 Err(Error {
                     kind: ErrorKind::ExecutePanic,
                     inner: Some(Box::new(e)),
-                    message: Some(String::from("stop order failed")),
+                    message: Some(String::from("wait order failed")),
+                })
+            })?;
+        }
+        Ok(())
+    }
+
+    // pub fn pause(&mut self) -> Result<(), Error> {
+    //     for order in &mut self.orders {
+    //         order.pause().or_else(|e| {
+    //             Err(Error {
+    //                 kind: ErrorKind::ExecutePanic,
+    //                 inner: Some(Box::new(e)),
+    //                 message: Some(String::from("pause order failed")),
+    //             })
+    //         })?;
+    //     }
+    //     Ok(())
+    // }
+
+    pub fn cease(&mut self) -> Result<(), Error> {
+        for order in &mut self.orders {
+            order.cease().or_else(|e| {
+                Err(Error {
+                    kind: ErrorKind::ExecutePanic,
+                    inner: Some(Box::new(e)),
+                    message: Some(String::from("cease order failed")),
+                })
+            })?;
+        }
+        Ok(())
+    }
+
+    pub fn terminate(&mut self) -> Result<(), Error> {
+        for order in &mut self.orders {
+            order.terminate().or_else(|e| {
+                Err(Error {
+                    kind: ErrorKind::ExecutePanic,
+                    inner: Some(Box::new(e)),
+                    message: Some(String::from("terminate order failed")),
                 })
             })?;
         }
@@ -513,6 +633,9 @@ impl Foundry {
 }
 
 pub fn run() -> Result<(), Error> {
-    Foundry::new(Config::new()?)?.start()
-    // Foundry::new(Config::_from_toml_test()?)?.start()
+    let mut foundry = Foundry::new(Config::new()?)?;
+    // let mut foundry = Foundry::new(Config::_from_toml_test()?)?;
+    foundry.start()?;
+    foundry.wait()?;
+    Ok(())
 }

@@ -25,7 +25,7 @@ pub struct Proposal {
     pub input_dir_path: Option<String>,
     pub input_dir_deep: Option<bool>,
     pub output_file_path: Option<String>, // Almost like "input_list"
-    pub output_file_override: Option<bool>,
+    pub output_file_overwrite: Option<bool>,
     pub output_dir_path: Option<String>,
     pub output_dir_keep_struct: Option<bool>,
     pub output_file_name_extension: Option<String>,
@@ -60,8 +60,8 @@ impl Proposal {
         complement_option(&mut self.input_dir_deep, &default.input_dir_deep);
         complement_option(&mut self.output_file_path, &default.output_file_path);
         complement_option(
-            &mut self.output_file_override,
-            &default.output_file_override,
+            &mut self.output_file_overwrite,
+            &default.output_file_overwrite,
         );
         complement_option(&mut self.output_dir_path, &default.output_dir_path);
         complement_option(
@@ -117,7 +117,6 @@ impl Config {
             message.info = true
             threads.count = 4
             process.simulate_terminal = false # TODO
-            repeat.illimitably = false
             repeat.count = 1
             stdio.stdout.type = 'file' # ignore | normal | file
             stdio.stdout.file.path = './target/test-stdout.log'
@@ -277,11 +276,11 @@ impl Config {
                         .try_into()
                         .ok()
                 })(),
-                output_file_override: (|| {
+                output_file_overwrite: (|| {
                     toml_value
                         .get("output")?
                         .get("file")?
-                        .get("path")?
+                        .get("overwrite")?
                         .as_bool()
                 })(),
                 output_dir_path: (|| {
@@ -356,7 +355,7 @@ impl Config {
             }
             if let Some(preset) = presets.get(current_preset_name) {
                 order.complement(preset);
-                if let Some(next_preset_name) = &preset.preset_name {
+                if let Some(ref next_preset_name) = preset.preset_name {
                     inherit_fill(order, next_preset_name, presets, stack_deep + 1);
                 }
             }
@@ -394,7 +393,7 @@ impl Config {
         }
 
         for order in &mut cfg.orders {
-            if let Some(preset_name) = &order.preset_name {
+            if let Some(ref preset_name) = order.preset_name {
                 let first_preset_name = preset_name.clone();
                 inherit_fill(order, &first_preset_name, &cfg.presets, 1);
             }
@@ -413,8 +412,8 @@ impl Config {
                 stderr_type: Some(String::from("ignore")),
                 stderr_file_path: None,
                 program: None,
-                args_template: Some(String::from("")),
-                args_switches: Some(String::from("")),
+                args_template: Some(String::new()),
+                args_switches: Some(String::new()),
                 input_list: if input_list.is_empty() {
                     None
                 } else {
@@ -427,7 +426,7 @@ impl Config {
                 } else {
                     Some(output_file_path.to_owned())
                 },
-                output_file_override: Some(true),
+                output_file_overwrite: Some(true),
                 output_dir_path: None,
                 output_dir_keep_struct: Some(false),
                 output_file_name_extension: None,
@@ -436,6 +435,14 @@ impl Config {
             });
         }
 
-        Ok(())
+        if cfg.orders.is_empty() {
+            Err(Error {
+                kind: ErrorKind::ConfigIllegal,
+                inner: None,
+                message: Some(String::from("order not provided")),
+            })
+        } else {
+            Ok(())
+        }
     }
 }

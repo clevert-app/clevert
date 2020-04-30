@@ -4,8 +4,13 @@ use std::time::SystemTime;
 fn main() {
     let now = SystemTime::now();
     match foundry::run() {
-        Ok(_) => print_log::info("all tasks completed"),
-        Err(e) => print_log::error(e),
+        Ok(_) => {
+            print_log::info("all tasks completed");
+        }
+        Err(ref e) => {
+            print_log::error(e);
+            print_log::error(format!("error detail = {:?}", e))
+        }
     }
     print_log::info(format!(
         "ended, took {:.2} seconds",

@@ -13,6 +13,6 @@ This project is still developing.
 ### ToDo List
 
 * Help document
-* GUI or CUI
+* GUI or ~~CUI~~
 * StdIn
 * Intro
