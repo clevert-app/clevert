@@ -10,9 +10,10 @@
 
 This project is still developing.
 
-### ToDo List
+### Todo List
 
+* Pause and stop (WIP)
 * Help document
-* GUI or ~~CUI~~
+* WebUI
 * StdIn
 * Intro
