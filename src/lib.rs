@@ -2,6 +2,8 @@ pub mod config;
 pub mod cui;
 use config::Config;
 use cui::print_log;
+use shared_child::SharedChild;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error;
 use std::fmt;
@@ -13,6 +15,8 @@ use std::path::PathBuf;
 use std::process::Child;
 use std::process::Command;
 use std::process::Stdio;
+use std::slice::Iter;
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -41,8 +45,8 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use ErrorKind::*;
         let mut content = match self.kind {
-            ConfigTomlIllegal => "config isn not a legal toml document",
-            ConfigIllegal => "config isn illegal",
+            ConfigTomlIllegal => "config is not a legal toml document",
+            ConfigIllegal => "config is illegal",
             ConfigFileCanNotRead => "read config file failed",
             CanNotWriteLogFile => "write log file failed",
             ExecutePanic => "task process panic",
@@ -58,7 +62,6 @@ impl fmt::Display for Error {
     }
 }
 
-#[derive(Debug)]
 struct Task {
     program: String,
     args: Vec<String>,
@@ -72,10 +75,95 @@ impl Task {
     }
 }
 
+enum TaskStdio {
+    Normal,
+    Ignore,
+    File(File),
+}
+
+struct Task2 {
+    program: String,
+    args: Vec<String>,
+    stdout: TaskStdio,
+    stderr: TaskStdio,
+}
+
+impl Task2 {
+    fn spawn(&self) -> io::Result<SharedChild> {
+        let mut command = Command::new(&self.program);
+        command.args(&self.args);
+        SharedChild::spawn(&mut command)
+    }
+}
+
+struct Order2<'a> {
+    threads_count: u32,
+    tasks: Vec<Task>,
+    iter: Arc<Mutex<Iter<'a, Task>>>,
+    threads: Arc<Mutex<Vec<thread::JoinHandle<Result<(), io::Error>>>>>,
+    childs: Arc<Mutex<Vec<Option<SharedChild>>>>,
+}
+
+impl Order2<'_> {
+    pub fn new(threads_count: u32, tasks: Vec<Task>) -> Self {
+        Self {
+            threads_count,
+            tasks,
+            iter: Arc::new(Mutex::new(tasks.iter())),
+            threads: Arc::new(Mutex::new(Vec::new())),
+            childs: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+    fn start(&mut self) {
+        // self.
+        // let a =self.tasks.iter();
+        // std::vec::Drain
+        // let mut commands = self.commands.lock().unwrap();
+        // commands.clear();
+        // commands.append(&mut self.prepare());
+        // let mut threads = self.threads.lock().unwrap();
+        // threads.clear();
+        // for i in 0..self.threads_count {
+        //     // let thread = self.spawn(i.try_into().unwrap());
+        //     // threads.push(thread);
+        // }
+    }
+
+    // fn spawn(&mut self, index: usize) -> thread::JoinHandle<Result<(), io::Error>> {
+    //     let commands_mutex = Arc::clone(&self.commands);
+    //     let threads_mutex = Arc::clone(&self.threads);
+    //     let childs_mutex = Arc::clone(&self.childs);
+    //     thread::spawn(move || {
+    //         while let Some(mut command) = {
+    //             let mut commands = commands_mutex.lock().unwrap();
+    //             commands.pop() // reverse?
+    //         } {
+    //             let child = Some(SharedChild::spawn(&mut command)?);
+
+    //             let mut childs = childs_mutex.lock().unwrap();
+    //             childs[index] = child;
+    //             drop(childs);
+
+    //             // child.as_ref().as_ref().unwrap().wait()?;
+    //             // Some().
+    //             // child
+    //             // let mut status = status_mutex.lock().unwrap();
+    //             // let s = status.childs[index].take();
+    //             // drop(status);
+    //         }
+    //         Ok(())
+    //     })
+    // }
+}
 enum OrderStdio {
     Normal,
     Ignore,
     ToFile(File),
+}
+
+struct OrderStatus {
+    commands: IntoIter<Command>,
+    threads: Vec<thread::JoinHandle<Result<(), io::Error>>>,
 }
 
 struct Order {
@@ -84,9 +172,7 @@ struct Order {
     stdout: OrderStdio,
     stderr: OrderStdio,
     tasks: Vec<Task>,
-    current_commands_iter: Option<Arc<Mutex<IntoIter<Command>>>>,
-    current_processes: Option<Arc<Mutex<Vec<Child>>>>,
-    current_threads: Option<Vec<thread::JoinHandle<Result<(), io::Error>>>>,
+    status: Option<Arc<Mutex<OrderStatus>>>,
 }
 
 impl Order {
@@ -112,12 +198,19 @@ impl Order {
         commands
     }
 
-    fn calc_progress(proc_mutex: &Arc<Mutex<Vec<Child>>>, amount: usize) -> (i32, i32, f64) {
-        let completed = proc_mutex.lock().unwrap().len();
-        let completed: i32 = completed.try_into().unwrap();
-        let completed_f64: f64 = completed.into();
+    fn calc_progress(status_mutex: &Arc<Mutex<OrderStatus>>, amount: usize) -> (i32, i32, f64) {
+        let status = status_mutex.lock().unwrap();
+
+        let remain = status.commands.len();
+        let remain: i32 = remain.try_into().unwrap();
+        let remain_f64: f64 = remain.into();
+
         let amount: i32 = amount.try_into().unwrap();
         let amount_f64: f64 = amount.into();
+
+        let completed = amount - remain;
+        let completed_f64: f64 = completed.into();
+
         let proportion = completed_f64 / amount_f64;
         (completed, amount, proportion)
     }
@@ -134,18 +227,25 @@ impl Order {
     /// );
     /// ```
     fn _progress(&self) -> (i32, i32, f64) {
-        let mutex = Arc::clone(self.current_processes.as_ref().unwrap());
+        let mutex = Arc::clone(self.status.as_ref().unwrap());
         let amount = self.tasks.len();
         Order::calc_progress(&mutex, amount)
     }
 
     fn start(&mut self) -> Result<(), io::Error> {
-        let commands = self.prepare();
-        let iter = commands.into_iter();
-        self.current_commands_iter = Some(Arc::new(Mutex::new(iter)));
-        self.current_processes = Some(Arc::new(Mutex::new(Vec::new())));
+        self.status = Some(Arc::new(Mutex::new(OrderStatus {
+            commands: self.prepare().into_iter(),
+            threads: Vec::new(),
+        })));
+        let status_mutex = Arc::clone(self.status.as_ref().unwrap());
+        let mut status = status_mutex.lock().unwrap();
+        for _ in 0..self.threads_count {
+            let handle = self.spawn();
+            status.threads.push(handle);
+        }
+        drop(status);
         if self.print_progress_msg {
-            let mutex = Arc::clone(self.current_processes.as_ref().unwrap());
+            let mutex = Arc::clone(self.status.as_ref().unwrap());
             let amount = self.tasks.len();
             thread::spawn(move || loop {
                 let (completed, amount, proportion) = Order::calc_progress(&mutex, amount);
@@ -161,63 +261,63 @@ impl Order {
                 thread::sleep(Duration::from_secs(1));
             });
         }
-        let mut handles = Vec::new();
-        for _ in 0..self.threads_count {
-            let handle = self.spawn();
-            handles.push(handle);
-        }
-        self.current_threads = Some(handles);
         Ok(())
     }
 
     fn wait(&mut self) -> Result<(), io::Error> {
-        let handles = self.current_threads.take().unwrap();
-        for handle in handles {
-            if let Err(e) = handle.join().unwrap() {
-                if self.print_progress_msg {
-                    let mut iter = self.current_commands_iter.as_ref().unwrap().lock().unwrap();
-                    iter.nth(self.tasks.len() - 1);
-                }
-                return Err(e);
-            }
+        let status_mutex = Arc::clone(self.status.as_ref().unwrap());
+        let mut status = status_mutex.lock().unwrap();
+        let mut threads = Vec::new();
+        threads.append(&mut status.threads);
+        drop(status);
+        for handle in threads {
+            handle.join().unwrap()?;
         }
         self.terminate()?;
         Ok(())
     }
 
+    fn rest(&mut self) -> Result<(), io::Error> {
+        Ok(())
+    }
+
+    fn recess(&mut self) -> Result<(), io::Error> {
+        Ok(())
+    }
+
+    fn pause(&mut self) -> Result<(), io::Error> {
+        Ok(())
+    }
+
     fn stop(&mut self, kill_processes: bool) -> Result<(), io::Error> {
-        let mutex = self.current_processes.as_mut().unwrap();
-        let mut mutex_guard = mutex.lock().unwrap();
-        let childs: &mut Vec<std::process::Child> = mutex_guard.as_mut();
-        if kill_processes {
-            for child in childs.iter_mut() {
-                let _ = child.kill();
-                match child.try_wait()? {
-                    Some(_) => {} // already exited
-                    None => {
-                        child.kill()?;
-                    }
-                }
-            }
-        }
-        if let OrderStdio::ToFile(ref mut file) = self.stdout {
-            for child in childs.iter_mut() {
-                let mut stdout = Vec::<u8>::new();
-                child.stdout.as_mut().unwrap().read_to_end(&mut stdout)?;
-                file.write_all(&stdout)?;
-            }
-        }
-        if let OrderStdio::ToFile(ref mut file) = self.stderr {
-            for child in childs.iter_mut() {
-                let mut stderr = Vec::<u8>::new();
-                child.stderr.as_mut().unwrap().read_to_end(&mut stderr)?;
-                file.write_all(&stderr)?;
-            }
-        }
-        drop(mutex_guard);
-        self.current_commands_iter = None;
-        self.current_processes = None;
-        self.current_threads = None;
+        // let status_mutex = Arc::clone(self.status.as_ref().unwrap());
+        // let mut status = status_mutex.lock().unwrap();
+        // if kill_processes {
+        //     for child in &mut status.processes {
+        //         let _ = child.kill();
+        //         match child.try_wait()? {
+        //             Some(_) => {} // already exited
+        //             None => {
+        //                 child.kill()?;
+        //             }
+        //         }
+        //     }
+        // }
+        // if let OrderStdio::ToFile(ref mut file) = self.stdout {
+        //     for child in &mut status.processes {
+        //         let mut stdout = Vec::new();
+        //         child.stdout.as_mut().unwrap().read_to_end(&mut stdout)?;
+        //         file.write_all(&stdout)?;
+        //     }
+        // }
+        // if let OrderStdio::ToFile(ref mut file) = self.stderr {
+        //     for child in &mut status.processes {
+        //         let mut stderr = Vec::new();
+        //         child.stderr.as_mut().unwrap().read_to_end(&mut stderr)?;
+        //         file.write_all(&stderr)?;
+        //     }
+        // }
+        // self.status = None;
         Ok(())
     }
 
@@ -230,16 +330,22 @@ impl Order {
     }
 
     fn spawn(&mut self) -> thread::JoinHandle<Result<(), io::Error>> {
-        let commands_iter_mutex = Arc::clone(self.current_commands_iter.as_ref().unwrap());
-        let processes_mutex = Arc::clone(self.current_processes.as_ref().unwrap());
+        let status_mutex = Arc::clone(self.status.as_ref().unwrap());
         thread::spawn(move || {
             while let Some(mut command) = {
-                let mut iter = commands_iter_mutex.lock().unwrap();
-                iter.next()
+                let mut status = status_mutex.lock().unwrap();
+                status.commands.next()
             } {
-                let mut child = command.spawn()?;
-                child.wait()?;
-                processes_mutex.lock().unwrap().push(child);
+                let child = Arc::new(SharedChild::spawn(&mut command)?);
+                let monitor = thread::spawn({
+                    let child = Arc::clone(&child);
+                    move || {
+                        thread::sleep(std::time::Duration::from_secs(2));
+                        child.kill()
+                    }
+                });
+                child.as_ref().wait()?;
+                monitor.join().unwrap()?;
             }
             Ok(())
         })
@@ -534,9 +640,7 @@ impl Foundry {
                     }
                 },
                 tasks,
-                current_commands_iter: None,
-                current_processes: None,
-                current_threads: None,
+                status: None,
             });
         }
         Ok(Foundry { orders })
@@ -592,18 +696,31 @@ impl Foundry {
         Ok(())
     }
 
-    // pub fn pause(&mut self) -> Result<(), Error> {
-    //     for order in &mut self.orders {
-    //         order.pause().or_else(|e| {
-    //             Err(Error {
-    //                 kind: ErrorKind::ExecutePanic,
-    //                 inner: Some(Box::new(e)),
-    //                 message: Some(String::from("pause order failed")),
-    //             })
-    //         })?;
-    //     }
-    //     Ok(())
-    // }
+    pub fn recess(&mut self) -> Result<(), Error> {
+        for order in &mut self.orders {
+            order.recess().or_else(|e| {
+                Err(Error {
+                    kind: ErrorKind::ExecutePanic,
+                    inner: Some(Box::new(e)),
+                    message: Some(String::from("recess order failed")),
+                })
+            })?;
+        }
+        Ok(())
+    }
+
+    pub fn pause(&mut self) -> Result<(), Error> {
+        for order in &mut self.orders {
+            order.pause().or_else(|e| {
+                Err(Error {
+                    kind: ErrorKind::ExecutePanic,
+                    inner: Some(Box::new(e)),
+                    message: Some(String::from("pause order failed")),
+                })
+            })?;
+        }
+        Ok(())
+    }
 
     pub fn cease(&mut self) -> Result<(), Error> {
         for order in &mut self.orders {
@@ -633,9 +750,23 @@ impl Foundry {
 }
 
 pub fn run() -> Result<(), Error> {
-    let mut foundry = Foundry::new(Config::new()?)?;
-    // let mut foundry = Foundry::new(Config::_from_toml_test()?)?;
+    // let mut foundry = Foundry::new(Config::new()?)?;
+    let mut foundry = Foundry::new(Config::_from_toml_test()?)?;
     foundry.start()?;
     foundry.wait()?;
+    // let foundry = Arc::new(Mutex::new(foundry));
+    // thread::spawn((|| {
+    //     let foundry = Arc::clone(&foundry);
+    //     move || {
+    //         foundry.lock().unwrap().start().unwrap();
+    //     }
+    // })());
+    // thread::sleep(Duration::from_secs(2));
+    // thread::spawn((|| {
+    //     let foundry = Arc::clone(&foundry);
+    //     move || {
+    //         foundry.lock().unwrap().terminate().unwrap();
+    //     }
+    // })());
     Ok(())
 }

@@ -6,6 +6,8 @@
 <img src="https://flat.badgen.net/github/license/kkocdko/foundry?color=4caf50">
 </div>
 
+> Project paused until 2021-06-09.
+
 ### Warning
 
 This project is still developing.

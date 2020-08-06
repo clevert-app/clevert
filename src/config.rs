@@ -143,11 +143,20 @@ impl Config {
             stdio.stdout.type = 'normal'
             stdio.stderr.type = 'normal'
 
+            [presets.timeout]
+            program = 'timeout'
+            args.template = '{args.switches}'
+            args.switches = '/t 5'
+            threads.count = 1
+            stdio.stdout.type = 'normal'
+            stdio.stderr.type = 'normal'
+
             [[orders]]
-            preset = 'cwebp_lossless'
-            program = 'D:\Library\libwebp\libwebp_1.0.0\bin\cwebp.exe'
+            message.progress = false
+            preset = 'timeout'
+            # program = 'D:\Library\libwebp\libwebp_1.0.0\bin\cwebp.exe'
             input.dir.path = 'D:\Temp\foundry_test\source'
-            output.dir.path = 'D:\Temp\foundry_test\target'
+            # output.dir.path = 'D:\Temp\foundry_test\target'
             output.file_name.prefix = 'out_'
             output.file_name.suffix = '_out'
             "#,
