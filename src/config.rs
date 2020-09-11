@@ -41,7 +41,7 @@ impl Proposal {
             }
         }
 
-        // Use macro instead?
+        // TODO: Use macro instead?
         complement_option(&mut self.preset_name, &default.preset_name); // Unnecessary?
         complement_option(&mut self.show_progress, &default.show_progress);
         complement_option(&mut self.show_info, &default.show_info);
@@ -116,6 +116,7 @@ impl Config {
             message.progress = true
             message.info = true
             threads.count = 4
+            threads.stop_painc = false # TODO
             process.simulate_terminal = false # TODO
             repeat.count = 1
             stdio.stdout.type = 'file' # ignore | normal | file
@@ -153,10 +154,10 @@ impl Config {
 
             [[orders]]
             message.progress = false
-            preset = 'timeout'
-            # program = 'D:\Library\libwebp\libwebp_1.0.0\bin\cwebp.exe'
+            preset = 'cwebp_lossless'
+            program = 'D:\Library\libwebp\libwebp_1.0.0\bin\cwebp.exe'
             input.dir.path = 'D:\Temp\foundry_test\source'
-            # output.dir.path = 'D:\Temp\foundry_test\target'
+            output.dir.path = 'D:\Temp\foundry_test\target'
             output.file_name.prefix = 'out_'
             output.file_name.suffix = '_out'
             "#,

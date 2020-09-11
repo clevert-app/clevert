@@ -2,19 +2,18 @@ use foundry::cui::print_log;
 use std::time::SystemTime;
 
 fn main() {
-    let now = SystemTime::now();
+    let time_now = SystemTime::now();
     match foundry::run() {
         Ok(_) => {
             print_log::info("all tasks completed");
         }
-        Err(ref e) => {
-            print_log::error(e);
-            print_log::error(format!("error detail = {:?}", e))
+        Err(e) => {
+            print_log::error(&e);
+            print_log::error(format!("error detail = {:?}", &e))
         }
     }
     print_log::info(format!(
         "ended, took {:.2} seconds",
-        now.elapsed().unwrap().as_secs_f64(),
+        time_now.elapsed().unwrap().as_secs_f64(),
     ));
-    //with_capacity
 }

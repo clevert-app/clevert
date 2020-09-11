@@ -1,6 +1,6 @@
 [package]
 name = "foundry"
-version = "0.1.4"
+version = "0.3.0"
 authors = ["kkocdko <kkocdko@163.com>"]
 description = "Automatically generate and execute commands from templates."
 edition = "2018"
@@ -9,8 +9,11 @@ license = "Unlicense"
 
 [profile.release]
 panic = "abort"
-lto = true
+lto = "fat"
+# codegen-units = 1
 
 [dependencies]
-toml = "0.5.6"
 shared_child = "0.3.4"
+os_pipe = "0.9.2"
+toml = "0.5.6"
+rust-embed = "5.6.0"
