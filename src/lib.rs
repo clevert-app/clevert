@@ -20,6 +20,7 @@ use std::sync::Condvar;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
 use std::thread;
+use std::vec::IntoIter;
 
 #[derive(Debug)]
 enum ErrorKind {
@@ -104,8 +105,8 @@ struct OrderStatus {
 }
 
 impl OrderStatus {
-    fn new() -> OrderStatus {
-        OrderStatus {
+    fn new() -> Self {
+        Self {
             commands: Vec::new(),
             childs: Vec::new(),
             stdout_file: None,
@@ -203,11 +204,11 @@ impl Order {
     }
 
     fn wait(&self) {
-        let mut status = self.status.lock().unwrap();
+        let status = self.get_status();
         let cvar = Arc::clone(&status.wait_cvar);
-        while status.active_threads_count != 0 {
-            status = cvar.wait(status).unwrap();
-        }
+        let _ = cvar
+            .wait_while(status, |s| s.active_threads_count != 0)
+            .unwrap();
     }
 
     fn cease(&self) {
@@ -226,12 +227,32 @@ impl Order {
     }
 }
 
+struct FoundryStatus {
+    orders: IntoIter<Order>,
+    current_order: Option<Arc<Order>>,
+    wait_cvar: Arc<Condvar>,
+}
+
 struct Foundry {
-    orders: Vec<Order>,
+    status: Arc<Mutex<FoundryStatus>>,
 }
 
 impl Foundry {
-    fn new(cfg: Config) -> Result<Foundry, Error> {
+    fn get_status(&self) -> MutexGuard<FoundryStatus> {
+        self.status.lock().unwrap()
+    }
+
+    fn from_orders(orders: Vec<Order>) -> Self {
+        Self {
+            status: Arc::new(Mutex::new(FoundryStatus {
+                orders: orders.into_iter(),
+                current_order: None,
+                wait_cvar: Arc::new(Condvar::new()),
+            })),
+        }
+    }
+
+    fn new(cfg: &Config) -> Result<Self, Error> {
         fn read_dir_recurse(dir: PathBuf) -> Result<Vec<PathBuf>, io::Error> {
             let mut files = Vec::new();
             for entry in fs::read_dir(dir)? {
@@ -493,42 +514,58 @@ impl Foundry {
                 status: Arc::new(Mutex::new(OrderStatus::new())),
             });
         }
-        Ok(Foundry { orders })
+        Ok(Self::from_orders(orders))
     }
 
-    fn execute(&self) {
-        for order in &self.orders {
-            order.start();
-            order.wait();
-        }
+    fn start(&self) {
+        let status_mutex = Arc::clone(&self.status);
+        thread::spawn(move || {
+            let get_status = || status_mutex.lock().unwrap();
+            while let Some(order) = {
+                let mut status = get_status();
+                status.orders.next()
+            } {
+                let order = Arc::new(order);
+                let mut status = get_status();
+                status.current_order = Some(Arc::clone(&order));
+                drop(status);
+                order.start();
+                order.wait();
+            }
+            let mut status = get_status();
+            status.current_order = None;
+            status.wait_cvar.notify_one();
+        });
     }
 
     // fn progress(&self) (i32,i32,f64){
     // }
 
     fn wait(&self) {
-        for order in &self.orders {
-            order.wait();
-        }
-    }
-
-    fn cease(&self) {
-        for order in &self.orders {
-            order.cease();
-        }
+        let status = self.get_status();
+        let cvar = Arc::clone(&status.wait_cvar);
+        // TODO: Fix BUG 在刚开始的时候，wait可能会直接被跳过，因为此时线程还没运行
+        let _ = cvar
+            .wait_while(status, |s| s.current_order.is_some())
+            .unwrap();
     }
 
     fn terminate(&self) {
-        for order in &self.orders {
-            order.terminate();
-        }
+        let mut status = self.get_status();
+        status.orders.nth(std::usize::MAX);
+        let order = status.current_order.as_ref().unwrap();
+        order.terminate();
     }
 }
 
 pub fn run() -> Result<(), Error> {
-    let foundry = Arc::new(Foundry::new(Config::new()?)?);
+    //foundry对象是一次性的，但Config对象不是一次性的；通过UI修改Config，新建Foundry对象。
+    let cfg = Config::new()?;
+    let foundry = Arc::new(Foundry::new(&cfg)?);
+    foundry.start();
+    foundry.wait();
+    Ok(())
     // let foundry = Arc::new(Foundry::new(Config::_from_toml_test()?)?);
-    foundry.execute();
     // foundry.wait();
     // thread::spawn((|| {
     //     let foundry = Arc::clone(&foundry);
@@ -542,5 +579,4 @@ pub fn run() -> Result<(), Error> {
     //         // foundry.terminate();
     //     }
     // })());
-    Ok(())
 }
