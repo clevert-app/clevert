@@ -4,6 +4,7 @@
 name = "foundry"
 version = "0.3.0"
 dependencies = [
+ "open",
  "os_pipe",
  "rust-embed",
  "shared_child",
@@ -15,6 +16,15 @@ name = "libc"
 version = "0.2.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9457b06509d27052635f90d6466700c65095fdf75409b3fbdd903e988b886f49"
+
+[[package]]
+name = "open"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c283bf0114efea9e42f1a60edea9859e8c47528eae09d01df4b29c1e489cc48"
+dependencies = [
+ "winapi",
+]
 
 [[package]]
 name = "os_pipe"

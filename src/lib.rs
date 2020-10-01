@@ -2,6 +2,7 @@ mod config;
 pub mod cui;
 use config::Config;
 // use cui::print_log;
+use os_pipe::PipeReader;
 use shared_child::SharedChild;
 use std::convert::TryInto;
 use std::error;
@@ -17,6 +18,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::Condvar;
 use std::sync::Mutex;
+use std::sync::MutexGuard;
 use std::thread;
 
 #[derive(Debug)]
@@ -48,10 +50,10 @@ impl fmt::Display for Error {
             ExecutePanic => "task process panic",
         }
         .to_string();
-        if let Some(ref message) = self.message {
+        if let Some(message) = &self.message {
             content += &format!(", message = {}", message);
         }
-        if let Some(ref inner) = self.inner {
+        if let Some(inner) = &self.inner {
             content += &format!(", error = {}", inner);
         }
         f.write_str(&content)
@@ -75,6 +77,21 @@ enum OrderStdio {
     Normal,
     Ignore,
     ToFile(PathBuf),
+}
+
+impl OrderStdio {
+    // TODO: Allow pipe both stdout and stderr into one file
+    fn stdio_pipe(&self) -> impl Fn() -> (Option<PipeReader>, Stdio) {
+        use OrderStdio::*;
+        match self {
+            Normal => || (None, Stdio::inherit()),
+            Ignore => || (None, Stdio::null()),
+            ToFile(_) => || {
+                let (reader, writer) = os_pipe::pipe().unwrap();
+                (Some(reader), writer.into())
+            },
+        }
+    }
 }
 
 struct OrderStatus {
@@ -108,24 +125,17 @@ struct Order {
 }
 
 impl Order {
+    fn get_status(&self) -> MutexGuard<OrderStatus> {
+        self.status.lock().unwrap()
+    }
+
     fn spawn(&self, index: usize) -> thread::JoinHandle<Result<(), io::Error>> {
-        let stdio_pipe = |order_stdio: &OrderStdio| match order_stdio {
-            OrderStdio::Normal => || (None, Stdio::inherit()),
-            OrderStdio::Ignore => || (None, Stdio::null()),
-            OrderStdio::ToFile(_) => || {
-                let (reader, writer) = os_pipe::pipe().unwrap();
-                (Some(reader), writer.into())
-            },
-        };
-        // TODO: Allow pipe both stdout and stderr into one file
-        let stdout_pipe = stdio_pipe(&self.stdout);
-        let stderr_pipe = stdio_pipe(&self.stderr);
+        let stdout_pipe = self.stdout.stdio_pipe();
+        let stderr_pipe = self.stderr.stdio_pipe();
         let status_mutex = Arc::clone(&self.status);
         thread::spawn(move || {
-            while let Some(mut command) = {
-                let mut status = status_mutex.lock().unwrap();
-                status.commands.pop()
-            } {
+            let get_status = || status_mutex.lock().unwrap();
+            while let Some(mut command) = get_status().commands.pop() {
                 let (stdout_reader, stdout_writer) = stdout_pipe();
                 command.stdout(stdout_writer);
                 let (stderr_reader, stderr_writer) = stderr_pipe();
@@ -133,25 +143,24 @@ impl Order {
 
                 let child = Arc::new(SharedChild::spawn(&mut command)?);
                 drop(command); // The "command" owns writers, and dropping it to closes them
-                let mut status = status_mutex.lock().unwrap();
-                status.childs[index] = Some(Arc::clone(&child));
-                drop(status);
+
+                {
+                    get_status().childs[index] = Some(Arc::clone(&child));
+                }
                 child.wait()?;
 
                 if let Some(mut reader) = stdout_reader {
                     let buf = &mut Vec::new();
                     reader.read_to_end(buf)?;
-                    let status = status_mutex.lock().unwrap();
-                    status.stdout_file.as_ref().unwrap().write(buf)?;
+                    get_status().stdout_file.as_ref().unwrap().write(buf)?;
                 }
                 if let Some(mut reader) = stderr_reader {
                     let buf = &mut Vec::new();
                     reader.read_to_end(buf)?;
-                    let status = status_mutex.lock().unwrap();
-                    status.stderr_file.as_ref().unwrap().write(buf)?;
+                    get_status().stderr_file.as_ref().unwrap().write(buf)?;
                 }
             }
-            let mut status = status_mutex.lock().unwrap();
+            let mut status = get_status();
             if let Some(file) = &status.stdout_file {
                 file.sync_all()?;
             }
@@ -166,7 +175,7 @@ impl Order {
     }
 
     fn start(&self) -> io::Result<()> {
-        let mut status = self.status.lock().unwrap();
+        let mut status = self.get_status();
         status.active_threads_count = self.threads_count;
         for task in &self.tasks {
             status.commands.push(task.generate());
@@ -188,7 +197,7 @@ impl Order {
     /// Return the progress of order as `(finished_and_active, remaining, total)`.
     fn progress(&self) -> (usize, usize, usize) {
         let total = self.tasks.len();
-        let status = self.status.lock().unwrap();
+        let status = self.get_status();
         let remaining = status.commands.len();
         (total - remaining, remaining, total)
     }
@@ -202,12 +211,11 @@ impl Order {
     }
 
     fn cease(&self) {
-        let mut status = self.status.lock().unwrap();
-        status.commands.clear();
+        self.get_status().commands.clear();
     }
 
     fn terminate(&self) -> io::Result<()> {
-        let mut status = self.status.lock().unwrap();
+        let mut status = self.get_status();
         status.commands.clear();
         for child_option in &mut status.childs {
             if let Some(child) = child_option.take() {
@@ -306,11 +314,11 @@ impl Foundry {
             let args_template = split_args(order.args_template.as_ref().unwrap())?;
             let args_switches = split_args(order.args_switches.as_ref().unwrap())?;
             for input_file_path in input_files {
-                let output_file_path = if let Some(ref output_file_path) = order.output_file_path {
+                let output_file_path = if let Some(output_file_path) = &order.output_file_path {
                     PathBuf::from(output_file_path)
                 } else {
-                    let target_dir_path = match order.output_dir_path {
-                        Some(ref path) => PathBuf::from(path),
+                    let target_dir_path = match &order.output_dir_path {
+                        Some(path) => PathBuf::from(path),
                         None => input_file_path.parent().unwrap().to_path_buf(),
                     };
                     let mut file_name = input_file_path
@@ -329,8 +337,8 @@ impl Foundry {
                         .to_str()
                         .unwrap()
                         .to_string();
-                    let mut relative_path = match order.input_dir_path {
-                        Some(ref input_dir_path) => input_file_path
+                    let mut relative_path = match &order.input_dir_path {
+                        Some(input_dir_path) => input_file_path
                             .strip_prefix(input_dir_path)
                             .or_else(|e| {
                                 Err(Error {
@@ -345,14 +353,14 @@ impl Foundry {
                             .to_path_buf(),
                         None => PathBuf::from(&file_name),
                     };
-                    if let Some(ref prefix) = order.output_file_name_prefix {
+                    if let Some(prefix) = &order.output_file_name_prefix {
                         file_name.insert_str(0, &prefix);
                     }
-                    if let Some(ref suffix) = order.output_file_name_suffix {
+                    if let Some(suffix) = &order.output_file_name_suffix {
                         file_name.push_str(&suffix);
                     }
                     relative_path.set_file_name(file_name);
-                    if let Some(ref extension) = order.output_file_name_extension {
+                    if let Some(extension) = &order.output_file_name_extension {
                         relative_path.set_extension(extension);
                     } else if let Some(extension) = input_file_path.extension() {
                         relative_path.set_extension(extension);

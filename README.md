@@ -14,7 +14,7 @@ This project is still developing.
 
 ### Todo List
 
-* Pause and stop (WIP)
+* Pause and resume (WIP)
 * Help document
 * WebUI
 * StdIn
