@@ -61,19 +61,6 @@ impl fmt::Display for Error {
     }
 }
 
-struct Task {
-    program: String,
-    args: Vec<String>,
-}
-
-impl Task {
-    fn generate(&self) -> Command {
-        let mut command = Command::new(&self.program);
-        command.args(&self.args);
-        command
-    }
-}
-
 enum OrderStdio {
     Normal,
     Ignore,
@@ -100,18 +87,17 @@ struct OrderStatus {
     childs: Vec<Option<Arc<SharedChild>>>,
     stdout_file: Option<File>,
     stderr_file: Option<File>,
-    active_threads_count: usize,
     wait_cvar: Arc<Condvar>,
 }
 
 impl OrderStatus {
-    fn new() -> Self {
+    fn from_commands(mut commands: Vec<Command>) -> Self {
+        commands.reverse();
         Self {
-            commands: Vec::new(),
+            commands: commands,
             childs: Vec::new(),
             stdout_file: None,
             stderr_file: None,
-            active_threads_count: 0,
             wait_cvar: Arc::new(Condvar::new()),
         }
     }
@@ -119,9 +105,9 @@ impl OrderStatus {
 
 struct Order {
     threads_count: usize,
+    commands_count: usize,
     stdout: OrderStdio,
     stderr: OrderStdio,
-    tasks: Vec<Task>,
     status: Arc<Mutex<OrderStatus>>,
 }
 
@@ -136,7 +122,10 @@ impl Order {
         let status_mutex = Arc::clone(&self.status);
         thread::spawn(move || {
             let get_status = || status_mutex.lock().unwrap();
-            while let Some(mut command) = get_status().commands.pop() {
+            while let Some(mut command) = {
+                let mut status = get_status();
+                status.commands.pop()
+            } {
                 let (stdout_reader, stdout_writer) = stdout_pipe();
                 command.stdout(stdout_writer);
                 let (stderr_reader, stderr_writer) = stderr_pipe();
@@ -145,9 +134,9 @@ impl Order {
                 let child = Arc::new(SharedChild::spawn(&mut command)?);
                 drop(command); // The "command" owns writers, and dropping it to closes them
 
-                {
-                    get_status().childs[index] = Some(Arc::clone(&child));
-                }
+                let mut status = get_status();
+                status.childs[index] = Some(Arc::clone(&child));
+                drop(status);
                 child.wait()?;
 
                 if let Some(mut reader) = stdout_reader {
@@ -168,8 +157,7 @@ impl Order {
             if let Some(file) = &status.stderr_file {
                 file.sync_all()?;
             }
-            status.childs[index] = None;
-            status.active_threads_count -= 1;
+            status.childs[index] = None; // Important for wait_cvar
             status.wait_cvar.notify_one();
             Ok(())
         })
@@ -177,11 +165,6 @@ impl Order {
 
     fn start(&self) -> io::Result<()> {
         let mut status = self.get_status();
-        status.active_threads_count = self.threads_count;
-        for task in &self.tasks {
-            status.commands.push(task.generate());
-        }
-        status.commands.reverse();
         status.childs.resize_with(self.threads_count, || None);
         if let OrderStdio::ToFile(path) = &self.stdout {
             status.stdout_file = Some(fs::OpenOptions::new().write(true).open(path)?);
@@ -195,11 +178,18 @@ impl Order {
         Ok(())
     }
 
-    /// Return the progress of order as `(finished_and_active, remaining, total)`.
+    /// Return the progress of order as `(finished, remaining_and_active, total)`.
     fn progress(&self) -> (usize, usize, usize) {
-        let total = self.tasks.len();
+        let total = self.commands_count;
         let status = self.get_status();
-        let remaining = status.commands.len();
+        let active = status.childs.iter().fold(0, |active_count, child_option| {
+            if child_option.is_some() {
+                active_count + 1
+            } else {
+                active_count
+            }
+        });
+        let remaining = status.commands.len() - active;
         (total - remaining, remaining, total)
     }
 
@@ -207,7 +197,9 @@ impl Order {
         let status = self.get_status();
         let cvar = Arc::clone(&status.wait_cvar);
         let _ = cvar
-            .wait_while(status, |s| s.active_threads_count != 0)
+            .wait_while(status, |s| {
+                s.commands.len() != 0 || s.childs.iter().any(|o| o.is_some())
+            })
             .unwrap();
     }
 
@@ -331,7 +323,7 @@ impl Foundry {
                 let input_dir = PathBuf::from(input_dir);
                 input_files.append(&mut read_dir(input_dir)?);
             }
-            let mut tasks = Vec::new();
+            let mut commands = Vec::new();
             let args_template = split_args(order.args_template.as_ref().unwrap())?;
             let args_switches = split_args(order.args_switches.as_ref().unwrap())?;
             for input_file_path in input_files {
@@ -445,14 +437,15 @@ impl Foundry {
                             _ => args.push(item.to_string()),
                         };
                     }
-                    tasks.push(Task {
-                        program: order.program.as_ref().unwrap().clone(),
-                        args,
+                    commands.push({
+                        let mut command = Command::new(order.program.as_ref().unwrap());
+                        command.args(args);
+                        command
                     });
                 }
             }
 
-            if tasks.is_empty() {
+            if commands.is_empty() {
                 return Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     inner: None,
@@ -507,11 +500,10 @@ impl Foundry {
 
             orders.push(Order {
                 threads_count: order.threads_count.unwrap().try_into().unwrap(),
-                // print_progress_msg: order.show_progress.unwrap(),
+                commands_count: commands.len(),
                 stdout: std_pipe("stdout", &order.stdout_type, &order.stdout_file_path)?,
                 stderr: std_pipe("stderr", &order.stderr_type, &order.stderr_file_path)?,
-                tasks,
-                status: Arc::new(Mutex::new(OrderStatus::new())),
+                status: Arc::new(Mutex::new(OrderStatus::from_commands(commands))),
             });
         }
         Ok(Self::from_orders(orders))
@@ -544,9 +536,10 @@ impl Foundry {
     fn wait(&self) {
         let status = self.get_status();
         let cvar = Arc::clone(&status.wait_cvar);
-        // TODO: Fix BUG 在刚开始的时候，wait可能会直接被跳过，因为此时线程还没运行
         let _ = cvar
-            .wait_while(status, |s| s.current_order.is_some())
+            .wait_while(status, |s| {
+                s.current_order.is_some() || s.orders.size_hint().0 > 0
+            })
             .unwrap();
     }
 
@@ -560,23 +553,26 @@ impl Foundry {
 
 pub fn run() -> Result<(), Error> {
     //foundry对象是一次性的，但Config对象不是一次性的；通过UI修改Config，新建Foundry对象。
-    let cfg = Config::new()?;
+    let cfg = Config::_from_toml_test()?;
+    // let cfg = Config::new()?;
     let foundry = Arc::new(Foundry::new(&cfg)?);
     foundry.start();
+    thread::spawn((|| {
+        let foundry = Arc::clone(&foundry);
+        move || loop {
+            let mut user_input = String::new();
+            io::stdin()
+                .read_line(&mut user_input)
+                .expect("Failed to read line");
+            match user_input.trim() {
+                "t" => {
+                    cui::print_log::info("user terminate the foundry");
+                    foundry.terminate();
+                }
+                _ => {}
+            }
+        }
+    })());
     foundry.wait();
     Ok(())
-    // let foundry = Arc::new(Foundry::new(Config::_from_toml_test()?)?);
-    // foundry.wait();
-    // thread::spawn((|| {
-    //     let foundry = Arc::clone(&foundry);
-    //     move || {
-    //         foundry.wait();
-    //         println!("finished!");
-    //         // while true {
-    //         //     foundry.progress();
-    //         //     thread::sleep(std::time::Duration::from_secs(2));
-    //         // }
-    //         // foundry.terminate();
-    //     }
-    // })());
 }
