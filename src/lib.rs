@@ -178,8 +178,8 @@ impl Order {
         Ok(())
     }
 
-    /// Return the progress of order as `(finished, remaining_and_active, total)`.
-    fn progress(&self) -> (usize, usize, usize) {
+    /// Return the progress of order as `(finished, total)`.
+    fn progress(&self) -> (usize, usize) {
         let total = self.commands_count;
         let status = self.get_status();
         let active = status.childs.iter().fold(0, |active_count, child_option| {
@@ -189,8 +189,8 @@ impl Order {
                 active_count
             }
         });
-        let remaining = status.commands.len() - active;
-        (total - remaining, remaining, total)
+        let remaining = status.commands.len() + active;
+        (total - remaining, total)
     }
 
     fn wait(&self) {
@@ -221,6 +221,7 @@ impl Order {
 
 struct FoundryStatus {
     orders: IntoIter<Order>,
+    orders_count: usize,
     current_order: Option<Arc<Order>>,
     wait_cvar: Arc<Condvar>,
 }
@@ -237,6 +238,7 @@ impl Foundry {
     fn from_orders(orders: Vec<Order>) -> Self {
         Self {
             status: Arc::new(Mutex::new(FoundryStatus {
+                orders_count: orders.len(),
                 orders: orders.into_iter(),
                 current_order: None,
                 wait_cvar: Arc::new(Condvar::new()),
@@ -530,8 +532,18 @@ impl Foundry {
         });
     }
 
-    // fn progress(&self) (i32,i32,f64){
-    // }
+    /// Return the progress of foundry as `((order_finished, order_total), (finished, total))`.
+    fn progress(&self) -> ((usize, usize), (usize, usize)) {
+        let status = self.get_status();
+        let order_progress = if let Some(order) = &status.current_order {
+            order.progress()
+        } else {
+            (0, 0)
+        };
+        let total = status.orders_count;
+        let finished = total - status.orders.size_hint().0 - 1; // TODO: Bug Fix: Num Overflow???
+        (order_progress, (finished, total))
+    }
 
     fn wait(&self) {
         let status = self.get_status();
@@ -552,7 +564,7 @@ impl Foundry {
 }
 
 pub fn run() -> Result<(), Error> {
-    //foundry对象是一次性的，但Config对象不是一次性的；通过UI修改Config，新建Foundry对象。
+    // Foundry is one-off, Config is not one-off, change Config from gui and then new a Foundry.
     let cfg = Config::_from_toml_test()?;
     // let cfg = Config::new()?;
     let foundry = Arc::new(Foundry::new(&cfg)?);
@@ -569,8 +581,21 @@ pub fn run() -> Result<(), Error> {
                     cui::print_log::info("user terminate the foundry");
                     foundry.terminate();
                 }
-                _ => {}
+                _ => {
+                    cui::print_log::info("unknown op");
+                }
             }
+        }
+    })());
+    thread::spawn((|| {
+        let foundry = Arc::clone(&foundry);
+        move || loop {
+            let ((o_finished, o_total), (f_finished, f_total)) = foundry.progress();
+            cui::print_log::info(format!(
+                "Current Order Progress: {} / {} | Foundry Progress: {} / {}",
+                o_finished, o_total, f_finished, f_total
+            ));
+            thread::sleep(std::time::Duration::from_secs(1));
         }
     })());
     foundry.wait();
