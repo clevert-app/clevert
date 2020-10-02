@@ -1,5 +1,6 @@
 mod config;
 pub mod cui;
+pub mod toml_seek;
 use config::Config;
 // use cui::print_log;
 use os_pipe::PipeReader;

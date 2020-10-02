@@ -1,7 +1,7 @@
+use crate::toml_seek::Seek;
 use crate::Error;
 use crate::ErrorKind;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::env;
 use std::fs;
 use toml;
@@ -112,9 +112,11 @@ impl Config {
     pub fn _from_toml_test() -> Result<Config, Error> {
         Config::from_toml(String::from(
             r#"
-            [presets.default]
+            message.progress = false
             message.progress = true
             message.info = true
+
+            [presets.default]
             threads.count = 4
             threads.stop_painc = false # TODO
             process.simulate_terminal = false # TODO
@@ -140,7 +142,6 @@ impl Config {
             args.template = '/c echo {args.switches} ; {repeat.index} ; {repeat.position} && timeout /t 1 > nul'
             args.switches = 'time: %time%'
             threads.count = 1
-            message.progress = false
             stdio.stdout.type = 'normal'
             stdio.stderr.type = 'normal'
 
@@ -153,7 +154,6 @@ impl Config {
             stdio.stderr.type = 'normal'
 
             [[orders]]
-            message.progress = false
             preset = 'cwebp_lossless'
             program = 'D:\Library\libwebp\libwebp_1.0.0\bin\cwebp.exe'
             input.dir.path = 'D:\Temp\foundry_test\source'
@@ -180,162 +180,29 @@ impl Config {
 
         fn toml_value_to_proposal(toml_value: &Value) -> Proposal {
             Proposal {
-                preset_name: (|| toml_value.get("preset")?.as_str()?.try_into().ok())(),
-                show_progress: (|| toml_value.get("message")?.get("progress")?.as_bool())(),
-                show_info: (|| toml_value.get("message")?.get("info")?.as_bool())(),
-                threads_count: (|| {
-                    toml_value
-                        .get("threads")?
-                        .get("count")?
-                        .as_integer()?
-                        .try_into()
-                        .ok()
-                })(),
-                simulate_terminal: (|| {
-                    toml_value
-                        .get("process")?
-                        .get("simulate_terminal")?
-                        .as_bool()
-                })(),
-                repeat_count: (|| {
-                    toml_value
-                        .get("repeat")?
-                        .get("count")?
-                        .as_integer()?
-                        .try_into()
-                        .ok()
-                })(),
-                stdout_type: (|| {
-                    toml_value
-                        .get("stdio")?
-                        .get("stdout")?
-                        .get("type")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                stdout_file_path: (|| {
-                    toml_value
-                        .get("stdio")?
-                        .get("stdout")?
-                        .get("file")?
-                        .get("path")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                stderr_type: (|| {
-                    toml_value
-                        .get("stdio")?
-                        .get("stderr")?
-                        .get("type")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                stderr_file_path: (|| {
-                    toml_value
-                        .get("stdio")?
-                        .get("stderr")?
-                        .get("file")?
-                        .get("path")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                program: (|| toml_value.get("program")?.as_str()?.try_into().ok())(),
-                args_template: (|| {
-                    toml_value
-                        .get("args")?
-                        .get("template")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                args_switches: (|| {
-                    toml_value
-                        .get("args")?
-                        .get("switches")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                input_list: (|| {
-                    let mut list = Vec::new();
-                    for v in toml_value.get("input")?.get("list")?.as_array()? {
-                        list.push(v.as_str()?.to_owned())
-                    }
-                    Some(list)
-                })(),
-                input_dir_path: (|| {
-                    toml_value
-                        .get("input")?
-                        .get("dir")?
-                        .get("path")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                input_dir_deep: (|| toml_value.get("input")?.get("dir")?.get("deep")?.as_bool())(),
-                output_file_path: (|| {
-                    toml_value
-                        .get("output")?
-                        .get("file")?
-                        .get("path")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                output_file_overwrite: (|| {
-                    toml_value
-                        .get("output")?
-                        .get("file")?
-                        .get("overwrite")?
-                        .as_bool()
-                })(),
-                output_dir_path: (|| {
-                    toml_value
-                        .get("output")?
-                        .get("dir")?
-                        .get("path")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                output_dir_keep_struct: (|| {
-                    toml_value
-                        .get("output")?
-                        .get("dir")?
-                        .get("keep_struct")?
-                        .as_bool()
-                })(),
-                output_file_name_extension: (|| {
-                    toml_value
-                        .get("output")?
-                        .get("file_name")?
-                        .get("extension")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                output_file_name_prefix: (|| {
-                    toml_value
-                        .get("output")?
-                        .get("file_name")?
-                        .get("prefix")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
-                output_file_name_suffix: (|| {
-                    toml_value
-                        .get("output")?
-                        .get("file_name")?
-                        .get("suffix")?
-                        .as_str()?
-                        .try_into()
-                        .ok()
-                })(),
+                preset_name: toml_value.seek_str("preset"),
+                show_progress: toml_value.seek_bool("message.progress"),
+                show_info: toml_value.seek_bool("message.info"),
+                threads_count: toml_value.seek_i32("threads.count"),
+                simulate_terminal: toml_value.seek_bool("process.simulate_terminal"),
+                repeat_count: toml_value.seek_i32("repeat.count"),
+                stdout_type: toml_value.seek_str("stdio.stdout.type"),
+                stdout_file_path: toml_value.seek_str("stdio.stdout.file.path"),
+                stderr_type: toml_value.seek_str("stdio.stderr.type"),
+                stderr_file_path: toml_value.seek_str("stdio.stderr.file.path"),
+                program: toml_value.seek_str("program"),
+                args_template: toml_value.seek_str("args.template"),
+                args_switches: toml_value.seek_str("args.switches"),
+                input_list: toml_value.seek_vec_str("input.list"),
+                input_dir_path: toml_value.seek_str("imput.dir.path"),
+                input_dir_deep: toml_value.seek_bool("imput.dir.deep"),
+                output_file_path: toml_value.seek_str("output.file.path"),
+                output_file_overwrite: toml_value.seek_bool("output.file.overwrite"),
+                output_dir_path: toml_value.seek_str("output.dir.path"),
+                output_dir_keep_struct: toml_value.seek_bool("output.dir.keep_struct"),
+                output_file_name_extension: toml_value.seek_str("output.file_name.extension"),
+                output_file_name_prefix: toml_value.seek_str("output.file_name.prefix"),
+                output_file_name_suffix: toml_value.seek_str("output.file_name.suffix"),
             }
         }
 
