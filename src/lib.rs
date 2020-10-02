@@ -565,8 +565,8 @@ impl Foundry {
 
 pub fn run() -> Result<(), Error> {
     // Foundry is one-off, Config is not one-off, change Config from gui and then new a Foundry.
-    let cfg = Config::_from_toml_test()?;
-    // let cfg = Config::new()?;
+    // let cfg = Config::_from_toml_test()?;
+    let cfg = Config::new()?;
     let foundry = Arc::new(Foundry::new(&cfg)?);
     foundry.start();
     thread::spawn((|| {
