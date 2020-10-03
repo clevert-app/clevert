@@ -68,38 +68,24 @@ enum OrderStdio {
     ToFile(PathBuf),
 }
 
-impl OrderStdio {
-    // TODO: Allow pipe both stdout and stderr into one file
-    fn stdio_pipe(&self) -> impl Fn() -> (Option<PipeReader>, Stdio) {
-        use OrderStdio::*;
-        match self {
-            Normal => || (None, Stdio::inherit()),
-            Ignore => || (None, Stdio::null()),
-            ToFile(_) => || {
-                let (reader, writer) = os_pipe::pipe().unwrap();
-                (Some(reader), writer.into())
-            },
-        }
-    }
-}
-
 struct OrderStatus {
-    commands: Vec<Command>,
+    commands: IntoIter<Command>,
     childs: Vec<Option<Arc<SharedChild>>>,
     stdout_file: Option<File>,
     stderr_file: Option<File>,
     wait_cvar: Arc<Condvar>,
+    active_threads_count: usize,
 }
 
 impl OrderStatus {
-    fn from_commands(mut commands: Vec<Command>) -> Self {
-        commands.reverse();
+    fn from_commands(commands: Vec<Command>) -> Self {
         Self {
-            commands: commands,
+            commands: commands.into_iter(),
             childs: Vec::new(),
             stdout_file: None,
             stderr_file: None,
             wait_cvar: Arc::new(Condvar::new()),
+            active_threads_count: 0,
         }
     }
 }
@@ -117,20 +103,66 @@ impl Order {
         self.status.lock().unwrap()
     }
 
+    /// |command| (stdout_setter_option, stderr_setter_option)
+    fn stdio_get_setter(
+        &self,
+    ) -> impl Fn(&mut Command) -> (Option<PipeReader>, Option<PipeReader>) {
+        let stdout_setter = match self.stdout {
+            OrderStdio::Normal => |_: &mut Command| None,
+            OrderStdio::Ignore => |command: &mut Command| {
+                command.stdout(Stdio::null());
+                None
+            },
+            OrderStdio::ToFile(_) => |command: &mut Command| {
+                let (reader, writer) = os_pipe::pipe().unwrap();
+                command.stdout(writer);
+                Some(reader)
+            },
+        };
+        let stderr_setter = match self.stderr {
+            OrderStdio::Normal => |_: &mut Command| None,
+            OrderStdio::Ignore => |command: &mut Command| {
+                command.stderr(Stdio::null());
+                None
+            },
+            OrderStdio::ToFile(_) => |command: &mut Command| {
+                let (reader, writer) = os_pipe::pipe().unwrap();
+                command.stderr(writer);
+                Some(reader)
+            },
+        };
+        move |command: &mut Command| (stdout_setter(command), stderr_setter(command))
+    }
+
+    fn stdio_writer(
+        stdio_pair: (Option<PipeReader>, Option<PipeReader>),
+        status_mutex: &Arc<Mutex<OrderStatus>>,
+    ) -> io::Result<()> {
+        let get_status = || status_mutex.lock().unwrap();
+        let (stdout, stderr) = stdio_pair;
+        if let Some(mut reader) = stdout {
+            let buf = &mut Vec::new();
+            reader.read_to_end(buf)?;
+            get_status().stdout_file.as_ref().unwrap().write_all(buf)?;
+        }
+        if let Some(mut reader) = stderr {
+            let buf = &mut Vec::new();
+            reader.read_to_end(buf)?;
+            get_status().stderr_file.as_ref().unwrap().write_all(buf)?;
+        }
+        Ok(())
+    }
+
     fn spawn(&self, index: usize) -> thread::JoinHandle<Result<(), io::Error>> {
-        let stdout_pipe = self.stdout.stdio_pipe();
-        let stderr_pipe = self.stderr.stdio_pipe();
+        let stdio_setter = self.stdio_get_setter();
         let status_mutex = Arc::clone(&self.status);
         thread::spawn(move || {
             let get_status = || status_mutex.lock().unwrap();
             while let Some(mut command) = {
                 let mut status = get_status();
-                status.commands.pop()
+                status.commands.next()
             } {
-                let (stdout_reader, stdout_writer) = stdout_pipe();
-                command.stdout(stdout_writer);
-                let (stderr_reader, stderr_writer) = stderr_pipe();
-                command.stderr(stderr_writer);
+                let stdio_pair = stdio_setter(&mut command);
 
                 let child = Arc::new(SharedChild::spawn(&mut command)?);
                 drop(command); // The "command" owns writers, and dropping it to closes them
@@ -140,25 +172,11 @@ impl Order {
                 drop(status);
                 child.wait()?;
 
-                if let Some(mut reader) = stdout_reader {
-                    let buf = &mut Vec::new();
-                    reader.read_to_end(buf)?;
-                    get_status().stdout_file.as_ref().unwrap().write(buf)?;
-                }
-                if let Some(mut reader) = stderr_reader {
-                    let buf = &mut Vec::new();
-                    reader.read_to_end(buf)?;
-                    get_status().stderr_file.as_ref().unwrap().write(buf)?;
-                }
+                Self::stdio_writer(stdio_pair, &status_mutex)?;
             }
             let mut status = get_status();
-            if let Some(file) = &status.stdout_file {
-                file.sync_all()?;
-            }
-            if let Some(file) = &status.stderr_file {
-                file.sync_all()?;
-            }
-            status.childs[index] = None; // Important for wait_cvar
+            status.childs[index] = None;
+            status.active_threads_count -= 1;
             status.wait_cvar.notify_one();
             Ok(())
         })
@@ -176,6 +194,7 @@ impl Order {
         for index in 0..self.threads_count {
             self.spawn(index);
         }
+        status.active_threads_count = self.threads_count;
         Ok(())
     }
 
@@ -198,19 +217,17 @@ impl Order {
         let status = self.get_status();
         let cvar = Arc::clone(&status.wait_cvar);
         let _ = cvar
-            .wait_while(status, |s| {
-                s.commands.len() != 0 || s.childs.iter().any(|o| o.is_some())
-            })
+            .wait_while(status, |s| s.active_threads_count != 0)
             .unwrap();
     }
 
     fn cease(&self) {
-        self.get_status().commands.clear();
+        self.get_status().commands.nth(std::usize::MAX);
     }
 
     fn terminate(&self) -> io::Result<()> {
+        self.cease();
         let mut status = self.get_status();
-        status.commands.clear();
         for child_option in &mut status.childs {
             if let Some(child) = child_option.take() {
                 child.kill()?;
@@ -225,6 +242,7 @@ struct FoundryStatus {
     orders_count: usize,
     current_order: Option<Arc<Order>>,
     wait_cvar: Arc<Condvar>,
+    running: bool,
 }
 
 struct Foundry {
@@ -243,6 +261,7 @@ impl Foundry {
                 orders: orders.into_iter(),
                 current_order: None,
                 wait_cvar: Arc::new(Condvar::new()),
+                running: false,
             })),
         }
     }
@@ -326,6 +345,7 @@ impl Foundry {
                 let input_dir = PathBuf::from(input_dir);
                 input_files.append(&mut read_dir(input_dir)?);
             }
+
             let mut commands = Vec::new();
             let args_template = split_args(order.args_template.as_ref().unwrap())?;
             let args_switches = split_args(order.args_switches.as_ref().unwrap())?;
@@ -513,6 +533,11 @@ impl Foundry {
     }
 
     fn start(&self) {
+        {
+            let mut status = self.get_status();
+            assert!(status.running == false);
+            status.running = true;
+        }
         let status_mutex = Arc::clone(&self.status);
         thread::spawn(move || {
             let get_status = || status_mutex.lock().unwrap();
@@ -529,6 +554,7 @@ impl Foundry {
             }
             let mut status = get_status();
             status.current_order = None;
+            status.running = false;
             status.wait_cvar.notify_one();
         });
     }
@@ -549,11 +575,7 @@ impl Foundry {
     fn wait(&self) {
         let status = self.get_status();
         let cvar = Arc::clone(&status.wait_cvar);
-        let _ = cvar
-            .wait_while(status, |s| {
-                s.current_order.is_some() || s.orders.size_hint().0 > 0
-            })
-            .unwrap();
+        let _ = cvar.wait_while(status, |s| s.running).unwrap();
     }
 
     fn terminate(&self) {
@@ -566,8 +588,8 @@ impl Foundry {
 
 pub fn run() -> Result<(), Error> {
     // Foundry is one-off, Config is not one-off, change Config from gui and then new a Foundry.
-    // let cfg = Config::_from_toml_test()?;
-    let cfg = Config::new()?;
+    let cfg = Config::_from_toml_test()?;
+    // let cfg = Config::new()?;
     let foundry = Arc::new(Foundry::new(&cfg)?);
     foundry.start();
     thread::spawn((|| {
@@ -593,7 +615,7 @@ pub fn run() -> Result<(), Error> {
         move || loop {
             let ((o_finished, o_total), (f_finished, f_total)) = foundry.progress();
             cui::print_log::info(format!(
-                "Current Order Progress: {} / {} | Foundry Progress: {} / {}",
+                "current order: {} / {} | foundry: {} / {}",
                 o_finished, o_total, f_finished, f_total
             ));
             thread::sleep(std::time::Duration::from_secs(1));
