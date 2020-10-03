@@ -5,8 +5,9 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use toml;
+use toml::Value;
 
-pub struct Proposal {
+pub struct Scheme {
     pub preset_name: Option<String>,
     pub show_progress: Option<bool>,
     pub show_info: Option<bool>,
@@ -33,8 +34,8 @@ pub struct Proposal {
     pub output_file_name_suffix: Option<String>,
 }
 
-impl Proposal {
-    fn complement(&mut self, default: &Proposal) {
+impl Scheme {
+    fn complement(&mut self, default: &Self) {
         fn complement_option<T: Clone>(target: &mut Option<T>, source: &Option<T>) {
             if let Some(v) = source {
                 target.get_or_insert(v.clone());
@@ -81,15 +82,43 @@ impl Proposal {
             &default.output_file_name_suffix,
         );
     }
+
+    fn from_toml_value(v: &Value) -> Self {
+        Self {
+            preset_name: v.seek_str("preset"),
+            show_progress: v.seek_bool("message.progress"),
+            show_info: v.seek_bool("message.info"),
+            threads_count: v.seek_i32("threads.count"),
+            simulate_terminal: v.seek_bool("process.simulate_terminal"),
+            repeat_count: v.seek_i32("repeat.count"),
+            stdout_type: v.seek_str("stdio.stdout.type"),
+            stdout_file_path: v.seek_str("stdio.stdout.file.path"),
+            stderr_type: v.seek_str("stdio.stderr.type"),
+            stderr_file_path: v.seek_str("stdio.stderr.file.path"),
+            program: v.seek_str("program"),
+            args_template: v.seek_str("args.template"),
+            args_switches: v.seek_str("args.switches"),
+            input_list: v.seek_vec_str("input.list"),
+            input_dir_path: v.seek_str("input.dir.path"),
+            input_dir_deep: v.seek_bool("input.dir.deep"),
+            output_file_path: v.seek_str("output.file.path"),
+            output_file_overwrite: v.seek_bool("output.file.overwrite"),
+            output_dir_path: v.seek_str("output.dir.path"),
+            output_dir_keep_struct: v.seek_bool("output.dir.keep_struct"),
+            output_file_name_extension: v.seek_str("output.file_name.extension"),
+            output_file_name_prefix: v.seek_str("output.file_name.prefix"),
+            output_file_name_suffix: v.seek_str("output.file_name.suffix"),
+        }
+    }
 }
 
 pub struct Config {
-    pub presets: HashMap<String, Proposal>,
-    pub orders: Vec<Proposal>,
+    pub presets: HashMap<String, Scheme>,
+    pub orders: Vec<Scheme>,
 }
 
 impl Config {
-    pub fn new() -> Result<Config, Error> {
+    pub fn new() -> Result<Self, Error> {
         let mut file_path = env::current_exe().unwrap();
 
         file_path.set_extension("toml");
@@ -109,12 +138,14 @@ impl Config {
         })
     }
 
-    pub fn _from_toml_test() -> Result<Config, Error> {
-        Config::from_toml(String::from(
+    pub fn _from_toml_test() -> Result<Self, Error> {
+        Self::from_toml(String::from(
             r#"
-            message.progress = false
+            [global]
             message.progress = true
             message.info = true
+            webui.ip = '127.0.0.1'
+            webui.port = 9090
 
             [presets.default]
             threads.count = 4
@@ -164,8 +195,7 @@ impl Config {
         ))
     }
 
-    fn from_toml(toml_str: String) -> Result<Config, Error> {
-        use toml::Value;
+    fn from_toml(toml_str: String) -> Result<Self, Error> {
         let toml_value: Value = toml_str.parse().or_else(|e| {
             Err(Error {
                 kind: ErrorKind::ConfigTomlIllegal,
@@ -173,58 +203,30 @@ impl Config {
                 message: None,
             })
         })?;
-        let mut cfg = Config {
+        let mut cfg = Self {
             presets: HashMap::new(),
             orders: Vec::new(),
         };
 
-        fn toml_value_to_proposal(toml_value: &Value) -> Proposal {
-            Proposal {
-                preset_name: toml_value.seek_str("preset"),
-                show_progress: toml_value.seek_bool("message.progress"),
-                show_info: toml_value.seek_bool("message.info"),
-                threads_count: toml_value.seek_i32("threads.count"),
-                simulate_terminal: toml_value.seek_bool("process.simulate_terminal"),
-                repeat_count: toml_value.seek_i32("repeat.count"),
-                stdout_type: toml_value.seek_str("stdio.stdout.type"),
-                stdout_file_path: toml_value.seek_str("stdio.stdout.file.path"),
-                stderr_type: toml_value.seek_str("stdio.stderr.type"),
-                stderr_file_path: toml_value.seek_str("stdio.stderr.file.path"),
-                program: toml_value.seek_str("program"),
-                args_template: toml_value.seek_str("args.template"),
-                args_switches: toml_value.seek_str("args.switches"),
-                input_list: toml_value.seek_vec_str("input.list"),
-                input_dir_path: toml_value.seek_str("imput.dir.path"),
-                input_dir_deep: toml_value.seek_bool("imput.dir.deep"),
-                output_file_path: toml_value.seek_str("output.file.path"),
-                output_file_overwrite: toml_value.seek_bool("output.file.overwrite"),
-                output_dir_path: toml_value.seek_str("output.dir.path"),
-                output_dir_keep_struct: toml_value.seek_bool("output.dir.keep_struct"),
-                output_file_name_extension: toml_value.seek_str("output.file_name.extension"),
-                output_file_name_prefix: toml_value.seek_str("output.file_name.prefix"),
-                output_file_name_suffix: toml_value.seek_str("output.file_name.suffix"),
-            }
-        }
-
         for (name, toml_value) in toml_value.get("presets").unwrap().as_table().unwrap() {
-            let preset = toml_value_to_proposal(toml_value);
+            let preset = Scheme::from_toml_value(toml_value);
             cfg.presets.insert(name.clone(), preset);
         }
         for toml_value in toml_value.get("orders").unwrap().as_array().unwrap() {
-            let order = toml_value_to_proposal(toml_value);
+            let order = Scheme::from_toml_value(toml_value);
             cfg.orders.push(order);
         }
-        Config::fix(&mut cfg)?;
+        Self::fix(&mut cfg)?;
         Ok(cfg)
     }
 
     // fn from_json() -> Config {}
 
-    fn fix(cfg: &mut Config) -> Result<(), Error> {
+    fn fix(cfg: &mut Self) -> Result<(), Error> {
         fn inherit_fill(
-            order: &mut Proposal,
+            order: &mut Scheme,
             current_preset_name: &str,
-            presets: &HashMap<String, Proposal>,
+            presets: &HashMap<String, Scheme>,
             stack_deep: i32,
         ) {
             if stack_deep > 64 {
@@ -270,14 +272,14 @@ impl Config {
         }
 
         for order in &mut cfg.orders {
-            if let Some(ref preset_name) = order.preset_name {
+            if let Some(preset_name) = &order.preset_name {
                 let first_preset_name = preset_name.clone();
                 inherit_fill(order, &first_preset_name, &cfg.presets, 1);
             }
             // You can use [default] -> [other preset you want]
             inherit_fill(order, "default", &cfg.presets, 1);
             // But can not [build_in] -> [other preset]
-            order.complement(&Proposal {
+            order.complement(&Scheme {
                 preset_name: Some(String::from("build_in")),
                 show_progress: Some(true),
                 show_info: Some(true),
