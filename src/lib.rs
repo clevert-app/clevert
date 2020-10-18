@@ -43,22 +43,22 @@ impl error::Error for Error {}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use ErrorKind::*;
-        let mut content = match self.kind {
-            ConfigTomlIllegal => "config is not a legal toml document",
-            ConfigIllegal => "config is illegal",
-            ConfigFileCanNotRead => "read config file failed",
-            CanNotWriteLogFile => "write log file failed",
-            ExecutePanic => "task process panic",
-        }
-        .to_string();
-        if let Some(message) = &self.message {
-            content += &format!(", message = {}", message);
-        }
-        if let Some(inner) = &self.inner {
-            content += &format!(", error = {}", inner);
-        }
-        f.write_str(&content)
+        f.write_str(&format!("{:?}", self))
+        // use ErrorKind::*;
+        // let mut content = match self.kind {
+        //     ConfigTomlIllegal => "config is not a legal toml document",
+        //     ConfigIllegal => "config is illegal",
+        //     ConfigFileCanNotRead => "read config file failed",
+        //     CanNotWriteLogFile => "write log file failed",
+        //     ExecutePanic => "task process panic",
+        // }
+        // .to_string();
+        // if let Some(message) = &self.message {
+        //     content += &format!(", message = {}", message);
+        // }
+        // if let Some(inner) = &self.inner {
+        //     content += &format!(", error = {}", inner);
+        // }
     }
 }
 
@@ -235,38 +235,8 @@ impl Order {
         }
         Ok(())
     }
-}
 
-struct FoundryStatus {
-    orders: IntoIter<Order>,
-    orders_count: usize,
-    current_order: Option<Arc<Order>>,
-    wait_cvar: Arc<Condvar>,
-    running: bool,
-}
-
-struct Foundry {
-    status: Arc<Mutex<FoundryStatus>>,
-}
-
-impl Foundry {
-    fn get_status(&self) -> MutexGuard<FoundryStatus> {
-        self.status.lock().unwrap()
-    }
-
-    fn from_orders(orders: Vec<Order>) -> Self {
-        Self {
-            status: Arc::new(Mutex::new(FoundryStatus {
-                orders_count: orders.len(),
-                orders: orders.into_iter(),
-                current_order: None,
-                wait_cvar: Arc::new(Condvar::new()),
-                running: false,
-            })),
-        }
-    }
-
-    fn new(cfg: &Config) -> Result<Self, Error> {
+    fn new(cfg: &Config) -> Self {
         fn read_dir_recurse(dir: PathBuf) -> Result<Vec<PathBuf>, io::Error> {
             let mut files = Vec::new();
             for entry in fs::read_dir(dir)? {
@@ -315,285 +285,163 @@ impl Foundry {
             }
         };
 
-        let mut orders = Vec::new();
-        for order in &cfg.orders {
-            let read_dir = |dir| {
-                if order.input_dir_deep.unwrap() {
-                    read_dir_recurse(dir)
+        let read_dir = |dir| {
+            if cfg.input_recursive.unwrap() {
+                read_dir_recurse(dir)
+            } else {
+                read_dir_foreach(dir)
+            }
+        };
+        let mut input_files = Vec::new();
+        if let Some(input_list) = &cfg.input_list {
+            for item in input_list {
+                let path = PathBuf::from(item);
+                if path.is_dir() {
+                    input_files.append(&mut read_dir(path).unwrap());
                 } else {
-                    read_dir_foreach(dir)
+                    input_files.push(path);
                 }
-                .or_else(|e| {
-                    Err(Error {
-                        kind: ErrorKind::ConfigIllegal,
-                        inner: Some(Box::new(e)),
-                        message: Some(String::from("read input dir failed")),
-                    })
-                })
+            }
+        } else if let Some(input_dir) = &cfg.input_dir {
+            let input_dir = PathBuf::from(input_dir);
+            input_files.append(&mut read_dir(input_dir).unwrap());
+        }
+
+        let mut commands = Vec::new();
+        let args_template = split_args(cfg.args_template.as_ref().unwrap()).unwrap();
+        let args_switches = split_args(cfg.args_switches.as_ref().unwrap()).unwrap();
+
+        for input_file in input_files {
+            let mut file_name = input_file
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            if let Some(prefix) = &cfg.output_prefix {
+                file_name.insert_str(0, &prefix);
+            }
+            if let Some(suffix) = &cfg.output_suffix {
+                file_name.push_str(&suffix);
+            }
+            let mut output_file = match &cfg.output_dir {
+                Some(path) => PathBuf::from(path),
+                None => input_file.parent().unwrap().to_path_buf(),
             };
-            let mut input_files = Vec::new();
-            if let Some(input_list) = &order.input_list {
-                let input_list: Vec<PathBuf> = input_list.iter().map(PathBuf::from).collect();
-                for entry in input_list {
-                    if entry.is_dir() {
-                        input_files.append(&mut read_dir(entry)?);
-                    } else {
-                        input_files.push(entry);
-                    }
-                }
-            } else if let Some(input_dir) = &order.input_dir_path {
-                let input_dir = PathBuf::from(input_dir);
-                input_files.append(&mut read_dir(input_dir)?);
+            if cfg.output_keep_subdir.unwrap() && cfg.input_dir.is_some() {
+                let path = input_file
+                    .strip_prefix(cfg.input_dir.as_ref().unwrap())
+                    .unwrap()
+                    .to_path_buf();
+                output_file.push(path);
+                output_file.set_file_name(file_name);
+            } else {
+                output_file.push(file_name);
+            }
+            if let Some(extension) = &cfg.output_extension {
+                output_file.set_extension(extension);
             }
 
-            let mut commands = Vec::new();
-            let args_template = split_args(order.args_template.as_ref().unwrap())?;
-            let args_switches = split_args(order.args_switches.as_ref().unwrap())?;
-            for input_file_path in input_files {
-                let output_file_path = if let Some(output_file_path) = &order.output_file_path {
-                    PathBuf::from(output_file_path)
-                } else {
-                    let target_dir_path = match &order.output_dir_path {
-                        Some(path) => PathBuf::from(path),
-                        None => input_file_path.parent().unwrap().to_path_buf(),
+            for index in 0..cfg.repeat_count.unwrap() {
+                let mut command = Command::new(cfg.program.as_ref().unwrap());
+                for item in &args_template {
+                    match item.as_str() {
+                        "{args_switches}" => {
+                            for item in &args_switches {
+                                command.arg(item);
+                            }
+                        }
+                        "{input_file}" => {
+                            command.arg(input_file.to_str().unwrap());
+                        }
+                        "{input_extension}" => {
+                            command.arg(input_file.extension().unwrap().to_str().unwrap());
+                        }
+                        "{output_file}" => {
+                            command.arg(output_file.to_str().unwrap());
+                        }
+                        "{output_dir}" => {
+                            command.arg(output_file.parent().unwrap().to_str().unwrap());
+                        }
+                        "{repeat_index}" => {
+                            command.arg(index.to_string());
+                        }
+                        "{repeat_position}" => {
+                            command.arg((index + 1).to_string());
+                        }
+                        _ => {
+                            command.arg(item);
+                        }
                     };
-                    let mut file_name = input_file_path
-                        .file_stem()
-                        .ok_or(Err(()))
-                        .or_else(|_: Result<(), ()>| {
-                            Err(Error {
-                                kind: ErrorKind::ConfigIllegal,
-                                inner: None,
-                                message: Some(format!(
-                                    "input file have not stem name, path = {}",
-                                    input_file_path.to_str().unwrap()
-                                )),
-                            })
-                        })?
-                        .to_str()
-                        .unwrap()
-                        .to_string();
-                    let mut relative_path = match &order.input_dir_path {
-                        Some(input_dir_path) => input_file_path
-                            .strip_prefix(input_dir_path)
-                            .or_else(|e| {
-                                Err(Error {
-                                    kind: ErrorKind::ConfigIllegal,
-                                    inner: Some(Box::new(e)),
-                                    message: Some(format!(
-                                        "strip path prefix failed, path = {}",
-                                        input_file_path.to_str().unwrap()
-                                    )),
-                                })
-                            })?
-                            .to_path_buf(),
-                        None => PathBuf::from(&file_name),
-                    };
-                    if let Some(prefix) = &order.output_file_name_prefix {
-                        file_name.insert_str(0, &prefix);
-                    }
-                    if let Some(suffix) = &order.output_file_name_suffix {
-                        file_name.push_str(&suffix);
-                    }
-                    relative_path.set_file_name(file_name);
-                    if let Some(extension) = &order.output_file_name_extension {
-                        relative_path.set_extension(extension);
-                    } else if let Some(extension) = input_file_path.extension() {
-                        relative_path.set_extension(extension);
-                    }
-                    let output_file_path = target_dir_path.join(relative_path);
-                    if !order.output_file_overwrite.unwrap()
-                        && fs::metadata(&output_file_path).is_ok()
-                    {
-                        // Unable to detect overwriting during executing!
+                }
+                commands.push(command);
+            }
+        }
+
+        if commands.is_empty() {}
+
+        fn std_pipe(
+            pipe_name: &str,
+            type_name: &Option<String>,
+            file_path: &Option<String>,
+        ) -> Result<OrderStdio, Error> {
+            let type_name = type_name.as_ref().unwrap();
+            match type_name.as_str() {
+                "normal" => Ok(OrderStdio::Normal),
+                "ignore" => Ok(OrderStdio::Ignore),
+                "file" => {
+                    if file_path.is_none() {
                         return Err(Error {
                             kind: ErrorKind::ConfigIllegal,
                             inner: None,
-                            message: Some(format!(
-                                "output target is already exists, path = {}",
-                                output_file_path.to_str().unwrap()
-                            )),
+                            message: Some(format!("{} file path not specified", pipe_name)),
                         });
                     }
-                    output_file_path
-                };
-
-                for index in 0..order.repeat_count.unwrap() {
-                    let mut args = Vec::new();
-                    for item in &args_template {
-                        match item.as_str() {
-                            "{args.switches}" => args.append(&mut args_switches.clone()),
-                            "{input.file_path}" => {
-                                args.push(input_file_path.to_str().unwrap().to_string())
-                            }
-                            "{input.file_extension}" => args.push(
-                                input_file_path
-                                    .extension()
-                                    .ok_or(Err(()))
-                                    .or_else(|_: Result<(), ()>| {
-                                        Err(Error {
-                                            kind: ErrorKind::ConfigIllegal,
-                                            inner: None,
-                                            message: Some(format!(
-                                                "input file has no extension name, path = {}",
-                                                input_file_path.to_str().unwrap()
-                                            )),
-                                        })
-                                    })?
-                                    .to_str()
-                                    .unwrap()
-                                    .to_string(),
-                            ),
-                            "{output.file_path}" => {
-                                args.push(output_file_path.to_str().unwrap().to_string())
-                            }
-                            "{output.dir_path}" => args.push(
-                                output_file_path
-                                    .parent()
-                                    .unwrap()
-                                    .to_str()
-                                    .unwrap()
-                                    .to_string(),
-                            ),
-                            "{repeat.index}" => args.push(index.to_string()),
-                            "{repeat.position}" => args.push((index + 1).to_string()),
-                            _ => args.push(item.to_string()),
-                        };
+                    let path = PathBuf::from(file_path.as_ref().unwrap());
+                    let meta = fs::metadata(&path);
+                    if meta.is_err() {
+                        if fs::write(&path, "").is_err() {
+                            return Err(Error {
+                                kind: ErrorKind::ConfigIllegal,
+                                inner: None,
+                                message: Some(format!("could not create {} file", pipe_name)),
+                            });
+                        }
+                    } else if meta.unwrap().is_dir() {
+                        return Err(Error {
+                            kind: ErrorKind::ConfigIllegal,
+                            inner: None,
+                            message: Some(format!("a dir on {} file path existed", pipe_name)),
+                        });
                     }
-                    commands.push({
-                        let mut command = Command::new(order.program.as_ref().unwrap());
-                        command.args(args);
-                        command
-                    });
+                    Ok(OrderStdio::ToFile(path))
                 }
-            }
-
-            if commands.is_empty() {
-                return Err(Error {
+                _ => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     inner: None,
-                    message: Some(String::from("current order generated no task")),
-                    // message: Some(format!("order[{}] generated no task", order_index)),
-                });
+                    message: Some(format!("unknown {} type", pipe_name)),
+                }),
             }
-
-            fn std_pipe(
-                pipe_name: &str,
-                type_name: &Option<String>,
-                file_path: &Option<String>,
-            ) -> Result<OrderStdio, Error> {
-                let type_name = type_name.as_ref().unwrap();
-                match type_name.as_str() {
-                    "normal" => Ok(OrderStdio::Normal),
-                    "ignore" => Ok(OrderStdio::Ignore),
-                    "file" => {
-                        if file_path.is_none() {
-                            return Err(Error {
-                                kind: ErrorKind::ConfigIllegal,
-                                inner: None,
-                                message: Some(format!("{} file path not specified", pipe_name)),
-                            });
-                        }
-                        let path = PathBuf::from(file_path.as_ref().unwrap());
-                        let meta = fs::metadata(&path);
-                        if meta.is_err() {
-                            if fs::write(&path, "").is_err() {
-                                return Err(Error {
-                                    kind: ErrorKind::ConfigIllegal,
-                                    inner: None,
-                                    message: Some(format!("could not create {} file", pipe_name)),
-                                });
-                            }
-                        } else if meta.unwrap().is_dir() {
-                            return Err(Error {
-                                kind: ErrorKind::ConfigIllegal,
-                                inner: None,
-                                message: Some(format!("a dir on {} file path existed", pipe_name)),
-                            });
-                        }
-                        Ok(OrderStdio::ToFile(path))
-                    }
-                    _ => Err(Error {
-                        kind: ErrorKind::ConfigIllegal,
-                        inner: None,
-                        message: Some(format!("unknown {} type", pipe_name)),
-                    }),
-                }
-            };
-
-            orders.push(Order {
-                threads_count: order.threads_count.unwrap().try_into().unwrap(),
-                commands_count: commands.len(),
-                stdout: std_pipe("stdout", &order.stdout_type, &order.stdout_file_path)?,
-                stderr: std_pipe("stderr", &order.stderr_type, &order.stderr_file_path)?,
-                status: Arc::new(Mutex::new(OrderStatus::from_commands(commands))),
-            });
-        }
-        Ok(Self::from_orders(orders))
-    }
-
-    fn start(&self) {
-        {
-            let mut status = self.get_status();
-            assert!(status.running == false);
-            status.running = true;
-        }
-        let status_mutex = Arc::clone(&self.status);
-        thread::spawn(move || {
-            let get_status = || status_mutex.lock().unwrap();
-            while let Some(order) = {
-                let mut status = get_status();
-                status.orders.next()
-            } {
-                let order = Arc::new(order);
-                let mut status = get_status();
-                status.current_order = Some(Arc::clone(&order));
-                drop(status);
-                order.start();
-                order.wait();
-            }
-            let mut status = get_status();
-            status.current_order = None;
-            status.running = false;
-            status.wait_cvar.notify_one();
-        });
-    }
-
-    /// Return the progress of foundry as `((order_finished, order_total), (finished, total))`.
-    fn progress(&self) -> ((usize, usize), (usize, usize)) {
-        let status = self.get_status();
-        let order_progress = if let Some(order) = &status.current_order {
-            order.progress()
-        } else {
-            (0, 0)
         };
-        let total = status.orders_count;
-        let finished = total - status.orders.size_hint().0 - 1; // TODO: Bug Fix: Num Overflow???
-        (order_progress, (finished, total))
-    }
 
-    fn wait(&self) {
-        let status = self.get_status();
-        let cvar = Arc::clone(&status.wait_cvar);
-        let _ = cvar.wait_while(status, |s| s.running).unwrap();
-    }
-
-    fn terminate(&self) {
-        let mut status = self.get_status();
-        status.orders.nth(std::usize::MAX);
-        let order = status.current_order.as_ref().unwrap();
-        order.terminate();
+        Self {
+            threads_count: cfg.threads_count.unwrap().try_into().unwrap(),
+            commands_count: commands.len(),
+            stdout: std_pipe("stdout", &cfg.stdout_type, &cfg.stdout_file).unwrap(),
+            stderr: std_pipe("stderr", &cfg.stderr_type, &cfg.stderr_file).unwrap(),
+            status: Arc::new(Mutex::new(OrderStatus::from_commands(commands))),
+        }
     }
 }
 
 pub fn run() -> Result<(), Error> {
     // Foundry is one-off, Config is not one-off, change Config from gui and then new a Foundry.
-    let cfg = Config::_from_toml_test()?;
-    // let cfg = Config::new()?;
-    let foundry = Arc::new(Foundry::new(&cfg)?);
-    foundry.start();
+    // let cfg = Config::_from_toml_test();
+    let cfg = Config::new()?;
+    let order = Arc::new(Order::new(&cfg));
+    order.start();
     thread::spawn((|| {
-        let foundry = Arc::clone(&foundry);
+        let order = Arc::clone(&order);
         move || loop {
             let mut user_input = String::new();
             io::stdin()
@@ -602,7 +450,7 @@ pub fn run() -> Result<(), Error> {
             match user_input.trim() {
                 "t" => {
                     cui::print_log::info("user terminate the foundry");
-                    foundry.terminate();
+                    order.terminate();
                 }
                 _ => {
                     cui::print_log::info("unknown op");
@@ -611,16 +459,13 @@ pub fn run() -> Result<(), Error> {
         }
     })());
     thread::spawn((|| {
-        let foundry = Arc::clone(&foundry);
+        let order = Arc::clone(&order);
         move || loop {
-            let ((o_finished, o_total), (f_finished, f_total)) = foundry.progress();
-            cui::print_log::info(format!(
-                "current order: {} / {} | foundry: {} / {}",
-                o_finished, o_total, f_finished, f_total
-            ));
+            let (finished, total) = order.progress();
+            cui::print_log::info(format!("progress: {} / {}", finished, total));
             thread::sleep(std::time::Duration::from_secs(1));
         }
     })());
-    foundry.wait();
+    order.wait();
     Ok(())
 }
