@@ -13,6 +13,7 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::Read;
 use std::io::prelude::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
@@ -237,60 +238,46 @@ impl Order {
     }
 
     fn new(cfg: &Config) -> Self {
-        fn read_dir_recurse(dir: PathBuf) -> Result<Vec<PathBuf>, io::Error> {
-            let mut files = Vec::new();
-            for entry in fs::read_dir(dir)? {
-                let entry = entry?.path();
-                if entry.is_dir() {
-                    files.append(&mut read_dir_recurse(entry)?);
-                } else {
-                    files.push(entry);
-                }
+        fn split_args(args: &str) -> Result<Vec<&str>, Error> {
+            let mut vec = Vec::new();
+            let mut wrapped = false;
+            for item in args.split('"') {
+                match wrapped {
+                    true => vec.push(item),
+                    false => vec.extend(item.split_whitespace()),
+                };
+                wrapped = !wrapped;
             }
-            Ok(files)
-        }
-
-        fn read_dir_foreach(dir: PathBuf) -> Result<Vec<PathBuf>, io::Error> {
-            let mut files = Vec::new();
-            for entry in fs::read_dir(dir)? {
-                let entry = entry?.path();
-                if entry.is_file() {
-                    files.push(entry);
-                }
-            }
-            Ok(files)
-        }
-
-        fn split_args(args_src: &str) -> Result<Vec<String>, Error> {
-            let mut args = Vec::new();
-            let mut is_in_quotation_mask = true;
-            for entry in args_src.split('"') {
-                is_in_quotation_mask = !is_in_quotation_mask;
-                if is_in_quotation_mask {
-                    args.push(String::from(entry));
-                } else {
-                    let entry_split = entry.split_whitespace().map(String::from);
-                    let mut entry_split: Vec<String> = entry_split.collect();
-                    args.append(&mut entry_split);
-                }
-            }
-            if is_in_quotation_mask {
-                Err(Error {
+            wrapped = !wrapped;
+            match wrapped {
+                true => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     inner: None,
                     message: Some(String::from("args' quotation mask is not closed")),
-                })
-            } else {
-                Ok(args)
+                }),
+                false => Ok(vec),
             }
-        };
-
-        let read_dir = |dir| {
-            if cfg.input_recursive.unwrap() {
-                read_dir_recurse(dir)
-            } else {
-                read_dir_foreach(dir)
+        }
+        let read_dir = |dir| -> Result<Vec<PathBuf>, io::Error> {
+            let mut vec = Vec::new();
+            let recursive = cfg.input_recursive.unwrap();
+            fn read(
+                dir: PathBuf,
+                vec: &mut Vec<PathBuf>,
+                recursive: bool,
+            ) -> Result<(), io::Error> {
+                for item in fs::read_dir(dir)? {
+                    let item = item?.path();
+                    if item.is_file() {
+                        vec.push(item);
+                    } else if recursive && item.is_dir() {
+                        read(item, vec, recursive)?;
+                    }
+                }
+                Ok(())
             }
+            read(dir, &mut vec, recursive)?;
+            Ok(vec)
         };
         let mut input_files = Vec::new();
         if let Some(input_list) = &cfg.input_list {
@@ -345,7 +332,7 @@ impl Order {
             for index in 0..cfg.repeat_count.unwrap() {
                 let mut command = Command::new(cfg.program.as_ref().unwrap());
                 for item in &args_template {
-                    match item.as_str() {
+                    match *item {
                         "{args_switches}" => {
                             for item in &args_switches {
                                 command.arg(item);
