@@ -253,7 +253,7 @@ impl Order {
                 true => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     inner: None,
-                    message: Some(String::from("args' quotation mask is not closed")),
+                    message: Some("args' quotation mask is not closed".into()),
                 }),
                 false => Ok(vec),
             }
@@ -334,9 +334,7 @@ impl Order {
                 for item in &args_template {
                     match *item {
                         "{args_switches}" => {
-                            for item in &args_switches {
-                                command.arg(item);
-                            }
+                            command.args(&args_switches);
                         }
                         "{input_file}" => {
                             command.arg(input_file.to_str().unwrap());
@@ -422,7 +420,7 @@ impl Order {
 }
 
 pub fn run() -> Result<(), Error> {
-    // Foundry is one-off, Config is not one-off, change Config from gui and then new a Foundry.
+    // cmdfactory is one-off, Config is not one-off, change Config from gui and then new a cmdfactory.
     // let cfg = Config::_from_toml_test();
     let cfg = Config::new()?;
     let order = Arc::new(Order::new(&cfg));
@@ -436,7 +434,7 @@ pub fn run() -> Result<(), Error> {
                 .expect("Failed to read line");
             match user_input.trim() {
                 "t" => {
-                    cui::print_log::info("user terminate the foundry");
+                    cui::print_log::info("user terminate the cmdfactory");
                     order.terminate();
                 }
                 _ => {
