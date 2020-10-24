@@ -1,10 +1,10 @@
 [package]
-name = "foundry"
+name = "cmdfactory"
 version = "0.3.2"
 authors = ["kkocdko <kkocdko@163.com>"]
 description = "Automatically generate and execute commands from templates."
 edition = "2018"
-repository = "https://github.com/kkocdko/foundry"
+repository = "https://github.com/kkocdko/cmdfactory"
 license = "Unlicense"
 
 [profile.release]

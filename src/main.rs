@@ -1,9 +1,9 @@
-use foundry::cui::print_log;
+use cmdfactory::cui::print_log;
 use std::time::SystemTime;
 
 fn main() {
     let time_now = SystemTime::now();
-    match foundry::run() {
+    match cmdfactory::run() {
         Ok(_) => {
             print_log::info("all tasks completed");
         }

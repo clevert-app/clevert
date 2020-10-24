@@ -157,13 +157,13 @@ impl Config {
         [order]
         parent = 'cwebp'
         stdout_type = 'file' # ignore | normal | file
-        stdout_file = './target/foundry_test/stdout.log.txt'
+        stdout_file = './target/cmdfactory_test/stdout.log.txt'
         stderr_type = 'file'
-        stderr_file = './target/foundry_test/stderr.log.txt'
+        stderr_file = './target/cmdfactory_test/stderr.log.txt'
         program = 'D:/Library/libwebp/libwebp_1.0.0/bin/cwebp.exe'
         args_switches = '-m 6'
-        input_dir = './target/foundry_test/input_dir'
-        output_dir = './target/foundry_test/output_dir'
+        input_dir = './target/cmdfactory_test/input_dir'
+        output_dir = './target/cmdfactory_test/output_dir'
         output_prefix = 'out_'
         output_suffix = '_out'
         "#
