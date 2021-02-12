@@ -6,41 +6,41 @@ use config::Config;
 use os_pipe::PipeReader;
 use shared_child::SharedChild;
 use std::convert::TryInto;
-use std::error;
 use std::fmt;
 use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::prelude::Read;
 use std::io::prelude::Write;
-use std::path::Path;
+// use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
-use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::Condvar;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
 use std::thread;
+use std::time::Duration;
 use std::vec::IntoIter;
 
 #[derive(Debug)]
 enum ErrorKind {
-    ConfigTomlIllegal,
+    // ConfigTomlIllegal,
     ConfigIllegal,
     ConfigFileCanNotRead,
-    CanNotWriteLogFile,
-    ExecutePanic,
+    UnknownError,
+    // CanNotWriteLogFile,
+    // ExecutePanic,
 }
 
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
-    inner: Option<Box<dyn error::Error>>,
+    inner: Option<Box<dyn std::error::Error>>,
     message: Option<String>,
 }
 
-impl error::Error for Error {}
+impl std::error::Error for Error {}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -63,30 +63,29 @@ impl fmt::Display for Error {
     }
 }
 
-enum OrderStdio {
+enum Stdio {
     Normal,
     Ignore,
     ToFile(PathBuf),
 }
-
-struct OrderStatus {
+struct Status {
     commands: IntoIter<Command>,
     childs: Vec<Option<Arc<SharedChild>>>,
+    threads: Vec<Option<thread::JoinHandle<io::Result<()>>>>,
     stdout_file: Option<File>,
     stderr_file: Option<File>,
     wait_cvar: Arc<Condvar>,
-    active_threads_count: usize,
 }
 
-impl OrderStatus {
+impl Status {
     fn from_commands(commands: Vec<Command>) -> Self {
         Self {
             commands: commands.into_iter(),
             childs: Vec::new(),
+            threads: Vec::new(),
             stdout_file: None,
             stderr_file: None,
             wait_cvar: Arc::new(Condvar::new()),
-            active_threads_count: 0,
         }
     }
 }
@@ -94,13 +93,13 @@ impl OrderStatus {
 struct Order {
     threads_count: usize,
     commands_count: usize,
-    stdout: OrderStdio,
-    stderr: OrderStdio,
-    status: Arc<Mutex<OrderStatus>>,
+    stdout: Stdio,
+    stderr: Stdio,
+    status: Arc<Mutex<Status>>,
 }
 
 impl Order {
-    fn get_status(&self) -> MutexGuard<OrderStatus> {
+    fn get_status(&self) -> MutexGuard<Status> {
         self.status.lock().unwrap()
     }
 
@@ -109,24 +108,24 @@ impl Order {
         &self,
     ) -> impl Fn(&mut Command) -> (Option<PipeReader>, Option<PipeReader>) {
         let stdout_setter = match self.stdout {
-            OrderStdio::Normal => |_: &mut Command| None,
-            OrderStdio::Ignore => |command: &mut Command| {
-                command.stdout(Stdio::null());
+            Stdio::Normal => |_: &mut Command| None,
+            Stdio::Ignore => |command: &mut Command| {
+                command.stdout(std::process::Stdio::null());
                 None
             },
-            OrderStdio::ToFile(_) => |command: &mut Command| {
+            Stdio::ToFile(_) => |command: &mut Command| {
                 let (reader, writer) = os_pipe::pipe().unwrap();
                 command.stdout(writer);
                 Some(reader)
             },
         };
         let stderr_setter = match self.stderr {
-            OrderStdio::Normal => |_: &mut Command| None,
-            OrderStdio::Ignore => |command: &mut Command| {
-                command.stderr(Stdio::null());
+            Stdio::Normal => |_: &mut Command| None,
+            Stdio::Ignore => |command: &mut Command| {
+                command.stderr(std::process::Stdio::null());
                 None
             },
-            OrderStdio::ToFile(_) => |command: &mut Command| {
+            Stdio::ToFile(_) => |command: &mut Command| {
                 let (reader, writer) = os_pipe::pipe().unwrap();
                 command.stderr(writer);
                 Some(reader)
@@ -137,7 +136,7 @@ impl Order {
 
     fn stdio_writer(
         stdio_pair: (Option<PipeReader>, Option<PipeReader>),
-        status_mutex: &Arc<Mutex<OrderStatus>>,
+        status_mutex: &Arc<Mutex<Status>>,
     ) -> io::Result<()> {
         let get_status = || status_mutex.lock().unwrap();
         let (stdout, stderr) = stdio_pair;
@@ -154,7 +153,7 @@ impl Order {
         Ok(())
     }
 
-    fn spawn(&self, index: usize) -> thread::JoinHandle<Result<(), io::Error>> {
+    fn spawn(&self, index: usize) -> thread::JoinHandle<io::Result<()>> {
         let stdio_setter = self.stdio_get_setter();
         let status_mutex = Arc::clone(&self.status);
         thread::spawn(move || {
@@ -165,6 +164,7 @@ impl Order {
             } {
                 let stdio_pair = stdio_setter(&mut command);
 
+                // BUG: If the program's path is bad, SharedChild::spawn will break this thread!
                 let child = Arc::new(SharedChild::spawn(&mut command)?);
                 drop(command); // The "command" owns writers, and dropping it to closes them
 
@@ -177,7 +177,7 @@ impl Order {
             }
             let mut status = get_status();
             status.childs[index] = None;
-            status.active_threads_count -= 1;
+            status.threads[index] = None;
             status.wait_cvar.notify_one();
             Ok(())
         })
@@ -186,16 +186,16 @@ impl Order {
     fn start(&self) -> io::Result<()> {
         let mut status = self.get_status();
         status.childs.resize_with(self.threads_count, || None);
-        if let OrderStdio::ToFile(path) = &self.stdout {
+        if let Stdio::ToFile(path) = &self.stdout {
             status.stdout_file = Some(fs::OpenOptions::new().write(true).open(path)?);
         }
-        if let OrderStdio::ToFile(path) = &self.stderr {
+        if let Stdio::ToFile(path) = &self.stderr {
             status.stderr_file = Some(fs::OpenOptions::new().write(true).open(path)?);
         }
+        status.threads.resize_with(self.threads_count, || None);
         for index in 0..self.threads_count {
-            self.spawn(index);
+            status.threads[index] = Some(self.spawn(index));
         }
-        status.active_threads_count = self.threads_count;
         Ok(())
     }
 
@@ -203,11 +203,11 @@ impl Order {
     fn progress(&self) -> (usize, usize) {
         let total = self.commands_count;
         let status = self.get_status();
-        let active = status.childs.iter().fold(0, |active_count, child_option| {
+        let active = status.childs.iter().fold(0, |count, child_option| {
             if child_option.is_some() {
-                active_count + 1
+                count + 1
             } else {
-                active_count
+                count
             }
         });
         let remaining = status.commands.len() + active;
@@ -218,14 +218,34 @@ impl Order {
         let status = self.get_status();
         let cvar = Arc::clone(&status.wait_cvar);
         let _ = cvar
-            .wait_while(status, |s| s.active_threads_count != 0)
+            .wait_while(status, |s| {
+                let no_childs = s.childs.iter().all(|child| child.is_none());
+                no_childs
+            })
             .unwrap();
     }
 
+    /// Must called at least and most once.
+    fn wait_result(&self) -> io::Result<()> {
+        let mut status = self.get_status();
+        let mut threads = Vec::new();
+        for opt in &mut status.threads {
+            let handle = opt.take().unwrap();
+            threads.push(handle);
+        }
+        drop(status);
+        for handle in threads {
+            handle.join().unwrap()?;
+        }
+        Ok(())
+    }
+
+    // Should call `wait` afterwards.
     fn cease(&self) {
         self.get_status().commands.nth(std::usize::MAX);
     }
 
+    // Should call `wait` afterwards.
     fn terminate(&self) -> io::Result<()> {
         self.cease();
         let mut status = self.get_status();
@@ -261,11 +281,7 @@ impl Order {
         let read_dir = |dir| -> Result<Vec<PathBuf>, io::Error> {
             let mut vec = Vec::new();
             let recursive = cfg.input_recursive.unwrap();
-            fn read(
-                dir: PathBuf,
-                vec: &mut Vec<PathBuf>,
-                recursive: bool,
-            ) -> Result<(), io::Error> {
+            fn read(dir: PathBuf, vec: &mut Vec<PathBuf>, recursive: bool) -> io::Result<()> {
                 for item in fs::read_dir(dir)? {
                     let item = item?.path();
                     if item.is_file() {
@@ -315,7 +331,7 @@ impl Order {
                 Some(path) => PathBuf::from(path),
                 None => input_file.parent().unwrap().to_path_buf(),
             };
-            if cfg.output_keep_subdir.unwrap() && cfg.input_dir.is_some() {
+            if cfg.output_recursive.unwrap() && cfg.input_dir.is_some() {
                 let path = input_file
                     .strip_prefix(cfg.input_dir.as_ref().unwrap())
                     .unwrap()
@@ -369,11 +385,11 @@ impl Order {
             pipe_name: &str,
             type_name: &Option<String>,
             file_path: &Option<String>,
-        ) -> Result<OrderStdio, Error> {
+        ) -> Result<Stdio, Error> {
             let type_name = type_name.as_ref().unwrap();
             match type_name.as_str() {
-                "normal" => Ok(OrderStdio::Normal),
-                "ignore" => Ok(OrderStdio::Ignore),
+                "normal" => Ok(Stdio::Normal),
+                "ignore" => Ok(Stdio::Ignore),
                 "file" => {
                     if file_path.is_none() {
                         return Err(Error {
@@ -399,7 +415,7 @@ impl Order {
                             message: Some(format!("a dir on {} file path existed", pipe_name)),
                         });
                     }
-                    Ok(OrderStdio::ToFile(path))
+                    Ok(Stdio::ToFile(path))
                 }
                 _ => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
@@ -414,43 +430,70 @@ impl Order {
             commands_count: commands.len(),
             stdout: std_pipe("stdout", &cfg.stdout_type, &cfg.stdout_file).unwrap(),
             stderr: std_pipe("stderr", &cfg.stderr_type, &cfg.stderr_file).unwrap(),
-            status: Arc::new(Mutex::new(OrderStatus::from_commands(commands))),
+            status: Arc::new(Mutex::new(Status::from_commands(commands))),
         }
     }
 }
 
 pub fn run() -> Result<(), Error> {
-    // cmdfactory is one-off, Config is not one-off, change Config from gui and then new a cmdfactory.
-    // let cfg = Config::_from_toml_test();
-    let cfg = Config::new()?;
+    // Order is one-off, Config is not one-off, change Config from gui and then new a Order.
+    let cfg = Config::_from_toml_test();
+    // let cfg = Config::new()?;
     let order = Arc::new(Order::new(&cfg));
-    order.start();
-    thread::spawn((|| {
+    order.start().or_else(|err| {
+        Err(Error {
+            kind: ErrorKind::UnknownError,
+            inner: Some(Box::new(err)),
+            message: None,
+        })
+    })?;
+
+    // Command op
+    // if cfg.cui_operation.unwrap() {
+    //     let order = Arc::clone(&order);
+    //     let op_thread = thread::spawn(move || {
+    //         loop {
+    //             let mut input = String::new();
+    //             io::stdin().read_line(&mut input)?;
+    //             match input.trim() {
+    //                 "t" => {
+    //                     cui::print_log::info("user terminate the cmdfactory");
+    //                     order.terminate()?;
+    //                 }
+    //                 "i" => {
+    //                     cui::print_log::info("user turn off the command op");
+    //                     break;
+    //                 }
+    //                 _ => {
+    //                     cui::print_log::info("unknown op");
+    //                 }
+    //             };
+    //         }
+    //         Result::<(), io::Error>::Ok(())
+    //     });
+    //     op_thread.join().unwrap().or_else(|err| {
+    //         Err(Error {
+    //             kind: ErrorKind::UnknownError,
+    //             inner: Some(Box::new(err)),
+    //             message: None,
+    //         })
+    //     })?;
+    // }
+
+    // Progress message
+    if cfg.cui_msg_level.unwrap() >= 2 {
         let order = Arc::clone(&order);
-        move || loop {
-            let mut user_input = String::new();
-            io::stdin()
-                .read_line(&mut user_input)
-                .expect("Failed to read line");
-            match user_input.trim() {
-                "t" => {
-                    cui::print_log::info("user terminate the cmdfactory");
-                    order.terminate();
-                }
-                _ => {
-                    cui::print_log::info("unknown op");
-                }
-            }
-        }
-    })());
-    thread::spawn((|| {
-        let order = Arc::clone(&order);
-        move || loop {
+        let interval = cfg.cui_msg_interval.unwrap().try_into().unwrap();
+        thread::spawn(move || loop {
             let (finished, total) = order.progress();
+            if finished == total {
+                break;
+            }
             cui::print_log::info(format!("progress: {} / {}", finished, total));
-            thread::sleep(std::time::Duration::from_secs(1));
-        }
-    })());
+            thread::sleep(Duration::from_millis(interval));
+        });
+    }
+
     order.wait();
     Ok(())
 }

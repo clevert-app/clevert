@@ -14,8 +14,8 @@ This project is still developing.
 
 ### Todo List
 
-* Pause and resume (WIP)
+* Pause and resume
 * Help document
-* WebUI
+* GUI (use wxWidgets)
 * StdIn
 * Intro

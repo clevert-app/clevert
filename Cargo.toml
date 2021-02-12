@@ -15,6 +15,4 @@ lto = "fat"
 [dependencies]
 shared_child = "0.3.4"
 os_pipe = "0.9.2"
-toml = "0.5.6"
-rust-embed = "5.6.0"
-open = "1.4.0"
+toml = "0.5.8"
