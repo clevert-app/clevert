@@ -1,4 +1,4 @@
-pub mod print_log {
+pub mod log {
     use std::fmt::Display;
 
     pub fn info(content: impl Display) {

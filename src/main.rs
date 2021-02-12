@@ -1,18 +1,13 @@
-use cmdfactory::cui::print_log;
+use cmdfactory::cui::log;
 use std::time::SystemTime;
 
 fn main() {
     let time_now = SystemTime::now();
     match cmdfactory::run() {
-        Ok(_) => {
-            print_log::info("all tasks completed");
-        }
-        Err(e) => {
-            print_log::error(&e);
-            print_log::error(format!("error detail = {:?}", &e))
-        }
+        Ok(_) => log::info("all tasks completed"),
+        Err(e) => log::error(format!("error = {:?}", &e)),
     }
-    print_log::info(format!(
+    log::info(format!(
         "ended, took {:.2} seconds",
         time_now.elapsed().unwrap().as_secs_f64(),
     ));

@@ -11,7 +11,7 @@ pub struct Config {
     // Common
     pub parent: Option<String>,
     pub threads_count: Option<i32>,
-    pub stop_panic: Option<bool>,
+    pub skip_panic: Option<bool>,
     pub via_terminal: Option<bool>,
     pub repeat_count: Option<i32>,
     pub stdout_type: Option<String>,
@@ -47,7 +47,7 @@ impl Config {
         // TODO: Use macro instead?
         complement_option(&mut self.parent, &default.parent);
         complement_option(&mut self.threads_count, &default.threads_count);
-        complement_option(&mut self.stop_panic, &default.stop_panic);
+        complement_option(&mut self.skip_panic, &default.skip_panic);
         complement_option(&mut self.via_terminal, &default.via_terminal);
         complement_option(&mut self.repeat_count, &default.repeat_count);
         complement_option(&mut self.stdout_type, &default.stdout_type);
@@ -75,7 +75,7 @@ impl Config {
         Self {
             parent: v.seek_str("parent"),
             threads_count: v.seek_i32("threads_count"),
-            stop_panic: v.seek_bool("stop_panic"),
+            skip_panic: v.seek_bool("skip_panic"),
             via_terminal: v.seek_bool("via_terminal"),
             repeat_count: v.seek_i32("repeat_count"),
             stdout_type: v.seek_str("stdout_type"),
@@ -116,10 +116,10 @@ impl Config {
         let toml_str = r#"
         [presets.default]
         cui_operation = true
-        cui_msg_level = 3 # 3:verbose | 2:normal | 1:concise | 0:none
+        cui_msg_level = 3 # TODO # 3:verbose | 2:normal | 1:concise | 0:none
         cui_msg_interval = 1000
-        stop_when_panic = false
-        via_terminal = false
+        skip_panic = false
+        via_terminal = false # TODO
         
         [presets.cwebp]
         parent = 'default'
@@ -137,7 +137,7 @@ impl Config {
         stdout_file = './target/cmdfactory_test/stdout.log.txt'
         stderr_type = 'file'
         stderr_file = './target/cmdfactory_test/stderr.log.txt'
-        program = 'D:/Librari2es/libwebp/libwebp_1.0.0/bin/cwebp.exe'
+        program = 'D:/Libraries/libwebp/libwebp_1.0.0/bin/cwebp.exe'
         args_switches = '-m 6'
         input_dir = './target/cmdfactory_test/input_dir'
         output_dir = './target/cmdfactory_test/output_dir'
@@ -165,7 +165,7 @@ impl Config {
         order.complement(&Self {
             parent: None,
             threads_count: Some(1),
-            stop_panic: Some(false),
+            skip_panic: Some(false),
             via_terminal: Some(false),
             repeat_count: Some(1),
             stdout_type: Some("ignore".to_string()),
@@ -238,7 +238,7 @@ impl Config {
         Err(Error {
             kind: ErrorKind::ConfigFileCanNotRead,
             inner: None,
-            message: None,
+            message: Some("the config file was not found".to_string()),
         })
     }
 }
