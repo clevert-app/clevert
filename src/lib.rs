@@ -2,6 +2,9 @@ mod config;
 pub mod cui;
 pub mod toml_seek;
 use config::Config;
+// use core::panic;
+// use io::Result;
+// use fmt::Result;
 use os_pipe::PipeReader;
 use shared_child::SharedChild;
 use std::convert::TryInto;
@@ -62,10 +65,12 @@ enum Stdio {
     Ignore,
     ToFile(PathBuf),
 }
+
 struct Status {
     commands: IntoIter<Command>,
     childs: Vec<Option<Arc<SharedChild>>>,
-    threads: Vec<Option<thread::JoinHandle<io::Result<()>>>>,
+    active_threads_count: usize,
+    error: Option<io::Error>,
     stdout_file: Option<File>,
     stderr_file: Option<File>,
     wait_cvar: Arc<Condvar>,
@@ -76,7 +81,8 @@ impl Status {
         Self {
             commands: commands.into_iter(),
             childs: Vec::new(),
-            threads: Vec::new(),
+            active_threads_count: 0,
+            error: None,
             stdout_file: None,
             stderr_file: None,
             wait_cvar: Arc::new(Condvar::new()),
@@ -148,43 +154,44 @@ impl Order {
         Ok(())
     }
 
-    fn spawn(&self, index: usize) -> thread::JoinHandle<io::Result<()>> {
+    fn spawn(&self, index: usize) {
         let skip_panic = self.skip_panic;
         let stdio_setter = self.stdio_get_setter();
-        let status_mutex = Arc::clone(&self.status);
-        thread::spawn(move || {
-            let get_status = || status_mutex.lock().unwrap();
-            while let Some(mut command) = {
-                let mut status = get_status();
-                status.commands.next()
-            } {
-                let stdio_pair = stdio_setter(&mut command);
+        let mutex = Arc::clone(&self.status);
 
-                let child = if skip_panic {
-                    if let Ok(child) = SharedChild::spawn(&mut command) {
-                        child
-                    } else {
-                        continue;
-                    }
-                } else {
-                    SharedChild::spawn(&mut command)?
-                };
+        thread::spawn(move || {
+            // thread MUST NOT panic
+            let get_status = || mutex.lock().unwrap();
+            let exec = |mut command| -> io::Result<()> {
+                let stdio_pair = stdio_setter(&mut command);
+                let child = SharedChild::spawn(&mut command)?;
                 let child = Arc::new(child);
-                drop(command); // The "command" owns writers, dropping it to closes writers.
+                drop(command); // The "command" owns writers, dropping to closes writers.
 
                 let mut status = get_status();
                 status.childs[index] = Some(Arc::clone(&child));
                 drop(status);
                 child.wait()?;
 
-                Self::stdio_writer(stdio_pair, &status_mutex)?;
+                Self::stdio_writer(stdio_pair, &mutex)?;
+                Ok(())
+            };
+            while let Some(command) = {
+                let mut status = get_status();
+                status.commands.next()
+            } {
+                let result = exec(command);
+                if result.is_err() && !skip_panic {
+                    let mut status = get_status();
+                    status.error = Some(result.unwrap_err());
+                    break;
+                }
             }
             let mut status = get_status();
             status.childs[index] = None;
-            status.threads[index] = None;
+            status.active_threads_count -= 1;
             status.wait_cvar.notify_one();
-            Ok(())
-        })
+        });
     }
 
     pub fn start(&self) -> io::Result<()> {
@@ -196,50 +203,43 @@ impl Order {
         if let Stdio::ToFile(path) = &self.stderr {
             status.stderr_file = Some(fs::OpenOptions::new().write(true).open(path)?);
         }
-        status.threads.resize_with(self.threads_count, || None);
         for index in 0..self.threads_count {
-            status.threads[index] = Some(self.spawn(index));
+            status.active_threads_count += 1;
+            self.spawn(index);
         }
         Ok(())
     }
 
     /// Return the progress of order as `(finished, total)`.
     pub fn progress(&self) -> (usize, usize) {
-        let total = self.commands_count;
         let status = self.get_status();
-        let active = status.childs.iter().fold(0, |count, child_option| {
-            if child_option.is_some() {
-                count + 1
-            } else {
-                count
-            }
-        });
-        let remaining = status.commands.len() + active;
-        (total - remaining, total)
+        let total = self.commands_count;
+        let idle = status.commands.len();
+        let mut finished = total - idle;
+        let active = status.active_threads_count;
+        if finished >= active {
+            finished -= active;
+        }
+        (finished, total)
     }
 
+    /// Can't be called after `wait_result`.
     pub fn wait(&self) {
         let status = self.get_status();
         let cvar = Arc::clone(&status.wait_cvar);
-        let _ = cvar
-            .wait_while(status, |s| {
-                let no_childs = s.childs.iter().all(|child| child.is_none());
-                no_childs
-            })
-            .unwrap();
+        let condition = |s: &mut Status| s.active_threads_count > 0 && s.error.is_none();
+        let _ = cvar.wait_while(status, condition).unwrap();
     }
 
-    /// Must called at least and most once.
+    /// Must be called at least and most once.
     pub fn wait_result(&self) -> io::Result<()> {
+        self.wait();
         let mut status = self.get_status();
-        let mut threads = Vec::new();
-        for opt in &mut status.threads {
-            let handle = opt.take().unwrap();
-            threads.push(handle);
-        }
+        let error = status.error.take();
         drop(status);
-        for handle in threads {
-            handle.join().unwrap()?;
+        if let Some(e) = error {
+            self.terminate()?;
+            return Err(e);
         }
         Ok(())
     }
@@ -282,7 +282,7 @@ impl Order {
                 false => Ok(vec),
             }
         }
-        let read_dir = |dir| -> Result<Vec<PathBuf>, io::Error> {
+        let read_dir = |dir| -> io::Result<Vec<PathBuf>> {
             let mut vec = Vec::new();
             let recursive = cfg.input_recursive.unwrap();
             fn read(dir: PathBuf, vec: &mut Vec<PathBuf>, recursive: bool) -> io::Result<()> {
@@ -342,8 +342,13 @@ impl Order {
                     .to_path_buf();
                 output_file.push(path);
                 output_file.set_file_name(file_name);
+                let dir = output_file.parent().unwrap();
+                fs::create_dir_all(dir).unwrap();
             } else {
                 output_file.push(file_name);
+            }
+            if cfg.output_overwrite.unwrap() {
+                let _ = fs::remove_file(&output_file);
             }
             if let Some(extension) = &cfg.output_extension {
                 output_file.set_extension(extension);
@@ -498,10 +503,10 @@ pub fn run() -> Result<(), Error> {
         let interval = cfg.cui_msg_interval.unwrap().try_into().unwrap();
         thread::spawn(move || loop {
             let (finished, total) = order.progress();
+            cui::log::info(format!("progress: {} / {}", finished, total));
             if finished == total {
                 break;
             }
-            cui::log::info(format!("progress: {} / {}", finished, total));
             thread::sleep(Duration::from_millis(interval));
         });
     }

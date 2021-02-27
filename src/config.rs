@@ -119,18 +119,18 @@ impl Config {
         cui_msg_level = 3 # TODO # 3:verbose | 2:normal | 1:concise | 0:none
         cui_msg_interval = 1000
         skip_panic = false
-        via_terminal = false # TODO
-        
+        via_terminal = false # TODO ?
+
         [presets.cwebp]
         parent = 'default'
-        threads_count = 2
+        threads_count = 3
         repeat_count = 1
         args_template = '{args_switches} {input_file} -o {output_file}'
         input_recursive = true
-        output_recursive = false
+        output_recursive = true
         output_overwrite = false
         output_extension = 'webp'
-        
+
         [order]
         parent = 'cwebp'
         stdout_type = 'file' # ignore | normal | file
