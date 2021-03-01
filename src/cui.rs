@@ -1,19 +1,19 @@
 pub mod log {
     use std::fmt::Display;
 
-    pub fn info(content: impl Display) {
-        println!("{}", msg("info", content));
+    fn message(kind: &str, content: impl Display) -> String {
+        format!("[ cmdfactory : {} ] {}", kind, content)
     }
 
-    pub fn warn(content: impl Display) {
-        println!("{}", msg("warn", content));
+    pub fn info(msg: impl Display) {
+        println!("{}", message("info", msg));
     }
 
-    pub fn error(content: impl Display) {
-        eprintln!("{}", msg("error", content));
+    pub fn warn(msg: impl Display) {
+        println!("{}", message("warn", msg));
     }
 
-    fn msg(log_type: &str, content: impl Display) -> String {
-        format!("[ cmdfactory : {} ] {}", log_type, content)
+    pub fn error(msg: impl Display) {
+        eprintln!("{}", message("error", msg));
     }
 }

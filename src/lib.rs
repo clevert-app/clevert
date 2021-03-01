@@ -1,19 +1,17 @@
+pub mod child;
 mod config;
 pub mod cui;
-pub mod toml_seek;
+mod toml_seek;
+use child::Child;
 use config::Config;
-// use core::panic;
-// use io::Result;
-// use fmt::Result;
-use os_pipe::PipeReader;
-use shared_child::SharedChild;
+use io::Write;
 use std::convert::TryInto;
 use std::fmt;
 use std::fs;
 use std::fs::File;
 use std::io;
-use std::io::prelude::{Read, Write};
 use std::path::PathBuf;
+use std::process;
 use std::process::Command;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
@@ -27,7 +25,7 @@ enum ErrorKind {
     ConfigFileCanNotRead,
     UnknownError,
     // CanNotWriteLogFile,
-    // ExecutePanic,
+    ExecutePanic,
 }
 
 #[derive(Debug)]
@@ -37,65 +35,34 @@ pub struct Error {
     message: Option<String>,
 }
 
-impl std::error::Error for Error {}
-
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&format!("{:?}", self))
-        // use ErrorKind::*;
-        // let mut content = match self.kind {
-        //     ConfigTomlIllegal => "config is not a legal toml document",
-        //     ConfigIllegal => "config is illegal",
-        //     ConfigFileCanNotRead => "read config file failed",
-        //     CanNotWriteLogFile => "write log file failed",
-        //     ExecutePanic => "task process panic",
-        // }
-        // .to_string();
-        // if let Some(message) = &self.message {
-        //     content += &format!(", message = {}", message);
-        // }
-        // if let Some(inner) = &self.inner {
-        //     content += &format!(", error = {}", inner);
-        // }
     }
 }
+
+impl std::error::Error for Error {}
 
 enum Stdio {
     Normal,
     Ignore,
-    ToFile(PathBuf),
+    ToFile(File),
 }
 
 struct Status {
     commands: IntoIter<Command>,
-    childs: Vec<Option<Arc<SharedChild>>>,
-    active_threads_count: usize,
+    childs: Vec<Option<Arc<Child>>>,
+    actives_count: usize,
     error: Option<io::Error>,
-    stdout_file: Option<File>,
-    stderr_file: Option<File>,
+    stdout: Stdio,
+    stderr: Stdio,
     wait_cvar: Arc<Condvar>,
-}
-
-impl Status {
-    fn from_commands(commands: Vec<Command>) -> Self {
-        Self {
-            commands: commands.into_iter(),
-            childs: Vec::new(),
-            active_threads_count: 0,
-            error: None,
-            stdout_file: None,
-            stderr_file: None,
-            wait_cvar: Arc::new(Condvar::new()),
-        }
-    }
 }
 
 pub struct Order {
     threads_count: usize,
     commands_count: usize,
     skip_panic: bool,
-    stdout: Stdio,
-    stderr: Stdio,
     status: Arc<Mutex<Status>>,
 }
 
@@ -104,76 +71,38 @@ impl Order {
         self.status.lock().unwrap()
     }
 
-    /// |command| (stdout_setter_option, stderr_setter_option)
-    fn stdio_get_setter(
-        &self,
-    ) -> impl Fn(&mut Command) -> (Option<PipeReader>, Option<PipeReader>) {
-        let stdout_setter = match self.stdout {
-            Stdio::Normal => |_: &mut Command| None,
-            Stdio::Ignore => |command: &mut Command| {
-                command.stdout(std::process::Stdio::null());
-                None
-            },
-            Stdio::ToFile(_) => |command: &mut Command| {
-                let (reader, writer) = os_pipe::pipe().unwrap();
-                command.stdout(writer);
-                Some(reader)
-            },
-        };
-        let stderr_setter = match self.stderr {
-            Stdio::Normal => |_: &mut Command| None,
-            Stdio::Ignore => |command: &mut Command| {
-                command.stderr(std::process::Stdio::null());
-                None
-            },
-            Stdio::ToFile(_) => |command: &mut Command| {
-                let (reader, writer) = os_pipe::pipe().unwrap();
-                command.stderr(writer);
-                Some(reader)
-            },
-        };
-        move |command: &mut Command| (stdout_setter(command), stderr_setter(command))
-    }
-
-    fn stdio_writer(
-        stdio_pair: (Option<PipeReader>, Option<PipeReader>),
-        status_mutex: &Arc<Mutex<Status>>,
-    ) -> io::Result<()> {
-        let get_status = || status_mutex.lock().unwrap();
-        let (stdout, stderr) = stdio_pair;
-        if let Some(mut reader) = stdout {
-            let buf = &mut Vec::new();
-            reader.read_to_end(buf)?;
-            get_status().stdout_file.as_ref().unwrap().write_all(buf)?;
-        }
-        if let Some(mut reader) = stderr {
-            let buf = &mut Vec::new();
-            reader.read_to_end(buf)?;
-            get_status().stderr_file.as_ref().unwrap().write_all(buf)?;
-        }
-        Ok(())
-    }
-
     fn spawn(&self, index: usize) {
         let skip_panic = self.skip_panic;
-        let stdio_setter = self.stdio_get_setter();
-        let mutex = Arc::clone(&self.status);
-
+        let status_mutex = Arc::clone(&self.status);
         thread::spawn(move || {
             // thread MUST NOT panic
-            let get_status = || mutex.lock().unwrap();
-            let exec = |mut command| -> io::Result<()> {
-                let stdio_pair = stdio_setter(&mut command);
-                let child = SharedChild::spawn(&mut command)?;
-                let child = Arc::new(child);
-                drop(command); // The "command" owns writers, dropping to closes writers.
-
+            let get_status = || status_mutex.lock().unwrap();
+            let exec = |mut command: Command| {
                 let mut status = get_status();
+                match status.stdout {
+                    Stdio::Ignore => command.stdout(process::Stdio::null()),
+                    Stdio::ToFile(_) => command.stdout(process::Stdio::piped()),
+                    Stdio::Normal => &mut command,
+                };
+                match status.stderr {
+                    Stdio::Ignore => command.stderr(process::Stdio::null()),
+                    Stdio::ToFile(_) => command.stderr(process::Stdio::piped()),
+                    Stdio::Normal => &mut command,
+                };
+                let child = Arc::new(Child::spawn(&mut command)?);
                 status.childs[index] = Some(Arc::clone(&child));
+                drop(command); // The "command" owns writers, dropping to closes writers.
                 drop(status);
+
                 child.wait()?;
 
-                Self::stdio_writer(stdio_pair, &mutex)?;
+                let mut status = get_status();
+                if let Stdio::ToFile(file) = &mut status.stdout {
+                    file.write(&mut child.take_stdout()?)?;
+                }
+                if let Stdio::ToFile(file) = &mut status.stderr {
+                    file.write(&mut child.take_stderr()?)?;
+                }
                 Ok(())
             };
             while let Some(command) = {
@@ -189,7 +118,7 @@ impl Order {
             }
             let mut status = get_status();
             status.childs[index] = None;
-            status.active_threads_count -= 1;
+            status.actives_count -= 1;
             status.wait_cvar.notify_one();
         });
     }
@@ -197,14 +126,8 @@ impl Order {
     pub fn start(&self) -> io::Result<()> {
         let mut status = self.get_status();
         status.childs.resize_with(self.threads_count, || None);
-        if let Stdio::ToFile(path) = &self.stdout {
-            status.stdout_file = Some(fs::OpenOptions::new().write(true).open(path)?);
-        }
-        if let Stdio::ToFile(path) = &self.stderr {
-            status.stderr_file = Some(fs::OpenOptions::new().write(true).open(path)?);
-        }
+        status.actives_count = self.threads_count;
         for index in 0..self.threads_count {
-            status.active_threads_count += 1;
             self.spawn(index);
         }
         Ok(())
@@ -216,18 +139,17 @@ impl Order {
         let total = self.commands_count;
         let idle = status.commands.len();
         let mut finished = total - idle;
-        let active = status.active_threads_count;
+        let active = status.actives_count;
         if finished >= active {
             finished -= active;
         }
         (finished, total)
     }
 
-    /// Can't be called after `wait_result`.
     pub fn wait(&self) {
         let status = self.get_status();
         let cvar = Arc::clone(&status.wait_cvar);
-        let condition = |s: &mut Status| s.active_threads_count > 0 && s.error.is_none();
+        let condition = |s: &mut Status| s.actives_count > 0 && s.error.is_none();
         let _ = cvar.wait_while(status, condition).unwrap();
     }
 
@@ -277,12 +199,12 @@ impl Order {
                 true => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     inner: None,
-                    message: Some("args' quotation mask is not closed".into()),
+                    message: Some("args' quotation mask is not closed".to_string()),
                 }),
                 false => Ok(vec),
             }
         }
-        let read_dir = |dir| -> io::Result<Vec<PathBuf>> {
+        let read_dir = |dir| {
             let mut vec = Vec::new();
             let recursive = cfg.input_recursive.unwrap();
             fn read(dir: PathBuf, vec: &mut Vec<PathBuf>, recursive: bool) -> io::Result<()> {
@@ -296,7 +218,11 @@ impl Order {
                 }
                 Ok(())
             }
-            read(dir, &mut vec, recursive)?;
+            read(dir, &mut vec, recursive).map_err(|e| Error {
+                kind: ErrorKind::ConfigIllegal,
+                inner: Some(Box::new(e)),
+                message: None,
+            })?;
             Ok(vec)
         };
         let mut input_files = Vec::new();
@@ -304,27 +230,23 @@ impl Order {
             for item in input_list {
                 let path = PathBuf::from(item);
                 if path.is_dir() {
-                    input_files.append(&mut read_dir(path).unwrap());
+                    input_files.append(&mut read_dir(path)?);
                 } else {
                     input_files.push(path);
                 }
             }
         } else if let Some(input_dir) = &cfg.input_dir {
             let input_dir = PathBuf::from(input_dir);
-            input_files.append(&mut read_dir(input_dir).unwrap());
+            input_files.append(&mut read_dir(input_dir)?);
         }
 
         let mut commands = Vec::new();
-        let args_template = split_args(cfg.args_template.as_ref().unwrap()).unwrap();
-        let args_switches = split_args(cfg.args_switches.as_ref().unwrap()).unwrap();
+        let args_template = split_args(cfg.args_template.as_ref().unwrap())?;
+        let args_switches = split_args(cfg.args_template.as_ref().unwrap())?;
 
         for input_file in input_files {
-            let mut file_name = input_file
-                .file_stem()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_string();
+            let file_name = input_file.file_stem().unwrap();
+            let mut file_name = file_name.to_str().unwrap().to_string();
             if let Some(prefix) = &cfg.output_prefix {
                 file_name.insert_str(0, &prefix);
             }
@@ -333,13 +255,11 @@ impl Order {
             }
             let mut output_file = match &cfg.output_dir {
                 Some(path) => PathBuf::from(path),
-                None => input_file.parent().unwrap().to_path_buf(),
+                None => input_file.parent().unwrap().into(),
             };
             if cfg.output_recursive.unwrap() && cfg.input_dir.is_some() {
-                let path = input_file
-                    .strip_prefix(cfg.input_dir.as_ref().unwrap())
-                    .unwrap()
-                    .to_path_buf();
+                let input_dir = cfg.input_dir.as_ref().unwrap();
+                let path = input_file.strip_prefix(input_dir).unwrap();
                 output_file.push(path);
                 output_file.set_file_name(file_name);
                 let dir = output_file.parent().unwrap();
@@ -356,34 +276,29 @@ impl Order {
 
             for index in 0..cfg.repeat_count.unwrap() {
                 let mut command = Command::new(cfg.program.as_ref().unwrap());
-                for item in &args_template {
-                    match *item {
-                        "{args_switches}" => {
-                            command.args(&args_switches);
-                        }
-                        "{input_file}" => {
-                            command.arg(input_file.to_str().unwrap());
-                        }
-                        "{input_extension}" => {
-                            command.arg(input_file.extension().unwrap().to_str().unwrap());
-                        }
-                        "{output_file}" => {
-                            command.arg(output_file.to_str().unwrap());
-                        }
-                        "{output_dir}" => {
-                            command.arg(output_file.parent().unwrap().to_str().unwrap());
-                        }
-                        "{repeat_index}" => {
-                            command.arg(index.to_string());
-                        }
-                        "{repeat_position}" => {
-                            command.arg((index + 1).to_string());
-                        }
-                        _ => {
-                            command.arg(item);
-                        }
-                    };
-                }
+                args_template.iter().for_each(|item| match *item {
+                    "{args_switches}" => {
+                        command.args(&args_switches);
+                    }
+                    "{input_file}" => {
+                        command.arg(input_file.to_str().unwrap());
+                    }
+                    "{output_file}" => {
+                        command.arg(output_file.to_str().unwrap());
+                    }
+                    "{output_dir}" => {
+                        command.arg(output_file.parent().unwrap().to_str().unwrap());
+                    }
+                    "{repeat_index}" => {
+                        command.arg(index.to_string());
+                    }
+                    "{repeat_position}" => {
+                        command.arg((index + 1).to_string());
+                    }
+                    _ => {
+                        command.arg(item);
+                    }
+                });
                 commands.push(command);
             }
         }
@@ -396,57 +311,48 @@ impl Order {
             })?;
         }
 
-        fn std_pipe(
-            name: &str,
-            kind: &Option<String>,
-            file_path: &Option<String>,
-        ) -> Result<Stdio, Error> {
-            let type_name = kind.as_ref().unwrap();
-            match type_name.as_str() {
-                "normal" => Ok(Stdio::Normal),
+        let threads_count = cfg.threads_count.unwrap().try_into().unwrap();
+        let commands_count = commands.len();
+        let stdpipe = |type_opt: &Option<String>, path_opt: &Option<String>| {
+            let type_str = type_opt.as_ref().unwrap().as_str();
+            match type_str {
                 "ignore" => Ok(Stdio::Ignore),
+                "normal" => Ok(Stdio::Normal),
                 "file" => {
-                    if file_path.is_none() {
-                        return Err(Error {
-                            kind: ErrorKind::ConfigIllegal,
-                            inner: None,
-                            message: Some(format!("{} file path not specified", name)),
-                        });
-                    }
-                    let path = PathBuf::from(file_path.as_ref().unwrap());
-                    let meta = fs::metadata(&path);
-                    if meta.is_err() {
-                        if fs::write(&path, "").is_err() {
-                            return Err(Error {
-                                kind: ErrorKind::ConfigIllegal,
-                                inner: None,
-                                message: Some(format!("could not create {} file", name)),
-                            });
-                        }
-                    } else if meta.unwrap().is_dir() {
-                        return Err(Error {
-                            kind: ErrorKind::ConfigIllegal,
-                            inner: None,
-                            message: Some(format!("a dir on {} file path existed", name)),
-                        });
-                    }
-                    Ok(Stdio::ToFile(path))
+                    let path = path_opt.as_ref().ok_or_else(|| Error {
+                        kind: ErrorKind::ConfigIllegal,
+                        inner: None,
+                        message: Some("std pipe file path is unknown".to_string()),
+                    })?;
+                    let mut opt = fs::OpenOptions::new();
+                    let file = opt.write(true).open(path).map_err(|e| Error {
+                        kind: ErrorKind::ConfigIllegal,
+                        inner: Some(Box::new(e)),
+                        message: Some("std pipe file could not write".to_string()),
+                    })?;
+                    Ok(Stdio::ToFile(file))
                 }
                 _ => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     inner: None,
-                    message: Some(format!("unknown {} type", name)),
+                    message: Some("std pipe type is unknown".to_string()),
                 }),
             }
         };
-
+        let status = Status {
+            commands: commands.into_iter(),
+            childs: (0..threads_count).map(|_| None).collect(),
+            actives_count: 0,
+            error: None,
+            stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
+            stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
+            wait_cvar: Arc::new(Condvar::new()),
+        };
         Ok(Self {
-            threads_count: cfg.threads_count.unwrap().try_into().unwrap(),
-            commands_count: commands.len(),
+            threads_count,
+            commands_count,
             skip_panic: cfg.skip_panic.unwrap(),
-            stdout: std_pipe("stdout", &cfg.stdout_type, &cfg.stdout_file)?,
-            stderr: std_pipe("stderr", &cfg.stderr_type, &cfg.stderr_file)?,
-            status: Arc::new(Mutex::new(Status::from_commands(commands))),
+            status: Arc::new(Mutex::new(status)),
         })
     }
 }
@@ -457,45 +363,11 @@ pub fn run() -> Result<(), Error> {
     let cfg = Config::new()?;
 
     let order = Arc::new(Order::new(&cfg)?);
-    order.start().or_else(|err| {
-        Err(Error {
-            kind: ErrorKind::UnknownError,
-            inner: Some(Box::new(err)),
-            message: None,
-        })
+    order.start().map_err(|e| Error {
+        kind: ErrorKind::UnknownError,
+        inner: Some(Box::new(e)),
+        message: None,
     })?;
-
-    // Command op
-    if cfg.cui_operation.unwrap() {
-        let order = Arc::clone(&order);
-        let _op_thread = thread::spawn(move || {
-            loop {
-                let mut input = String::new();
-                io::stdin().read_line(&mut input)?;
-                match input.trim() {
-                    "t" => {
-                        cui::log::info("user terminate the cmdfactory");
-                        order.terminate()?;
-                    }
-                    "i" => {
-                        cui::log::info("user turn off the command op");
-                        break;
-                    }
-                    _ => {
-                        cui::log::info("unknown op");
-                    }
-                };
-            }
-            Result::<(), io::Error>::Ok(())
-        });
-        // op_thread.join().unwrap().or_else(|err| {
-        //     Err(Error {
-        //         kind: ErrorKind::UnknownError,
-        //         inner: Some(Box::new(err)),
-        //         message: None,
-        //     })
-        // })?;
-    }
 
     // Progress message
     if cfg.cui_msg_level.unwrap() >= 2 {
@@ -511,13 +383,53 @@ pub fn run() -> Result<(), Error> {
         });
     }
 
-    order.wait_result().or_else(|err| {
-        Err(Error {
-            kind: ErrorKind::UnknownError,
-            inner: Some(Box::new(err)),
-            message: None,
-        })
+    // Command operation
+    let op_thread = if cfg.cui_operation.unwrap() {
+        let order = Arc::clone(&order);
+        let handle = thread::spawn(move || {
+            loop {
+                let mut input = String::new();
+                io::stdin().read_line(&mut input)?;
+                match input.trim() {
+                    "t" => {
+                        cui::log::info("user terminate the cmdfactory");
+                        order.terminate()?;
+                        break;
+                    }
+                    "c" => {
+                        cui::log::info("user cease the cmdfactory");
+                        order.cease();
+                        break;
+                    }
+                    "i" => {
+                        cui::log::info("user turn off the command op");
+                        break;
+                    }
+                    _ => {
+                        cui::log::info("unknown op");
+                    }
+                };
+            }
+            Result::<(), io::Error>::Ok(())
+        });
+        Some(handle)
+    } else {
+        None
+    };
+
+    order.wait_result().map_err(|e| Error {
+        kind: ErrorKind::ExecutePanic,
+        inner: Some(Box::new(e)),
+        message: None,
     })?;
+
+    if let Some(handle) = op_thread {
+        handle.join().unwrap().map_err(|e| Error {
+            kind: ErrorKind::UnknownError,
+            inner: Some(Box::new(e)),
+            message: None,
+        })?;
+    }
 
     Ok(())
 }
