@@ -71,38 +71,42 @@ impl Order {
         self.status.lock().unwrap()
     }
 
+    fn stdpipe_set(command: &mut Command, status: &mut MutexGuard<Status>) {
+        match status.stdout {
+            Stdio::Ignore => command.stdout(process::Stdio::null()),
+            Stdio::ToFile(_) => command.stdout(process::Stdio::piped()),
+            Stdio::Normal => command,
+        };
+        match status.stderr {
+            Stdio::Ignore => command.stderr(process::Stdio::null()),
+            Stdio::ToFile(_) => command.stderr(process::Stdio::piped()),
+            Stdio::Normal => command,
+        };
+    }
+
+    fn stdpipe_write(child: &Arc<Child>, mut status: MutexGuard<Status>) -> io::Result<()> {
+        if let Stdio::ToFile(file) = &mut status.stdout {
+            file.write_all(&mut child.take_stdout()?)?;
+        }
+        if let Stdio::ToFile(file) = &mut status.stderr {
+            file.write_all(&mut child.take_stderr()?)?;
+        }
+        Ok(())
+    }
+
     fn spawn(&self, index: usize) {
         let skip_panic = self.skip_panic;
         let status_mutex = Arc::clone(&self.status);
         thread::spawn(move || {
-            // thread MUST NOT panic
             let get_status = || status_mutex.lock().unwrap();
             let exec = |mut command: Command| {
                 let mut status = get_status();
-                match status.stdout {
-                    Stdio::Ignore => command.stdout(process::Stdio::null()),
-                    Stdio::ToFile(_) => command.stdout(process::Stdio::piped()),
-                    Stdio::Normal => &mut command,
-                };
-                match status.stderr {
-                    Stdio::Ignore => command.stderr(process::Stdio::null()),
-                    Stdio::ToFile(_) => command.stderr(process::Stdio::piped()),
-                    Stdio::Normal => &mut command,
-                };
+                Self::stdpipe_set(&mut command, &mut status);
                 let child = Arc::new(Child::spawn(&mut command)?);
                 status.childs[index] = Some(Arc::clone(&child));
-                drop(command); // The "command" owns writers, dropping to closes writers.
                 drop(status);
-
                 child.wait()?;
-
-                let mut status = get_status();
-                if let Stdio::ToFile(file) = &mut status.stdout {
-                    file.write(&mut child.take_stdout()?)?;
-                }
-                if let Stdio::ToFile(file) = &mut status.stderr {
-                    file.write(&mut child.take_stderr()?)?;
-                }
+                Self::stdpipe_write(&child, get_status())?;
                 Ok(())
             };
             while let Some(command) = {
@@ -359,8 +363,8 @@ impl Order {
 
 pub fn run() -> Result<(), Error> {
     // Order is one-off, Config is not one-off, change Config from gui and then new a Order.
-    // let cfg = Config::_from_toml_test();
-    let cfg = Config::new()?;
+    let cfg = Config::_from_toml_test();
+    // let cfg = Config::new()?;
 
     let order = Arc::new(Order::new(&cfg)?);
     order.start().map_err(|e| Error {
@@ -384,37 +388,29 @@ pub fn run() -> Result<(), Error> {
     }
 
     // Command operation
-    let op_thread = if cfg.cui_operation.unwrap() {
+    if cfg.cui_operation.unwrap() {
         let order = Arc::clone(&order);
-        let handle = thread::spawn(move || {
-            loop {
-                let mut input = String::new();
-                io::stdin().read_line(&mut input)?;
-                match input.trim() {
-                    "t" => {
-                        cui::log::info("user terminate the cmdfactory");
-                        order.terminate()?;
-                        break;
-                    }
-                    "c" => {
-                        cui::log::info("user cease the cmdfactory");
-                        order.cease();
-                        break;
-                    }
-                    "i" => {
-                        cui::log::info("user turn off the command op");
-                        break;
-                    }
-                    _ => {
-                        cui::log::info("unknown op");
-                    }
-                };
-            }
-            Result::<(), io::Error>::Ok(())
+        thread::spawn(move || loop {
+            let mut input = String::new();
+            io::stdin().read_line(&mut input).unwrap();
+            match input.trim() {
+                "t" => {
+                    cui::log::info("user terminate the cmdfactory");
+                    order.terminate().unwrap();
+                }
+                "c" => {
+                    cui::log::info("user cease the cmdfactory");
+                    order.cease();
+                }
+                "i" => {
+                    cui::log::info("user turn off the command op");
+                    break;
+                }
+                _ => {
+                    cui::log::info("unknown op");
+                }
+            };
         });
-        Some(handle)
-    } else {
-        None
     };
 
     order.wait_result().map_err(|e| Error {
@@ -422,14 +418,6 @@ pub fn run() -> Result<(), Error> {
         inner: Some(Box::new(e)),
         message: None,
     })?;
-
-    if let Some(handle) = op_thread {
-        handle.join().unwrap().map_err(|e| Error {
-            kind: ErrorKind::UnknownError,
-            inner: Some(Box::new(e)),
-            message: None,
-        })?;
-    }
 
     Ok(())
 }

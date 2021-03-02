@@ -1,13 +1,81 @@
+use io::Read;
 use std::io;
 use std::process;
 use std::process::{Command, ExitStatus};
 use std::sync::{Condvar, Mutex};
 
-mod sys;
-
-// Publish the Unix-only SharedChildExt trait.
 #[cfg(unix)]
-pub mod unix;
+#[path = "unix.rs"]
+mod sys {
+    extern crate libc;
+
+    use std;
+    use std::io;
+    use std::process::Child;
+
+    // A handle on Unix is just the PID.
+    pub struct Handle(u32);
+
+    pub fn get_handle(child: &Child) -> Handle {
+        Handle(child.id())
+    }
+
+    // This blocks until a child exits, without reaping the child.
+    pub fn wait_without_reaping(handle: Handle) -> io::Result<()> {
+        loop {
+            let ret = unsafe {
+                let mut siginfo = std::mem::zeroed();
+                libc::waitid(
+                    libc::P_PID,
+                    handle.0 as libc::id_t,
+                    &mut siginfo,
+                    libc::WEXITED | libc::WNOWAIT,
+                )
+            };
+            if ret == 0 {
+                return Ok(());
+            }
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::Interrupted {
+                return Err(error);
+            }
+            // We were interrupted. Loop and retry.
+        }
+    }
+}
+
+#[cfg(windows)]
+#[path = "windows.rs"]
+mod sys {
+    use std::io;
+    use std::os::windows::io::{AsRawHandle, RawHandle};
+    use std::process::Child;
+    use winapi::um::synchapi::WaitForSingleObject;
+    use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0};
+    use winapi::um::winnt::HANDLE;
+
+    pub struct Handle(RawHandle);
+
+    // Kind of like a child PID on Unix, it's important not to keep the handle
+    // around after the child has been cleaned up. The best solution would be to
+    // have the handle actually borrow the child, but we need to keep the child
+    // unborrowed. Instead we just avoid storing them.
+    pub fn get_handle(child: &Child) -> Handle {
+        Handle(child.as_raw_handle())
+    }
+
+    // This is very similar to libstd's Child::wait implementation, because the
+    // basic wait on Windows doesn't reap. The main difference is that this can be
+    // called without &mut Child.
+    pub fn wait_without_reaping(handle: Handle) -> io::Result<()> {
+        let wait_ret = unsafe { WaitForSingleObject(handle.0 as HANDLE, INFINITE) };
+        if wait_ret != WAIT_OBJECT_0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Child {
@@ -130,5 +198,39 @@ enum State {
     Exited(ExitStatus),
 }
 
-use io::Read;
 use State::*;
+
+// Publish the Unix-only SharedChildExt trait.
+#[cfg(unix)]
+pub mod unix_ext {
+
+    //! Unix-only extensions, for sending signals.
+
+    extern crate libc;
+
+    use std::io;
+
+    pub trait SharedChildExt {
+        /// Send a signal to the child process with `libc::kill`. If the process
+        /// has already been waited on, this returns `Ok(())` and does nothing.
+        fn send_signal(&self, signal: libc::c_int) -> io::Result<()>;
+    }
+
+    impl SharedChildExt for super::SharedChild {
+        fn send_signal(&self, signal: libc::c_int) -> io::Result<()> {
+            let status = self.state_lock.lock().unwrap();
+            if let super::ChildState::Exited(_) = *status {
+                return Ok(());
+            }
+            // The child is still running. Signal it. Holding the state lock
+            // is important to prevent a PID race.
+            // This assumes that the wait methods will never hold the child
+            // lock during a blocking wait, since we need it to get the pid.
+            let pid = self.id() as libc::pid_t;
+            match unsafe { libc::kill(pid, signal) } {
+                -1 => Err(io::Error::last_os_error()),
+                _ => Ok(()),
+            }
+        }
+    }
+}
