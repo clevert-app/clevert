@@ -4,7 +4,6 @@ use crate::ErrorKind;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use toml;
 use toml::Value;
 
 pub struct Config {
@@ -45,30 +44,32 @@ impl Config {
         }
 
         // TODO: Use macro instead?
-        complement_option(&mut self.parent, &default.parent);
-        complement_option(&mut self.threads_count, &default.threads_count);
-        complement_option(&mut self.skip_panic, &default.skip_panic);
-        complement_option(&mut self.via_terminal, &default.via_terminal);
-        complement_option(&mut self.repeat_count, &default.repeat_count);
-        complement_option(&mut self.stdout_type, &default.stdout_type);
-        complement_option(&mut self.stdout_file, &default.stdout_file);
-        complement_option(&mut self.stderr_type, &default.stderr_type);
-        complement_option(&mut self.stderr_file, &default.stderr_file);
-        complement_option(&mut self.program, &default.program);
-        complement_option(&mut self.args_template, &default.args_template);
-        complement_option(&mut self.args_switches, &default.args_switches);
-        complement_option(&mut self.input_list, &default.input_list);
-        complement_option(&mut self.input_dir, &default.input_dir);
-        complement_option(&mut self.input_recursive, &default.input_recursive);
-        complement_option(&mut self.output_dir, &default.output_dir);
-        complement_option(&mut self.output_recursive, &default.output_recursive);
-        complement_option(&mut self.output_overwrite, &default.output_overwrite);
-        complement_option(&mut self.output_extension, &default.output_extension);
-        complement_option(&mut self.output_prefix, &default.output_prefix);
-        complement_option(&mut self.output_suffix, &default.output_suffix);
-        complement_option(&mut self.cui_operation, &default.cui_operation);
-        complement_option(&mut self.cui_msg_level, &default.cui_msg_level);
-        complement_option(&mut self.cui_msg_interval, &default.cui_msg_interval);
+        let t = self;
+        let s = default;
+        complement_option(&mut t.parent, &s.parent);
+        complement_option(&mut t.threads_count, &s.threads_count);
+        complement_option(&mut t.skip_panic, &s.skip_panic);
+        complement_option(&mut t.via_terminal, &s.via_terminal);
+        complement_option(&mut t.repeat_count, &s.repeat_count);
+        complement_option(&mut t.stdout_type, &s.stdout_type);
+        complement_option(&mut t.stdout_file, &s.stdout_file);
+        complement_option(&mut t.stderr_type, &s.stderr_type);
+        complement_option(&mut t.stderr_file, &s.stderr_file);
+        complement_option(&mut t.program, &s.program);
+        complement_option(&mut t.args_template, &s.args_template);
+        complement_option(&mut t.args_switches, &s.args_switches);
+        complement_option(&mut t.input_list, &s.input_list);
+        complement_option(&mut t.input_dir, &s.input_dir);
+        complement_option(&mut t.input_recursive, &s.input_recursive);
+        complement_option(&mut t.output_dir, &s.output_dir);
+        complement_option(&mut t.output_recursive, &s.output_recursive);
+        complement_option(&mut t.output_overwrite, &s.output_overwrite);
+        complement_option(&mut t.output_extension, &s.output_extension);
+        complement_option(&mut t.output_prefix, &s.output_prefix);
+        complement_option(&mut t.output_suffix, &s.output_suffix);
+        complement_option(&mut t.cui_operation, &s.cui_operation);
+        complement_option(&mut t.cui_msg_level, &s.cui_msg_level);
+        complement_option(&mut t.cui_msg_interval, &s.cui_msg_interval);
     }
 
     fn from_toml_value(v: &Value) -> Self {
@@ -100,7 +101,7 @@ impl Config {
         }
     }
 
-    fn from_toml_str(toml_str: String) -> Self {
+    fn from_toml(toml_str: String) -> Self {
         let cfg: Value = toml_str.parse().unwrap();
         let mut order = Self::from_toml_value(cfg.get("order").unwrap());
         let mut presets = HashMap::new();
@@ -125,27 +126,34 @@ impl Config {
         parent = 'default'
         threads_count = 3
         repeat_count = 1
-        args_template = '{args_switches} {input_file} -o {output_file}'
-        input_recursive = true
-        output_recursive = true
-        output_overwrite = false
-        output_extension = 'webp'
-
-        [order]
-        parent = 'cwebp'
         stdout_type = 'file' # ignore | normal | file
         stdout_file = './target/cmdfactory_test/stdout.log.txt'
         stderr_type = 'file'
         stderr_file = './target/cmdfactory_test/stderr.log.txt'
         program = 'D:/Libraries/libwebp/libwebp_1.0.0/bin/cwebp.exe'
+        args_template = '{args_switches} {input_file} -o {output_file}'
         args_switches = '-m 6'
+        input_recursive = true
+        output_recursive = true
+        output_overwrite = false
+        output_extension = 'webp'
+
+        [presets.timeout]
+        parent = 'default'
+        stdout_type = 'ignore'
+        stderr_type = 'ignore'
+        program = 'timeout'
+        args_template = '-t 9'
+
+        [order]
+        parent = 'cwebp'
         input_dir = './target/cmdfactory_test/input_dir'
         output_dir = './target/cmdfactory_test/output_dir'
         output_prefix = 'out_'
         output_suffix = '_out'        
         "#
         .to_string();
-        Self::from_toml_str(toml_str)
+        Self::from_toml(toml_str)
     }
 
     fn fix(order: &mut Self, presets: HashMap<String, Self>) {
@@ -227,12 +235,12 @@ impl Config {
 
         file_path.set_extension("toml");
         if let Ok(toml_str) = fs::read_to_string(&file_path) {
-            return Ok(Config::from_toml_str(toml_str));
+            return Ok(Self::from_toml(toml_str));
         }
 
         // file_path.set_extension("json");
         // if let Ok(json_str) = fs::read_to_string(&file_path) {
-        //     return Config::from_json(json_str);
+        //     return Self::from_json(json_str);
         // }
 
         Err(Error {

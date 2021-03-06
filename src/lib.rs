@@ -1,18 +1,16 @@
-pub mod child;
+mod child_kit;
 mod config;
 pub mod cui;
 mod toml_seek;
-use child::Child;
 use config::Config;
-use io::Write;
 use std::convert::TryInto;
 use std::fmt;
 use std::fs;
 use std::fs::File;
 use std::io;
+use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::process;
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
@@ -43,7 +41,7 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-enum Stdio {
+enum StdioCfg {
     Normal,
     Ignore,
     ToFile(File),
@@ -51,12 +49,12 @@ enum Stdio {
 
 struct Status {
     commands: IntoIter<Command>,
-    childs: Vec<Option<Arc<Child>>>,
+    childs: Vec<Option<u32>>,
     actives_count: usize,
     error: Option<io::Error>,
-    stdout: Stdio,
-    stderr: Stdio,
-    wait_cvar: Arc<Condvar>,
+    stdout: StdioCfg,
+    stderr: StdioCfg,
+    cvar: Arc<Condvar>,
 }
 
 pub struct Order {
@@ -71,25 +69,29 @@ impl Order {
         self.status.lock().unwrap()
     }
 
-    fn stdpipe_set(command: &mut Command, status: &mut MutexGuard<Status>) {
+    fn output_set(command: &mut Command, status: &mut MutexGuard<Status>) {
         match status.stdout {
-            Stdio::Ignore => command.stdout(process::Stdio::null()),
-            Stdio::ToFile(_) => command.stdout(process::Stdio::piped()),
-            Stdio::Normal => command,
+            StdioCfg::Ignore => command.stdout(Stdio::null()),
+            StdioCfg::ToFile(_) => command.stdout(Stdio::piped()),
+            StdioCfg::Normal => command,
         };
         match status.stderr {
-            Stdio::Ignore => command.stderr(process::Stdio::null()),
-            Stdio::ToFile(_) => command.stderr(process::Stdio::piped()),
-            Stdio::Normal => command,
+            StdioCfg::Ignore => command.stderr(Stdio::null()),
+            StdioCfg::ToFile(_) => command.stderr(Stdio::piped()),
+            StdioCfg::Normal => command,
         };
     }
 
-    fn stdpipe_write(child: &Arc<Child>, mut status: MutexGuard<Status>) -> io::Result<()> {
-        if let Stdio::ToFile(file) = &mut status.stdout {
-            file.write_all(&mut child.take_stdout()?)?;
+    fn output_write(child: &mut Child, mut status: MutexGuard<Status>) -> io::Result<()> {
+        if let StdioCfg::ToFile(file) = &mut status.stdout {
+            let buf = &mut Vec::new();
+            child.stdout.take().unwrap().read_to_end(buf)?;
+            file.write_all(buf)?;
         }
-        if let Stdio::ToFile(file) = &mut status.stderr {
-            file.write_all(&mut child.take_stderr()?)?;
+        if let StdioCfg::ToFile(file) = &mut status.stderr {
+            let buf = &mut Vec::new();
+            child.stderr.take().unwrap().read_to_end(buf)?;
+            file.write_all(buf)?;
         }
         Ok(())
     }
@@ -99,31 +101,34 @@ impl Order {
         let status_mutex = Arc::clone(&self.status);
         thread::spawn(move || {
             let get_status = || status_mutex.lock().unwrap();
-            let exec = |mut command: Command| {
+            let exec = |mut command| {
                 let mut status = get_status();
-                Self::stdpipe_set(&mut command, &mut status);
-                let child = Arc::new(Child::spawn(&mut command)?);
-                status.childs[index] = Some(Arc::clone(&child));
+                Self::output_set(&mut command, &mut status);
+                let mut child = command.spawn()?;
+                status.childs[index] = Some(child.id());
                 drop(status);
                 child.wait()?;
-                Self::stdpipe_write(&child, get_status())?;
+                let mut status = get_status();
+                status.childs[index] = None; // MUST clear outdated pid before drop `child`
+                drop(status);
+                Self::output_write(&mut child, get_status())?;
                 Ok(())
             };
             while let Some(command) = {
                 let mut status = get_status();
                 status.commands.next()
             } {
-                let result = exec(command);
-                if result.is_err() && !skip_panic {
-                    let mut status = get_status();
-                    status.error = Some(result.unwrap_err());
-                    break;
+                if let Err(e) = exec(command) {
+                    if !skip_panic {
+                        get_status().error = Some(e);
+                        break;
+                    }
                 }
             }
             let mut status = get_status();
             status.childs[index] = None;
             status.actives_count -= 1;
-            status.wait_cvar.notify_one();
+            status.cvar.notify_one();
         });
     }
 
@@ -150,21 +155,19 @@ impl Order {
         (finished, total)
     }
 
-    pub fn wait(&self) {
+    pub fn wait(&self) -> io::Result<()> {
         let status = self.get_status();
-        let cvar = Arc::clone(&status.wait_cvar);
+        let cvar = Arc::clone(&status.cvar);
         let condition = |s: &mut Status| s.actives_count > 0 && s.error.is_none();
-        let _ = cvar.wait_while(status, condition).unwrap();
+        let _cvar_status = cvar.wait_while(status, condition).unwrap();
+        self.terminate()?;
+        Ok(())
     }
 
     /// Must be called at least and most once.
     pub fn wait_result(&self) -> io::Result<()> {
-        self.wait();
-        let mut status = self.get_status();
-        let error = status.error.take();
-        drop(status);
-        if let Some(e) = error {
-            self.terminate()?;
+        self.wait()?;
+        if let Some(e) = self.get_status().error.take() {
             return Err(e);
         }
         Ok(())
@@ -178,10 +181,10 @@ impl Order {
     // Should call `wait` afterwards.
     pub fn terminate(&self) -> io::Result<()> {
         self.cease();
-        let mut status = self.get_status();
-        for child_option in &mut status.childs {
-            if let Some(child) = child_option.take() {
-                child.kill()?;
+        let status = self.get_status();
+        for opt in &status.childs {
+            if let Some(pid) = *opt {
+                child_kit::kill(pid)?;
             }
         }
         Ok(())
@@ -190,16 +193,16 @@ impl Order {
     pub fn new(cfg: &Config) -> Result<Self, Error> {
         fn split_args(args: &str) -> Result<Vec<&str>, Error> {
             let mut vec = Vec::new();
-            let mut wrapped = false;
+            let mut inside = false;
             for item in args.split('"') {
-                match wrapped {
+                match inside {
                     true => vec.push(item),
                     false => vec.extend(item.split_whitespace()),
                 };
-                wrapped = !wrapped;
+                inside = !inside;
             }
-            wrapped = !wrapped;
-            match wrapped {
+            inside = !inside;
+            match inside {
                 true => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     inner: None,
@@ -308,11 +311,11 @@ impl Order {
         }
 
         if commands.is_empty() {
-            Err(Error {
+            return Err(Error {
                 kind: ErrorKind::ConfigIllegal,
                 inner: None,
                 message: Some("config generated commands's count is 0".to_string()),
-            })?;
+            });
         }
 
         let threads_count = cfg.threads_count.unwrap().try_into().unwrap();
@@ -320,8 +323,8 @@ impl Order {
         let stdpipe = |type_opt: &Option<String>, path_opt: &Option<String>| {
             let type_str = type_opt.as_ref().unwrap().as_str();
             match type_str {
-                "ignore" => Ok(Stdio::Ignore),
-                "normal" => Ok(Stdio::Normal),
+                "ignore" => Ok(StdioCfg::Ignore),
+                "normal" => Ok(StdioCfg::Normal),
                 "file" => {
                     let path = path_opt.as_ref().ok_or_else(|| Error {
                         kind: ErrorKind::ConfigIllegal,
@@ -334,7 +337,7 @@ impl Order {
                         inner: Some(Box::new(e)),
                         message: Some("std pipe file could not write".to_string()),
                     })?;
-                    Ok(Stdio::ToFile(file))
+                    Ok(StdioCfg::ToFile(file))
                 }
                 _ => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
@@ -350,7 +353,7 @@ impl Order {
             error: None,
             stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
             stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
-            wait_cvar: Arc::new(Condvar::new()),
+            cvar: Arc::new(Condvar::new()),
         };
         Ok(Self {
             threads_count,
@@ -363,8 +366,8 @@ impl Order {
 
 pub fn run() -> Result<(), Error> {
     // Order is one-off, Config is not one-off, change Config from gui and then new a Order.
-    let cfg = Config::_from_toml_test();
-    // let cfg = Config::new()?;
+    // let cfg = Config::_from_toml_test();
+    let cfg = Config::new()?;
 
     let order = Arc::new(Order::new(&cfg)?);
     order.start().map_err(|e| Error {
@@ -393,6 +396,7 @@ pub fn run() -> Result<(), Error> {
         thread::spawn(move || loop {
             let mut input = String::new();
             io::stdin().read_line(&mut input).unwrap();
+            println!();
             match input.trim() {
                 "t" => {
                     cui::log::info("user terminate the cmdfactory");

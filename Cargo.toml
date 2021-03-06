@@ -1,8 +1,8 @@
 [package]
 name = "cmdfactory"
-version = "0.3.2"
+version = "0.4.0"
 authors = ["kkocdko <kkocdko@163.com>"]
-description = "Automatically generate and execute commands from templates."
+description = "Automatically generate and execute commands from template."
 edition = "2018"
 repository = "https://github.com/kkocdko/cmdfactory"
 license = "Unlicense"
@@ -10,12 +10,16 @@ license = "Unlicense"
 [profile.release]
 panic = "abort"
 lto = "fat"
-# codegen-units = 1
+codegen-units = 1
+# opt-level = "z"
 
 [dependencies]
 toml = "0.5.8"
 # anyhow = "1.0.38"
 
+[target."cfg(not(windows))".dependencies.libc]
+version = "0.2.42"
+
 [target."cfg(windows)".dependencies.winapi]
 version = "0.3.5"
-features = ["synchapi", "winbase", "winerror", "winnt"]
+features = ["processthreadsapi", "ntdef", "winnt"]
