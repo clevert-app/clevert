@@ -159,7 +159,8 @@ impl Order {
         let status = self.get_status();
         let cvar = Arc::clone(&status.cvar);
         let condition = |s: &mut Status| s.actives_count > 0 && s.error.is_none();
-        let _cvar_status = cvar.wait_while(status, condition).unwrap();
+        let cvar_status = cvar.wait_while(status, condition).unwrap();
+        drop(cvar_status);
         self.terminate()?;
         Ok(())
     }
@@ -191,26 +192,6 @@ impl Order {
     }
 
     pub fn new(cfg: &Config) -> Result<Self, Error> {
-        fn split_args(args: &str) -> Result<Vec<&str>, Error> {
-            let mut vec = Vec::new();
-            let mut inside = false;
-            for item in args.split('"') {
-                match inside {
-                    true => vec.push(item),
-                    false => vec.extend(item.split_whitespace()),
-                };
-                inside = !inside;
-            }
-            inside = !inside;
-            match inside {
-                true => Err(Error {
-                    kind: ErrorKind::ConfigIllegal,
-                    inner: None,
-                    message: Some("args' quotation mask is not closed".to_string()),
-                }),
-                false => Ok(vec),
-            }
-        }
         let read_dir = |dir| {
             let mut vec = Vec::new();
             let recursive = cfg.input_recursive.unwrap();
@@ -246,14 +227,11 @@ impl Order {
             let input_dir = PathBuf::from(input_dir);
             input_files.append(&mut read_dir(input_dir)?);
         }
-
-        let mut commands = Vec::new();
-        let args_template = split_args(cfg.args_template.as_ref().unwrap())?;
-        let args_switches = split_args(cfg.args_template.as_ref().unwrap())?;
-
-        for input_file in input_files {
-            let file_name = input_file.file_stem().unwrap();
-            let mut file_name = file_name.to_str().unwrap().to_string();
+        let current_dir = std::env::current_dir().unwrap();
+        let mut pairs = Vec::new();
+        for mut input_file in input_files {
+            let file_name = input_file.file_stem().unwrap().to_str().unwrap();
+            let mut file_name = file_name.to_string();
             if let Some(prefix) = &cfg.output_prefix {
                 file_name.insert_str(0, &prefix);
             }
@@ -261,52 +239,71 @@ impl Order {
                 file_name.push_str(&suffix);
             }
             let mut output_file = match &cfg.output_dir {
-                Some(path) => PathBuf::from(path),
+                Some(p) => PathBuf::from(p),
                 None => input_file.parent().unwrap().into(),
             };
             if cfg.output_recursive.unwrap() && cfg.input_dir.is_some() {
                 let input_dir = cfg.input_dir.as_ref().unwrap();
-                let path = input_file.strip_prefix(input_dir).unwrap();
-                output_file.push(path);
+                let relative_path = input_file.strip_prefix(input_dir).unwrap();
+                output_file.push(relative_path);
                 output_file.set_file_name(file_name);
-                let dir = output_file.parent().unwrap();
-                fs::create_dir_all(dir).unwrap();
+                let output_dir = output_file.parent().unwrap();
+                fs::create_dir_all(output_dir).unwrap();
             } else {
                 output_file.push(file_name);
             }
             if cfg.output_overwrite.unwrap() {
-                let _ = fs::remove_file(&output_file);
+                let _result = fs::remove_file(&output_file);
             }
             if let Some(extension) = &cfg.output_extension {
                 output_file.set_extension(extension);
             }
+            if !input_file.is_absolute() {
+                input_file = current_dir.join(&input_file);
+            }
+            if !output_file.is_absolute() {
+                output_file = current_dir.join(&output_file);
+            }
+            pairs.push((input_file, output_file));
+        }
 
-            for index in 0..cfg.repeat_count.unwrap() {
-                let mut command = Command::new(cfg.program.as_ref().unwrap());
-                args_template.iter().for_each(|item| match *item {
-                    "{args_switches}" => {
-                        command.args(&args_switches);
-                    }
-                    "{input_file}" => {
-                        command.arg(input_file.to_str().unwrap());
-                    }
-                    "{output_file}" => {
-                        command.arg(output_file.to_str().unwrap());
-                    }
-                    "{output_dir}" => {
-                        command.arg(output_file.parent().unwrap().to_str().unwrap());
-                    }
-                    "{repeat_index}" => {
-                        command.arg(index.to_string());
-                    }
-                    "{repeat_position}" => {
-                        command.arg((index + 1).to_string());
-                    }
-                    _ => {
-                        command.arg(item);
-                    }
+        fn split_args(args: &str) -> Result<Vec<&str>, Error> {
+            let parts = args.split('"');
+            if parts.size_hint().0 % 2 == 1 {
+                return Err(Error {
+                    kind: ErrorKind::ConfigIllegal,
+                    inner: None,
+                    message: Some("args' quotation mask is not closed".to_string()),
                 });
-                commands.push(command);
+            }
+            let mut vec = Vec::new();
+            for (index, part) in parts.enumerate() {
+                match index % 2 {
+                    1 => vec.push(part),
+                    _ => vec.extend(part.split_whitespace()),
+                };
+            }
+            Ok(vec)
+        }
+        let args_template = split_args(cfg.args_template.as_ref().unwrap())?;
+        let args_switches = split_args(cfg.args_switches.as_ref().unwrap())?;
+
+        let mut commands = Vec::new();
+        for (input_file, output_file) in pairs {
+            for repeat_index in 0..cfg.repeat_count.unwrap() {
+                let mut c = Command::new(cfg.program.as_ref().unwrap());
+                for enrty in &args_template {
+                    match *enrty {
+                        "{args_switches}" => c.args(&args_switches),
+                        "{input_file}" => c.arg(&input_file),
+                        "{output_file}" => c.arg(&output_file),
+                        "{output_dir}" => c.arg(output_file.parent().unwrap()),
+                        "{repeat_index}" => c.arg(repeat_index.to_string()),
+                        "{repeat_position}" => c.arg((repeat_index + 1).to_string()),
+                        _ => c.arg(enrty),
+                    };
+                }
+                commands.push(c);
             }
         }
 
@@ -318,8 +315,6 @@ impl Order {
             });
         }
 
-        let threads_count = cfg.threads_count.unwrap().try_into().unwrap();
-        let commands_count = commands.len();
         let stdpipe = |type_opt: &Option<String>, path_opt: &Option<String>| {
             let type_str = type_opt.as_ref().unwrap().as_str();
             match type_str {
@@ -346,6 +341,8 @@ impl Order {
                 }),
             }
         };
+        let threads_count = cfg.threads_count.unwrap() as usize;
+        let commands_count = commands.len();
         let status = Status {
             commands: commands.into_iter(),
             childs: (0..threads_count).map(|_| None).collect(),
@@ -365,7 +362,7 @@ impl Order {
 }
 
 pub fn run() -> Result<(), Error> {
-    // Order is one-off, Config is not one-off, change Config from gui and then new a Order.
+    // Order is one-off, Config is not one-off, change config on GUI and then new a Order.
     // let cfg = Config::_from_toml_test();
     let cfg = Config::new()?;
 

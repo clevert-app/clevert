@@ -145,8 +145,15 @@ impl Config {
         program = 'timeout'
         args_template = '-t 9'
 
+        [presets.echo]
+        parent = 'default'
+        stdout_type = 'normal'
+        stderr_type = 'normal'
+        program = 'cmd'
+        args_template = '/c echo {input_file}'
+
         [order]
-        parent = 'cwebp'
+        parent = 'echo'
         input_dir = './target/cmdfactory_test/input_dir'
         output_dir = './target/cmdfactory_test/output_dir'
         output_prefix = 'out_'
@@ -181,8 +188,8 @@ impl Config {
             stderr_type: Some("ignore".to_string()),
             stderr_file: None,
             program: None,
-            args_template: None,
-            args_switches: None,
+            args_template: Some(String::new()),
+            args_switches: Some(String::new()),
             input_list: None,
             input_dir: None,
             input_recursive: Some(false),
