@@ -3,7 +3,6 @@ mod config;
 pub mod cui;
 mod toml_seek;
 use config::Config;
-use std::convert::TryInto;
 use std::fmt;
 use std::fs;
 use std::fs::File;
@@ -258,10 +257,10 @@ impl Order {
             if let Some(extension) = &cfg.output_extension {
                 output_file.set_extension(extension);
             }
-            if !input_file.is_absolute() {
+            if cfg.input_absolute.unwrap() && !input_file.is_absolute() {
                 input_file = current_dir.join(&input_file);
             }
-            if !output_file.is_absolute() {
+            if cfg.output_absolute.unwrap() && !output_file.is_absolute() {
                 output_file = current_dir.join(&output_file);
             }
             pairs.push((input_file, output_file));
@@ -290,7 +289,7 @@ impl Order {
 
         let mut commands = Vec::new();
         for (input_file, output_file) in pairs {
-            for repeat_index in 0..cfg.repeat_count.unwrap() {
+            for index in 0..cfg.repeat_count.unwrap() {
                 let mut c = Command::new(cfg.program.as_ref().unwrap());
                 for enrty in &args_template {
                     match *enrty {
@@ -298,8 +297,8 @@ impl Order {
                         "{input_file}" => c.arg(&input_file),
                         "{output_file}" => c.arg(&output_file),
                         "{output_dir}" => c.arg(output_file.parent().unwrap()),
-                        "{repeat_index}" => c.arg(repeat_index.to_string()),
-                        "{repeat_position}" => c.arg((repeat_index + 1).to_string()),
+                        "{repeat_index}" => c.arg(index.to_string()),
+                        "{repeat_position}" => c.arg((index + 1).to_string()),
                         _ => c.arg(enrty),
                     };
                 }
@@ -311,7 +310,7 @@ impl Order {
             return Err(Error {
                 kind: ErrorKind::ConfigIllegal,
                 inner: None,
-                message: Some("config generated commands's count is 0".to_string()),
+                message: Some("no commands generated with order".to_string()),
             });
         }
 
@@ -324,20 +323,20 @@ impl Order {
                     let path = path_opt.as_ref().ok_or_else(|| Error {
                         kind: ErrorKind::ConfigIllegal,
                         inner: None,
-                        message: Some("std pipe file path is unknown".to_string()),
+                        message: Some("stdio file unknown".to_string()),
                     })?;
                     let mut opt = fs::OpenOptions::new();
                     let file = opt.write(true).open(path).map_err(|e| Error {
                         kind: ErrorKind::ConfigIllegal,
                         inner: Some(Box::new(e)),
-                        message: Some("std pipe file could not write".to_string()),
+                        message: Some("stdio file can't write".to_string()),
                     })?;
                     Ok(StdioCfg::ToFile(file))
                 }
                 _ => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     inner: None,
-                    message: Some("std pipe type is unknown".to_string()),
+                    message: Some("stdio type unknown".to_string()),
                 }),
             }
         };
@@ -362,9 +361,9 @@ impl Order {
 }
 
 pub fn run() -> Result<(), Error> {
-    // Order is one-off, Config is not one-off, change config on GUI and then new a Order.
-    // let cfg = Config::_from_toml_test();
+    // Order is one-off, Config is not one-off, change cfg on GUI and then new an Order.
     let cfg = Config::new()?;
+    // let cfg = Config::_from_toml_test();
 
     let order = Arc::new(Order::new(&cfg)?);
     order.start().map_err(|e| Error {
@@ -376,7 +375,7 @@ pub fn run() -> Result<(), Error> {
     // Progress message
     if cfg.cui_msg_level.unwrap() >= 2 {
         let order = Arc::clone(&order);
-        let interval = cfg.cui_msg_interval.unwrap().try_into().unwrap();
+        let interval = cfg.cui_msg_interval.unwrap() as u64;
         thread::spawn(move || loop {
             let (finished, total) = order.progress();
             cui::log::info(format!("progress: {} / {}", finished, total));

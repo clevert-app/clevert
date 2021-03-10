@@ -22,8 +22,10 @@ pub struct Config {
     pub args_switches: Option<String>,
     pub input_list: Option<Vec<String>>,
     pub input_dir: Option<String>,
+    pub input_absolute: Option<bool>,
     pub input_recursive: Option<bool>,
     pub output_dir: Option<String>,
+    pub output_absolute: Option<bool>,
     pub output_recursive: Option<bool>,
     pub output_overwrite: Option<bool>,
     pub output_extension: Option<String>,
@@ -60,8 +62,10 @@ impl Config {
         complement_option(&mut t.args_switches, &s.args_switches);
         complement_option(&mut t.input_list, &s.input_list);
         complement_option(&mut t.input_dir, &s.input_dir);
+        complement_option(&mut t.input_absolute, &s.input_absolute);
         complement_option(&mut t.input_recursive, &s.input_recursive);
         complement_option(&mut t.output_dir, &s.output_dir);
+        complement_option(&mut t.output_absolute, &s.output_absolute);
         complement_option(&mut t.output_recursive, &s.output_recursive);
         complement_option(&mut t.output_overwrite, &s.output_overwrite);
         complement_option(&mut t.output_extension, &s.output_extension);
@@ -88,8 +92,10 @@ impl Config {
             args_switches: v.seek_str("args_switches"),
             input_list: v.seek_vec_str("input_list"),
             input_dir: v.seek_str("input_dir"),
+            input_absolute: v.seek_bool("input_absolute"),
             input_recursive: v.seek_bool("input_recursive"),
             output_dir: v.seek_str("output_dir"),
+            output_absolute: v.seek_bool("output_absolute"),
             output_recursive: v.seek_bool("output_recursive"),
             output_overwrite: v.seek_bool("output_overwrite"),
             output_extension: v.seek_str("output_extension"),
@@ -119,13 +125,12 @@ impl Config {
         cui_operation = true
         cui_msg_level = 3 # TODO # 3:verbose | 2:normal | 1:concise | 0:none
         cui_msg_interval = 1000
+        threads_count = 2
+        repeat_count = 1
         skip_panic = false
         via_terminal = false # TODO ?
 
         [presets.cwebp]
-        parent = 'default'
-        threads_count = 3
-        repeat_count = 1
         stdout_type = 'file' # ignore | normal | file
         stdout_file = './target/cmdfactory_test/stdout.log.txt'
         stderr_type = 'file'
@@ -135,25 +140,23 @@ impl Config {
         args_switches = '-m 6'
         input_recursive = true
         output_recursive = true
-        output_overwrite = false
+        output_overwrite = true
         output_extension = 'webp'
 
         [presets.timeout]
-        parent = 'default'
-        stdout_type = 'ignore'
-        stderr_type = 'ignore'
         program = 'timeout'
-        args_template = '-t 9'
+        args_template = '-t 3'
 
         [presets.echo]
-        parent = 'default'
         stdout_type = 'normal'
         stderr_type = 'normal'
         program = 'cmd'
-        args_template = '/c echo {input_file}'
+        args_template = '/c echo [ {input_file} ] [ {output_file} ]'
+        input_absolute = true
+        output_absolute = true
 
         [order]
-        parent = 'echo'
+        parent = 'cwebp'
         input_dir = './target/cmdfactory_test/input_dir'
         output_dir = './target/cmdfactory_test/output_dir'
         output_prefix = 'out_'
@@ -166,7 +169,7 @@ impl Config {
     fn fix(order: &mut Self, presets: HashMap<String, Self>) {
         fn inherit_fill(order: &mut Config, presets: &HashMap<String, Config>, deep: i32) {
             if deep > 64 {
-                return;
+                return; // Add error msg here?
             }
             if let Some(k) = &order.parent {
                 if let Some(parent) = presets.get(k) {
@@ -176,6 +179,8 @@ impl Config {
                 }
             }
         }
+        inherit_fill(order, &presets, 0);
+        order.parent.replace("default".to_string());
         inherit_fill(order, &presets, 0);
         order.complement(&Self {
             parent: None,
@@ -192,9 +197,11 @@ impl Config {
             args_switches: Some(String::new()),
             input_list: None,
             input_dir: None,
+            input_absolute: Some(false),
             input_recursive: Some(false),
             output_dir: None,
-            output_recursive: Some(true),
+            output_absolute: Some(false),
+            output_recursive: Some(true), // Auto create output dir also
             output_overwrite: Some(false),
             output_extension: None,
             output_prefix: None,
@@ -203,38 +210,10 @@ impl Config {
             cui_msg_level: Some(2),
             cui_msg_interval: Some(1000),
         });
-        let mut input_list = Vec::new();
-        for arg in env::args().skip(1) {
-            input_list.push(arg);
-        }
+        let input_list: Vec<String> = env::args().skip(1).collect();
         if !input_list.is_empty() {
             order.input_list = Some(input_list);
         }
-        // let mut output_file_path = String::new();
-        // let mut is_output_item = false;
-        // if is_output_item {
-        //     if output_file_path.is_empty() {
-        //         output_file_path = arg;
-        //     } else {
-        //         return Err(Error {
-        //             kind: ErrorKind::ConfigIllegal,
-        //             inner: None,
-        //             message: Some(String::from("too many output path in process arguments")),
-        //         });
-        //     }
-        // } else if arg.starts_with('-') {
-        //     if arg == "-o" || arg == "--output" {
-        //         is_output_item = true;
-        //     } else {
-        //         return Err(Error {
-        //             kind: ErrorKind::ConfigIllegal,
-        //             inner: None,
-        //             message: Some(format!("unknown switch `{}` in process arguments", arg)),
-        //         });
-        //     }
-        // } else {
-        //     input_list.push(arg);
-        // }
     }
 
     pub fn new() -> Result<Self, Error> {

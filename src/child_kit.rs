@@ -21,12 +21,11 @@ mod sys {
 #[cfg(windows)]
 mod sys {
     use std::io;
-    use winapi::shared::ntdef::FALSE;
     use winapi::um::processthreadsapi::{OpenProcess, TerminateProcess};
     use winapi::um::winnt::{HANDLE, PROCESS_ALL_ACCESS};
 
     fn get_handle(pid: u32) -> HANDLE {
-        unsafe { OpenProcess(PROCESS_ALL_ACCESS, FALSE as i32, pid) }
+        unsafe { OpenProcess(PROCESS_ALL_ACCESS, false as i32, pid) }
     }
 
     pub fn kill(pid: u32) -> io::Result<()> {
@@ -38,7 +37,7 @@ mod sys {
     }
 }
 
-/// Warning: This may kill ended pid?
+/// Warning: This may kill invalid pid?
 pub fn kill(pid: u32) -> io::Result<()> {
     sys::kill(pid)
 }
