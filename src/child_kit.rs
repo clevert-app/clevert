@@ -37,7 +37,7 @@ mod sys {
     }
 }
 
-/// Warning: This may kill invalid pid?
+// Dangerous: This may kill invalid pid!
 pub fn kill(pid: u32) -> io::Result<()> {
     sys::kill(pid)
 }

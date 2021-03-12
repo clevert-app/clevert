@@ -81,7 +81,7 @@ impl Order {
         };
     }
 
-    fn output_write(child: &mut Child, mut status: MutexGuard<Status>) -> io::Result<()> {
+    fn output_write(child: &mut Child, status: &mut MutexGuard<Status>) -> io::Result<()> {
         if let StdioCfg::ToFile(file) = &mut status.stdout {
             let buf = &mut Vec::new();
             child.stdout.take().unwrap().read_to_end(buf)?;
@@ -103,29 +103,27 @@ impl Order {
             let exec = |mut command| {
                 let mut status = get_status();
                 Self::output_set(&mut command, &mut status);
-                let mut child = command.spawn()?;
+                let child = &mut command.spawn()?;
                 status.childs[index] = Some(child.id());
                 drop(status);
-                child.wait()?;
+                let wait_result = child.wait();
                 let mut status = get_status();
-                status.childs[index] = None; // MUST clear outdated pid before drop `child`
-                drop(status);
-                Self::output_write(&mut child, get_status())?;
-                Ok(())
+                status.childs[index] = None; // MUST clear pid immediately
+                Self::output_write(child, &mut status)?;
+                wait_result
             };
             while let Some(command) = {
                 let mut status = get_status();
                 status.commands.next()
             } {
-                if let Err(e) = exec(command) {
-                    if !skip_panic {
-                        get_status().error = Some(e);
-                        break;
-                    }
+                let result = exec(command);
+                if !skip_panic && result.is_err() {
+                    get_status().error = result.err();
+                    break;
                 }
             }
             let mut status = get_status();
-            status.childs[index] = None;
+            status.childs[index] = None; // Maybe useless?
             status.actives_count -= 1;
             status.cvar.notify_one();
         });
@@ -175,7 +173,7 @@ impl Order {
 
     // Should call `wait` afterwards.
     pub fn cease(&self) {
-        self.get_status().commands.nth(std::usize::MAX);
+        self.get_status().commands.nth(usize::MAX);
     }
 
     // Should call `wait` afterwards.
@@ -291,15 +289,15 @@ impl Order {
         for (input_file, output_file) in pairs {
             for index in 0..cfg.repeat_count.unwrap() {
                 let mut c = Command::new(cfg.program.as_ref().unwrap());
-                for enrty in &args_template {
-                    match *enrty {
+                for part in &args_template {
+                    match *part {
                         "{args_switches}" => c.args(&args_switches),
                         "{input_file}" => c.arg(&input_file),
                         "{output_file}" => c.arg(&output_file),
                         "{output_dir}" => c.arg(output_file.parent().unwrap()),
                         "{repeat_index}" => c.arg(index.to_string()),
                         "{repeat_position}" => c.arg((index + 1).to_string()),
-                        _ => c.arg(enrty),
+                        _ => c.arg(part),
                     };
                 }
                 commands.push(c);

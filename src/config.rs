@@ -11,7 +11,6 @@ pub struct Config {
     pub parent: Option<String>,
     pub threads_count: Option<i32>,
     pub skip_panic: Option<bool>,
-    pub via_terminal: Option<bool>,
     pub repeat_count: Option<i32>,
     pub stdout_type: Option<String>,
     pub stdout_file: Option<String>,
@@ -39,41 +38,39 @@ pub struct Config {
 
 impl Config {
     fn complement(&mut self, default: &Self) {
-        fn complement_option<T: Clone>(target: &mut Option<T>, source: &Option<T>) {
+        // TODO: Use macro instead?
+        fn c<T: Clone>(target: &mut Option<T>, source: &Option<T>) {
             if let Some(v) = source {
                 target.get_or_insert(v.clone());
             }
         }
-
-        // TODO: Use macro instead?
         let t = self;
         let s = default;
-        complement_option(&mut t.parent, &s.parent);
-        complement_option(&mut t.threads_count, &s.threads_count);
-        complement_option(&mut t.skip_panic, &s.skip_panic);
-        complement_option(&mut t.via_terminal, &s.via_terminal);
-        complement_option(&mut t.repeat_count, &s.repeat_count);
-        complement_option(&mut t.stdout_type, &s.stdout_type);
-        complement_option(&mut t.stdout_file, &s.stdout_file);
-        complement_option(&mut t.stderr_type, &s.stderr_type);
-        complement_option(&mut t.stderr_file, &s.stderr_file);
-        complement_option(&mut t.program, &s.program);
-        complement_option(&mut t.args_template, &s.args_template);
-        complement_option(&mut t.args_switches, &s.args_switches);
-        complement_option(&mut t.input_list, &s.input_list);
-        complement_option(&mut t.input_dir, &s.input_dir);
-        complement_option(&mut t.input_absolute, &s.input_absolute);
-        complement_option(&mut t.input_recursive, &s.input_recursive);
-        complement_option(&mut t.output_dir, &s.output_dir);
-        complement_option(&mut t.output_absolute, &s.output_absolute);
-        complement_option(&mut t.output_recursive, &s.output_recursive);
-        complement_option(&mut t.output_overwrite, &s.output_overwrite);
-        complement_option(&mut t.output_extension, &s.output_extension);
-        complement_option(&mut t.output_prefix, &s.output_prefix);
-        complement_option(&mut t.output_suffix, &s.output_suffix);
-        complement_option(&mut t.cui_operation, &s.cui_operation);
-        complement_option(&mut t.cui_msg_level, &s.cui_msg_level);
-        complement_option(&mut t.cui_msg_interval, &s.cui_msg_interval);
+        c(&mut t.parent, &s.parent);
+        c(&mut t.threads_count, &s.threads_count);
+        c(&mut t.skip_panic, &s.skip_panic);
+        c(&mut t.repeat_count, &s.repeat_count);
+        c(&mut t.stdout_type, &s.stdout_type);
+        c(&mut t.stdout_file, &s.stdout_file);
+        c(&mut t.stderr_type, &s.stderr_type);
+        c(&mut t.stderr_file, &s.stderr_file);
+        c(&mut t.program, &s.program);
+        c(&mut t.args_template, &s.args_template);
+        c(&mut t.args_switches, &s.args_switches);
+        c(&mut t.input_list, &s.input_list);
+        c(&mut t.input_dir, &s.input_dir);
+        c(&mut t.input_absolute, &s.input_absolute);
+        c(&mut t.input_recursive, &s.input_recursive);
+        c(&mut t.output_dir, &s.output_dir);
+        c(&mut t.output_absolute, &s.output_absolute);
+        c(&mut t.output_recursive, &s.output_recursive);
+        c(&mut t.output_overwrite, &s.output_overwrite);
+        c(&mut t.output_extension, &s.output_extension);
+        c(&mut t.output_prefix, &s.output_prefix);
+        c(&mut t.output_suffix, &s.output_suffix);
+        c(&mut t.cui_operation, &s.cui_operation);
+        c(&mut t.cui_msg_level, &s.cui_msg_level);
+        c(&mut t.cui_msg_interval, &s.cui_msg_interval);
     }
 
     fn from_toml_value(v: &Value) -> Self {
@@ -81,7 +78,6 @@ impl Config {
             parent: v.seek_str("parent"),
             threads_count: v.seek_i32("threads_count"),
             skip_panic: v.seek_bool("skip_panic"),
-            via_terminal: v.seek_bool("via_terminal"),
             repeat_count: v.seek_i32("repeat_count"),
             stdout_type: v.seek_str("stdout_type"),
             stdout_file: v.seek_str("stdout_file"),
@@ -128,10 +124,9 @@ impl Config {
         threads_count = 2
         repeat_count = 1
         skip_panic = false
-        via_terminal = false # TODO ?
 
         [presets.cwebp]
-        stdout_type = 'file' # ignore | normal | file
+        stdout_type = 'file' # normal | ignore | file
         stdout_file = './target/cmdfactory_test/stdout.log.txt'
         stderr_type = 'file'
         stderr_file = './target/cmdfactory_test/stderr.log.txt'
@@ -186,7 +181,6 @@ impl Config {
             parent: None,
             threads_count: Some(1),
             skip_panic: Some(false),
-            via_terminal: Some(false),
             repeat_count: Some(1),
             stdout_type: Some("ignore".to_string()),
             stdout_file: None,
