@@ -225,8 +225,8 @@ impl Config {
 
         Err(Error {
             kind: ErrorKind::ConfigFileCanNotRead,
-            inner: None,
-            message: Some("the config file was not found".to_string()),
+            message: "the config file was not found".to_string(),
+            ..Error::default()
         })
     }
 }

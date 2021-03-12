@@ -28,8 +28,18 @@ enum ErrorKind {
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
-    inner: Option<Box<dyn std::error::Error>>,
-    message: Option<String>,
+    inner: Box<dyn fmt::Debug>,
+    message: String,
+}
+
+impl Error {
+    pub fn default() -> Self {
+        Self {
+            kind: ErrorKind::UnknownError,
+            inner: Box::new(Option::<()>::None),
+            message: String::new(),
+        }
+    }
 }
 
 impl fmt::Display for Error {
@@ -205,8 +215,8 @@ impl Order {
             }
             read(dir, &mut vec, recursive).map_err(|e| Error {
                 kind: ErrorKind::ConfigIllegal,
-                inner: Some(Box::new(e)),
-                message: None,
+                inner: Box::new(e),
+                ..Error::default()
             })?;
             Ok(vec)
         };
@@ -269,8 +279,8 @@ impl Order {
             if parts.size_hint().0 % 2 == 1 {
                 return Err(Error {
                     kind: ErrorKind::ConfigIllegal,
-                    inner: None,
-                    message: Some("args' quotation mask is not closed".to_string()),
+                    message: "args' quotation mask is not closed".to_string(),
+                    ..Error::default()
                 });
             }
             let mut vec = Vec::new();
@@ -307,8 +317,8 @@ impl Order {
         if commands.is_empty() {
             return Err(Error {
                 kind: ErrorKind::ConfigIllegal,
-                inner: None,
-                message: Some("no commands generated with order".to_string()),
+                message: "no commands generated with order".to_string(),
+                ..Error::default()
             });
         }
 
@@ -320,21 +330,21 @@ impl Order {
                 "file" => {
                     let path = path_opt.as_ref().ok_or_else(|| Error {
                         kind: ErrorKind::ConfigIllegal,
-                        inner: None,
-                        message: Some("stdio file unknown".to_string()),
+                        message: "stdio file unknown".to_string(),
+                        ..Error::default()
                     })?;
                     let mut opt = fs::OpenOptions::new();
                     let file = opt.write(true).open(path).map_err(|e| Error {
                         kind: ErrorKind::ConfigIllegal,
-                        inner: Some(Box::new(e)),
-                        message: Some("stdio file can't write".to_string()),
+                        inner: Box::new(e),
+                        message: "stdio file can't write".to_string(),
                     })?;
                     Ok(StdioCfg::ToFile(file))
                 }
                 _ => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
-                    inner: None,
-                    message: Some("stdio type unknown".to_string()),
+                    message: "stdio type unknown".to_string(),
+                    ..Error::default()
                 }),
             }
         };
@@ -365,9 +375,8 @@ pub fn run() -> Result<(), Error> {
 
     let order = Arc::new(Order::new(&cfg)?);
     order.start().map_err(|e| Error {
-        kind: ErrorKind::UnknownError,
-        inner: Some(Box::new(e)),
-        message: None,
+        inner: Box::new(e),
+        ..Error::default()
     })?;
 
     // Progress message
@@ -413,8 +422,8 @@ pub fn run() -> Result<(), Error> {
 
     order.wait_result().map_err(|e| Error {
         kind: ErrorKind::ExecutePanic,
-        inner: Some(Box::new(e)),
-        message: None,
+        inner: Box::new(e),
+        ..Error::default()
     })?;
 
     Ok(())
