@@ -4,7 +4,6 @@ use crate::ErrorKind;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use toml::Value;
 
 pub struct Config {
     // Common
@@ -73,7 +72,7 @@ impl Config {
         c(&mut t.cui_msg_interval, &s.cui_msg_interval);
     }
 
-    fn from_toml_value(v: &Value) -> Self {
+    fn from_toml_value(v: &toml::Value) -> Self {
         Self {
             parent: v.seek_str("parent"),
             threads_count: v.seek_i32("threads_count"),
@@ -104,14 +103,14 @@ impl Config {
     }
 
     fn from_toml(toml_str: String) -> Self {
-        let cfg: Value = toml_str.parse().unwrap();
+        let cfg: toml::Value = toml_str.parse().unwrap();
         let mut order = Self::from_toml_value(cfg.get("order").unwrap());
         let mut presets = HashMap::new();
         for (k, v) in cfg.get("presets").unwrap().as_table().unwrap() {
             let preset = Self::from_toml_value(v);
             presets.insert(k.clone(), preset);
         }
-        Self::fix(&mut order, presets);
+        Self::fit(&mut order, presets);
         order
     }
 
@@ -161,7 +160,7 @@ impl Config {
         Self::from_toml(toml_str)
     }
 
-    fn fix(order: &mut Self, presets: HashMap<String, Self>) {
+    fn fit(order: &mut Self, presets: HashMap<String, Self>) {
         fn inherit_fill(order: &mut Config, presets: &HashMap<String, Config>, deep: i32) {
             if deep > 64 {
                 return; // Add error msg here?

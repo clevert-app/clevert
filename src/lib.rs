@@ -1,8 +1,8 @@
 mod child_kit;
 mod config;
-pub mod cui;
+mod log;
 mod toml_seek;
-use config::Config;
+pub use config::Config;
 use std::fmt;
 use std::fs;
 use std::fs::File;
@@ -13,15 +13,14 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
+use std::time::SystemTime;
 use std::vec::IntoIter;
 
 #[derive(Debug)]
 enum ErrorKind {
-    // ConfigTomlIllegal,
     ConfigIllegal,
     ConfigFileCanNotRead,
     UnknownError,
-    // CanNotWriteLogFile,
     ExecutePanic,
 }
 
@@ -113,14 +112,15 @@ impl Order {
             let exec = |mut command| {
                 let mut status = get_status();
                 Self::output_set(&mut command, &mut status);
-                let child = &mut command.spawn()?;
+                let mut child = command.spawn()?;
                 status.childs[index] = Some(child.id());
                 drop(status);
                 let wait_result = child.wait();
                 let mut status = get_status();
                 status.childs[index] = None; // MUST clear pid immediately
-                Self::output_write(child, &mut status)?;
-                wait_result
+                Self::output_write(&mut child, &mut status)?;
+                wait_result?;
+                Ok(())
             };
             while let Some(command) = {
                 let mut status = get_status();
@@ -139,14 +139,10 @@ impl Order {
         });
     }
 
-    pub fn start(&self) -> io::Result<()> {
-        let mut status = self.get_status();
-        status.childs.resize_with(self.threads_count, || None);
-        status.actives_count = self.threads_count;
+    pub fn start(&self) {
         for index in 0..self.threads_count {
             self.spawn(index);
         }
-        Ok(())
     }
 
     /// Return the progress of order as `(finished, total)`.
@@ -154,11 +150,8 @@ impl Order {
         let status = self.get_status();
         let total = self.commands_count;
         let idle = status.commands.len();
-        let mut finished = total - idle;
         let active = status.actives_count;
-        if finished >= active {
-            finished -= active;
-        }
+        let finished = (total - idle).saturating_sub(active);
         (finished, total)
     }
 
@@ -166,8 +159,7 @@ impl Order {
         let status = self.get_status();
         let cvar = Arc::clone(&status.cvar);
         let condition = |s: &mut Status| s.actives_count > 0 && s.error.is_none();
-        let cvar_status = cvar.wait_while(status, condition).unwrap();
-        drop(cvar_status);
+        drop(cvar.wait_while(status, condition).unwrap());
         self.terminate()?;
         Ok(())
     }
@@ -353,7 +345,7 @@ impl Order {
         let status = Status {
             commands: commands.into_iter(),
             childs: (0..threads_count).map(|_| None).collect(),
-            actives_count: 0,
+            actives_count: threads_count,
             error: None,
             stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
             stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
@@ -368,16 +360,13 @@ impl Order {
     }
 }
 
-pub fn run() -> Result<(), Error> {
+fn cui_run() -> Result<(), Error> {
     // Order is one-off, Config is not one-off, change cfg on GUI and then new an Order.
     let cfg = Config::new()?;
     // let cfg = Config::_from_toml_test();
 
     let order = Arc::new(Order::new(&cfg)?);
-    order.start().map_err(|e| Error {
-        inner: Box::new(e),
-        ..Error::default()
-    })?;
+    order.start();
 
     // Progress message
     if cfg.cui_msg_level.unwrap() >= 2 {
@@ -385,7 +374,7 @@ pub fn run() -> Result<(), Error> {
         let interval = cfg.cui_msg_interval.unwrap() as u64;
         thread::spawn(move || loop {
             let (finished, total) = order.progress();
-            cui::log::info(format!("progress: {} / {}", finished, total));
+            log::info(format!("progress: {} / {}", finished, total));
             if finished == total {
                 break;
             }
@@ -402,19 +391,19 @@ pub fn run() -> Result<(), Error> {
             println!();
             match input.trim() {
                 "t" => {
-                    cui::log::info("user terminate the cmdfactory");
+                    log::info("user terminate the cmdfactory");
                     order.terminate().unwrap();
                 }
                 "c" => {
-                    cui::log::info("user cease the cmdfactory");
+                    log::info("user cease the cmdfactory");
                     order.cease();
                 }
                 "i" => {
-                    cui::log::info("user turn off the command op");
+                    log::info("user turn off the command op");
                     break;
                 }
                 _ => {
-                    cui::log::info("unknown op");
+                    log::warn("unknown op");
                 }
             };
         });
@@ -427,4 +416,16 @@ pub fn run() -> Result<(), Error> {
     })?;
 
     Ok(())
+}
+
+pub fn cui_main() {
+    let time_now = SystemTime::now();
+    match cui_run() {
+        Ok(_) => log::info("all tasks completed"),
+        Err(e) => log::error(format!("error = {:?}", &e)),
+    };
+    log::info(format!(
+        "ended, took {:.2} seconds",
+        time_now.elapsed().unwrap().as_secs_f64(),
+    ));
 }
