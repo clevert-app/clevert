@@ -1,23 +1,19 @@
 mod child_kit;
 mod config;
-mod log;
+pub mod log;
 mod toml_seek;
 pub use config::Config;
 use std::fmt;
-use std::fs;
-use std::fs::File;
-use std::io;
-use std::io::{Read, Write};
+use std::fs::{self, File};
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
-use std::time::Duration;
-use std::time::SystemTime;
 use std::vec::IntoIter;
 
 #[derive(Debug)]
-enum ErrorKind {
+pub enum ErrorKind {
     ConfigIllegal,
     ConfigFileCanNotRead,
     UnknownError,
@@ -26,9 +22,9 @@ enum ErrorKind {
 
 #[derive(Debug)]
 pub struct Error {
-    kind: ErrorKind,
-    inner: Box<dyn fmt::Debug>,
-    message: String,
+    pub kind: ErrorKind,
+    pub inner: Box<dyn fmt::Debug>,
+    pub message: String,
 }
 
 impl Error {
@@ -358,74 +354,4 @@ impl Order {
             status: Arc::new(Mutex::new(status)),
         })
     }
-}
-
-fn cui_run() -> Result<(), Error> {
-    // Order is one-off, Config is not one-off, change cfg on GUI and then new an Order.
-    let cfg = Config::new()?;
-    // let cfg = Config::_from_toml_test();
-
-    let order = Arc::new(Order::new(&cfg)?);
-    order.start();
-
-    // Progress message
-    if cfg.cui_msg_level.unwrap() >= 2 {
-        let order = Arc::clone(&order);
-        let interval = cfg.cui_msg_interval.unwrap() as u64;
-        thread::spawn(move || loop {
-            let (finished, total) = order.progress();
-            log::info(format!("progress: {} / {}", finished, total));
-            if finished == total {
-                break;
-            }
-            thread::sleep(Duration::from_millis(interval));
-        });
-    }
-
-    // Command operation
-    if cfg.cui_operation.unwrap() {
-        let order = Arc::clone(&order);
-        thread::spawn(move || loop {
-            let mut input = String::new();
-            io::stdin().read_line(&mut input).unwrap();
-            println!();
-            match input.trim() {
-                "t" => {
-                    log::info("user terminate the cmdfactory");
-                    order.terminate().unwrap();
-                }
-                "c" => {
-                    log::info("user cease the cmdfactory");
-                    order.cease();
-                }
-                "i" => {
-                    log::info("user turn off the command op");
-                    break;
-                }
-                _ => {
-                    log::warn("unknown op");
-                }
-            };
-        });
-    };
-
-    order.wait_result().map_err(|e| Error {
-        kind: ErrorKind::ExecutePanic,
-        inner: Box::new(e),
-        ..Error::default()
-    })?;
-
-    Ok(())
-}
-
-pub fn cui_main() {
-    let time_now = SystemTime::now();
-    match cui_run() {
-        Ok(_) => log::info("all tasks completed"),
-        Err(e) => log::error(format!("error = {:?}", &e)),
-    };
-    log::info(format!(
-        "ended, took {:.2} seconds",
-        time_now.elapsed().unwrap().as_secs_f64(),
-    ));
 }

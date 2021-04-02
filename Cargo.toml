@@ -2,7 +2,7 @@
 name = "cmdfactory"
 version = "0.4.0"
 authors = ["kkocdko <kkocdko@163.com>"]
-description = "Automatically generate and execute commands from template."
+description = "Execute commands from template."
 edition = "2018"
 repository = "https://github.com/kkocdko/cmdfactory"
 license = "Unlicense"
