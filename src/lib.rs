@@ -316,12 +316,15 @@ impl Order {
                         message: "stdio file unknown".to_string(),
                         ..Error::default()
                     })?;
-                    let mut opt = fs::OpenOptions::new();
-                    let file = opt.write(true).open(path).map_err(|e| Error {
-                        kind: ErrorKind::ConfigIllegal,
-                        inner: Box::new(e),
-                        message: "stdio file can't write".to_string(),
-                    })?;
+                    let file = fs::OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .open(path)
+                        .map_err(|e| Error {
+                            kind: ErrorKind::ConfigIllegal,
+                            inner: Box::new(e),
+                            message: "stdio file can't write".to_string(),
+                        })?;
                     Ok(StdioCfg::ToFile(file))
                 }
                 _ => Err(Error {
