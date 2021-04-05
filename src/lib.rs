@@ -1,13 +1,12 @@
 mod child_kit;
 mod config;
-pub mod log;
 mod toml_seek;
 pub use config::Config;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::vec::IntoIter;
@@ -51,18 +50,38 @@ enum StdioCfg {
     ToFile(File),
 }
 
+impl StdioCfg {
+    fn set_command(&self, command: &mut Command) {
+        match self {
+            StdioCfg::Ignore => command.stderr(Stdio::null()),
+            StdioCfg::ToFile(_) => command.stderr(Stdio::piped()),
+            StdioCfg::Normal => command,
+        };
+    }
+
+    fn write(&mut self, stdio: &mut Option<impl Read>) -> io::Result<()> {
+        if let StdioCfg::ToFile(file) = self {
+            if let Some(mut stream) = stdio.take() {
+                let buf = &mut Vec::new();
+                stream.read_to_end(buf)?;
+                file.write_all(buf)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 struct Status {
     commands: IntoIter<Command>,
     childs: Vec<Option<u32>>,
     actives_count: usize,
-    error: Option<io::Error>,
+    cvar: Arc<Condvar>,
     stdout: StdioCfg,
     stderr: StdioCfg,
-    cvar: Arc<Condvar>,
+    error: Option<io::Error>,
 }
 
 pub struct Order {
-    threads_count: usize,
     commands_count: usize,
     skip_panic: bool,
     status: Arc<Mutex<Status>>,
@@ -73,33 +92,6 @@ impl Order {
         self.status.lock().unwrap()
     }
 
-    fn output_set(command: &mut Command, status: &mut MutexGuard<Status>) {
-        match status.stdout {
-            StdioCfg::Ignore => command.stdout(Stdio::null()),
-            StdioCfg::ToFile(_) => command.stdout(Stdio::piped()),
-            StdioCfg::Normal => command,
-        };
-        match status.stderr {
-            StdioCfg::Ignore => command.stderr(Stdio::null()),
-            StdioCfg::ToFile(_) => command.stderr(Stdio::piped()),
-            StdioCfg::Normal => command,
-        };
-    }
-
-    fn output_write(child: &mut Child, status: &mut MutexGuard<Status>) -> io::Result<()> {
-        if let StdioCfg::ToFile(file) = &mut status.stdout {
-            let buf = &mut Vec::new();
-            child.stdout.take().unwrap().read_to_end(buf)?;
-            file.write_all(buf)?;
-        }
-        if let StdioCfg::ToFile(file) = &mut status.stderr {
-            let buf = &mut Vec::new();
-            child.stderr.take().unwrap().read_to_end(buf)?;
-            file.write_all(buf)?;
-        }
-        Ok(())
-    }
-
     fn spawn(&self, index: usize) {
         let skip_panic = self.skip_panic;
         let status_mutex = Arc::clone(&self.status);
@@ -107,14 +99,16 @@ impl Order {
             let get_status = || status_mutex.lock().unwrap();
             let exec = |mut command| {
                 let mut status = get_status();
-                Self::output_set(&mut command, &mut status);
+                status.stdout.set_command(&mut command);
+                status.stderr.set_command(&mut command);
                 let mut child = command.spawn()?;
                 status.childs[index] = Some(child.id());
                 drop(status);
                 let wait_result = child.wait();
                 let mut status = get_status();
-                status.childs[index] = None; // MUST clear pid immediately
-                Self::output_write(&mut child, &mut status)?;
+                status.childs[index] = None; // MUST clear pid immediately!
+                status.stdout.write(&mut child.stdout)?;
+                status.stderr.write(&mut child.stderr)?;
                 wait_result?;
                 Ok(())
             };
@@ -136,7 +130,8 @@ impl Order {
     }
 
     pub fn start(&self) {
-        for index in 0..self.threads_count {
+        let status = self.get_status();
+        for index in 0..status.actives_count {
             self.spawn(index);
         }
     }
@@ -178,8 +173,8 @@ impl Order {
     pub fn terminate(&self) -> io::Result<()> {
         self.cease();
         let status = self.get_status();
-        for opt in &status.childs {
-            if let Some(pid) = *opt {
+        for pid_opt in &status.childs {
+            if let Some(pid) = *pid_opt {
                 child_kit::kill(pid)?;
             }
         }
@@ -212,10 +207,10 @@ impl Order {
         if let Some(input_list) = &cfg.input_list {
             for item in input_list {
                 let path = PathBuf::from(item);
-                if path.is_dir() {
-                    input_files.append(&mut read_dir(path)?);
-                } else {
+                if path.is_file() {
                     input_files.push(path);
+                } else {
+                    input_files.append(&mut read_dir(path)?);
                 }
             }
         } else if let Some(input_dir) = &cfg.input_dir {
@@ -336,19 +331,18 @@ impl Order {
                 }),
             }
         };
-        let threads_count = cfg.threads_count.unwrap() as usize;
+        let actives_count = cfg.threads_count.unwrap() as usize;
         let commands_count = commands.len();
         let status = Status {
             commands: commands.into_iter(),
-            childs: (0..threads_count).map(|_| None).collect(),
-            actives_count: threads_count,
-            error: None,
+            childs: (0..actives_count).map(|_| None).collect(),
+            actives_count,
+            cvar: Arc::new(Condvar::new()),
             stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
             stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
-            cvar: Arc::new(Condvar::new()),
+            error: None,
         };
         Ok(Self {
-            threads_count,
             commands_count,
             skip_panic: cfg.skip_panic.unwrap(),
             status: Arc::new(Mutex::new(status)),

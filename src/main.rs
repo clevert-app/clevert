@@ -1,8 +1,9 @@
-use cmdfactory::{log, Config, Error, ErrorKind, Order};
+mod gui;
+mod log;
+use cmdfactory::*;
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 fn main() {
     cui_main();
@@ -41,10 +42,12 @@ fn cui_run() -> Result<(), Error> {
                 "t" => {
                     log::info("user terminate the cmdfactory");
                     order.terminate().unwrap();
+                    break;
                 }
                 "c" => {
                     log::info("user cease the cmdfactory");
                     order.cease();
+                    break;
                 }
                 "i" => {
                     log::info("user turn off the command op");
@@ -66,14 +69,14 @@ fn cui_run() -> Result<(), Error> {
     Ok(())
 }
 
-pub fn cui_main() {
+fn cui_main() {
     let time_now = SystemTime::now();
     match cui_run() {
         Ok(_) => log::info("all tasks completed"),
         Err(e) => log::error(format!("error = {:?}", &e)),
     };
     log::info(format!(
-        "ended, took {:.2} seconds",
+        "took {:.2} seconds",
         time_now.elapsed().unwrap().as_secs_f64(),
     ));
 }
