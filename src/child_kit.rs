@@ -1,4 +1,4 @@
-use std::io;
+pub use sys::*;
 
 #[cfg(unix)]
 mod sys {
@@ -19,25 +19,53 @@ mod sys {
 }
 
 #[cfg(windows)]
+#[allow(clippy::upper_case_acronyms)]
 mod sys {
     use std::io;
-    use winapi::um::processthreadsapi::{OpenProcess, TerminateProcess};
-    use winapi::um::winnt::{HANDLE, PROCESS_ALL_ACCESS};
+    use std::os::raw::{c_int, c_uint, c_ulong, c_void};
+
+    type BOOL = c_int;
+    type UINT = c_uint;
+    type DWORD = c_ulong;
+    type HANDLE = *mut c_void;
+
+    const TRUE: BOOL = true as BOOL;
+    const FALSE: BOOL = false as BOOL;
+    const STANDARD_RIGHTS_REQUIRED: DWORD = 0x000F0000;
+    const SYNCHRONIZE: DWORD = 0x00100000;
+    const PROCESS_ALL_ACCESS: DWORD = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF;
+
+    #[link(name = "kernel32", kind = "dylib")]
+    extern "C" {
+        fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
+        fn TerminateProcess(hProcess: HANDLE, uExitCode: UINT) -> BOOL;
+    }
+
+    #[link(name = "ntdll", kind = "dylib")]
+    extern "C" {
+        fn NtSuspendProcess(hProcess: HANDLE);
+        fn NtResumeProcess(hProcess: HANDLE);
+    }
 
     fn get_handle(pid: u32) -> HANDLE {
-        unsafe { OpenProcess(PROCESS_ALL_ACCESS, false as i32, pid) }
+        unsafe { OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid) }
     }
 
     pub fn kill(pid: u32) -> io::Result<()> {
         let handle = get_handle(pid);
         match unsafe { TerminateProcess(handle, 0) } {
-            1 => Ok(()),
+            TRUE => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
     }
-}
 
-// Dangerous: This may kill invalid pid!
-pub fn kill(pid: u32) -> io::Result<()> {
-    sys::kill(pid)
+    pub fn suspend(pid: u32) {
+        let handle = get_handle(pid);
+        unsafe { NtSuspendProcess(handle) }
+    }
+
+    pub fn resume(pid: u32) {
+        let handle = get_handle(pid);
+        unsafe { NtResumeProcess(handle) }
+    }
 }
