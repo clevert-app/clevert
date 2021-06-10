@@ -224,7 +224,7 @@ impl Config {
 
         file_path.set_extension("toml");
         if let Ok(toml_str) = fs::read_to_string(&file_path) {
-            return Ok(Self::from_toml(toml_str)?);
+            return Self::from_toml(toml_str);
         }
 
         // file_path.set_extension("json");

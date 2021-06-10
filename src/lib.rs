@@ -184,24 +184,24 @@ impl Order {
     // pub fn pause() {}
 
     pub fn new(cfg: &Config) -> Result<Self, Error> {
+        fn visit_dir(dir: PathBuf, vec: &mut Vec<PathBuf>, recursive: bool) -> io::Result<()> {
+            for item in fs::read_dir(dir)? {
+                let item = item?.path();
+                if item.is_file() {
+                    vec.push(item);
+                } else if recursive && item.is_dir() {
+                    visit_dir(item, vec, recursive)?;
+                }
+            }
+            Ok(())
+        }
         let read_dir = |dir| {
             let mut vec = Vec::new();
             let recursive = cfg.input_recursive.unwrap();
-            fn read(dir: PathBuf, vec: &mut Vec<PathBuf>, recursive: bool) -> io::Result<()> {
-                for item in fs::read_dir(dir)? {
-                    let item = item?.path();
-                    if item.is_file() {
-                        vec.push(item);
-                    } else if recursive && item.is_dir() {
-                        read(item, vec, recursive)?;
-                    }
-                }
-                Ok(())
-            }
-            read(dir, &mut vec, recursive).map_err(|e| Error {
+            visit_dir(dir, &mut vec, recursive).map_err(|e| Error {
                 kind: ErrorKind::ConfigIllegal,
                 inner: Box::new(e),
-                ..Error::default()
+                message: "read input dir failed".to_string(),
             })?;
             Ok(vec)
         };
@@ -219,21 +219,29 @@ impl Order {
             let input_dir = PathBuf::from(input_dir);
             input_files.append(&mut read_dir(input_dir)?);
         }
+
+        // Current dir is different with Exe dir
         let current_dir = std::env::current_dir().unwrap();
-        let mut pairs = Vec::new();
+        let mut pairs = Vec::new(); // (from, to)
         for mut input_file in input_files {
+            // Bare name
             let file_name = input_file.file_stem().unwrap().to_str().unwrap();
             let mut file_name = file_name.to_string();
+
+            // Set prefix and suffix
             if let Some(prefix) = &cfg.output_prefix {
                 file_name.insert_str(0, &prefix);
             }
             if let Some(suffix) = &cfg.output_suffix {
                 file_name.push_str(&suffix);
             }
+
             let mut output_file = match &cfg.output_dir {
                 Some(p) => PathBuf::from(p),
                 None => input_file.parent().unwrap().into(),
             };
+
+            // Keep output recursive directories structure
             if cfg.output_recursive.unwrap() && cfg.input_dir.is_some() {
                 let input_dir = cfg.input_dir.as_ref().unwrap();
                 let relative_path = input_file.strip_prefix(input_dir).unwrap();
@@ -244,18 +252,35 @@ impl Order {
             } else {
                 output_file.push(file_name);
             }
+
+            // Overwrite
             if cfg.output_overwrite.unwrap() {
-                let _result = fs::remove_file(&output_file);
+                fs::remove_file(&output_file).map_err(|e| Error {
+                    kind: ErrorKind::ConfigIllegal,
+                    inner: Box::new(e),
+                    message: "failed to delete the file which will be overwrite".to_string(),
+                })?;
             }
+
+            // Set extension name
             if let Some(extension) = &cfg.output_extension {
                 output_file.set_extension(extension);
+            } else if let Some(extension) = input_file.extension() {
+                output_file.set_extension(extension);
             }
+
+            // Expand repative path to absolute
             if cfg.input_absolute.unwrap() && !input_file.is_absolute() {
                 input_file = current_dir.join(&input_file);
             }
             if cfg.output_absolute.unwrap() && !output_file.is_absolute() {
                 output_file = current_dir.join(&output_file);
             }
+
+            if input_file == output_file {
+                // Add `output_allow_samepath` ?
+            }
+
             pairs.push((input_file, output_file));
         }
 

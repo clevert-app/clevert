@@ -5,15 +5,14 @@
 <img src="https://flat.badgen.net/github/license/kkocdko/cmdfactory?color=4caf50">
 </div>
 
-> Project was delayed because of the 2021-NCEE.
-
 ### Warning
 
 This project is still developing.
 
 ### Todo List
 
-- GUI use YUE
-- Help document and Intro
-- Pause(Suspend) and Resume
-- StdIn
+0. Linux / Unix support.
+1. Help document and Intro.
+2. GUI using wxWidgets.
+3. Pause(Suspend) and Resume.
+4. StdIn.
