@@ -41,11 +41,11 @@ mod sys {
         fn TerminateProcess(hProcess: HANDLE, uExitCode: UINT) -> BOOL;
     }
 
-    #[link(name = "ntdll", kind = "dylib")]
-    extern "C" {
-        fn NtSuspendProcess(hProcess: HANDLE);
-        fn NtResumeProcess(hProcess: HANDLE);
-    }
+    // #[link(name = "ntdll", kind = "dylib")]
+    // extern "C" {
+    //     fn NtSuspendProcess(hProcess: HANDLE);
+    //     fn NtResumeProcess(hProcess: HANDLE);
+    // }
 
     fn get_handle(pid: u32) -> HANDLE {
         unsafe { OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid) }
@@ -59,13 +59,13 @@ mod sys {
         }
     }
 
-    pub fn suspend(pid: u32) {
-        let handle = get_handle(pid);
-        unsafe { NtSuspendProcess(handle) }
-    }
+    // pub fn suspend(pid: u32) {
+    //     let handle = get_handle(pid);
+    //     unsafe { NtSuspendProcess(handle) }
+    // }
 
-    pub fn resume(pid: u32) {
-        let handle = get_handle(pid);
-        unsafe { NtResumeProcess(handle) }
-    }
+    // pub fn resume(pid: u32) {
+    //     let handle = get_handle(pid);
+    //     unsafe { NtResumeProcess(handle) }
+    // }
 }

@@ -1,4 +1,4 @@
-mod gui;
+// mod gui;
 mod log;
 use cmdfactory::*;
 use std::sync::Arc;
@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 fn main() {
+    // gui::gui_run();
     cui_main();
 }
 

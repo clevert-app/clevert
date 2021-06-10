@@ -102,7 +102,7 @@ impl Config {
         }
     }
 
-    fn from_toml(toml_str: String) -> Self {
+    fn from_toml(toml_str: String) -> Result<Self, Error> {
         let cfg: toml::Value = toml_str.parse().unwrap();
         let mut order = Self::from_toml_value(cfg.get("order").unwrap());
         let mut presets = HashMap::new();
@@ -110,11 +110,11 @@ impl Config {
             let preset = Self::from_toml_value(v);
             presets.insert(k.clone(), preset);
         }
-        Self::fit(&mut order, presets);
-        order
+        Self::fit(&mut order, presets)?;
+        Ok(order)
     }
 
-    pub fn _from_toml_test() -> Self {
+    pub fn _from_toml_test() -> Result<Self, Error> {
         let toml_str = r#"
         [presets.default]
         cui_operation = true
@@ -160,22 +160,31 @@ impl Config {
         Self::from_toml(toml_str)
     }
 
-    fn fit(order: &mut Self, presets: HashMap<String, Self>) {
-        fn inherit_fill(order: &mut Config, presets: &HashMap<String, Config>, deep: i32) {
+    fn fit(order: &mut Self, presets: HashMap<String, Self>) -> Result<(), Error> {
+        fn inherit_fill(
+            order: &mut Config,
+            presets: &HashMap<String, Config>,
+            deep: i32,
+        ) -> Result<(), Error> {
             if deep > 64 {
-                return; // Add error msg here?
+                return Err(Error {
+                    kind: ErrorKind::ConfigIllegal,
+                    message: "preset deep > 64, loop reference?".to_string(),
+                    ..Error::default()
+                });
             }
             if let Some(k) = &order.parent {
                 if let Some(parent) = presets.get(k) {
                     order.complement(parent);
                     order.parent = parent.parent.clone();
-                    inherit_fill(order, presets, deep + 1);
+                    inherit_fill(order, presets, deep + 1)?;
                 }
             }
+            Ok(())
         }
-        inherit_fill(order, &presets, 0);
-        order.parent.replace("default".to_string());
-        inherit_fill(order, &presets, 0);
+        inherit_fill(order, &presets, 0)?;
+        order.parent = Some("default".to_string());
+        inherit_fill(order, &presets, 0)?;
         order.complement(&Self {
             parent: None,
             threads_count: Some(1),
@@ -207,6 +216,7 @@ impl Config {
         if !input_list.is_empty() {
             order.input_list = Some(input_list);
         }
+        Ok(())
     }
 
     pub fn new() -> Result<Self, Error> {
@@ -214,7 +224,7 @@ impl Config {
 
         file_path.set_extension("toml");
         if let Ok(toml_str) = fs::read_to_string(&file_path) {
-            return Ok(Self::from_toml(toml_str));
+            return Ok(Self::from_toml(toml_str)?);
         }
 
         // file_path.set_extension("json");
