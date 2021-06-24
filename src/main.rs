@@ -13,8 +13,6 @@ fn main() {
 fn cui_run() -> Result<(), Error> {
     // Order is one-off, Config is not one-off, change cfg on GUI and then new an Order.
     let cfg = Config::new()?;
-    // let cfg = Config::_from_toml_test();
-
     let order = Arc::new(Order::new(&cfg)?);
     order.start();
 
@@ -48,6 +46,16 @@ fn cui_run() -> Result<(), Error> {
                 "c" => {
                     log::info("user cease the cmdfactory");
                     order.cease();
+                    break;
+                }
+                "p" => {
+                    log::info("user pause the cmdfactory");
+                    order.pause();
+                    break;
+                }
+                "r" => {
+                    log::info("user resume the cmdfactory");
+                    order.resume();
                     break;
                 }
                 "i" => {

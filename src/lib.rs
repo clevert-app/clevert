@@ -181,7 +181,23 @@ impl Order {
         Ok(())
     }
 
-    // pub fn pause() {}
+    pub fn pause(&self) {
+        let status = self.get_status();
+        for pid_opt in &status.childs {
+            if let Some(pid) = *pid_opt {
+                child_kit::suspend(pid);
+            }
+        }
+    }
+
+    pub fn resume(&self) {
+        let status = self.get_status();
+        for pid_opt in &status.childs {
+            if let Some(pid) = *pid_opt {
+                child_kit::resume(pid);
+            }
+        }
+    }
 
     pub fn new(cfg: &Config) -> Result<Self, Error> {
         fn visit_dir(dir: PathBuf, vec: &mut Vec<PathBuf>, recursive: bool) -> io::Result<()> {
