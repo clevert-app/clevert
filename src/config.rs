@@ -170,7 +170,15 @@ impl Config {
         order.parent = Some("default".to_string());
         inherit_fill(order, &presets, 0)?;
         order.complement(&Self::default());
-        let input_list: Vec<String> = env::args().skip(1).collect();
+        let mut input_list = Vec::new();
+        for arg in env::args().skip(1).rev() {
+            // Skip switches in tests
+            if arg.starts_with("-") {
+                break;
+            }
+            input_list.push(arg);
+        }
+        input_list.reverse();
         if !input_list.is_empty() {
             order.input_list = Some(input_list);
         }

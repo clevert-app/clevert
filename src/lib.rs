@@ -271,11 +271,12 @@ impl Order {
 
             // Overwrite
             if cfg.output_overwrite.unwrap() {
-                fs::remove_file(&output_file).map_err(|e| Error {
-                    kind: ErrorKind::ConfigIllegal,
-                    inner: Box::new(e),
-                    message: "failed to delete the file which will be overwrite".to_string(),
-                })?;
+                let _ = fs::remove_file(&output_file);
+                // fs::remove_file(&output_file).map_err(|e| Error {
+                //     kind: ErrorKind::ConfigIllegal,
+                //     inner: Box::new(e),
+                //     message: "failed to delete the file which will be overwrite".to_string(),
+                // })?;
             }
 
             // Set extension name
