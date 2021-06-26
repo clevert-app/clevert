@@ -50,15 +50,17 @@ enum StdioCfg {
     ToFile(File),
 }
 
-impl StdioCfg {
-    fn set_command(&self, command: &mut Command) {
+impl Into<Stdio> for &StdioCfg {
+    fn into(self) -> Stdio {
         match self {
-            StdioCfg::Ignore => command.stderr(Stdio::null()),
-            StdioCfg::ToFile(_) => command.stderr(Stdio::piped()),
-            StdioCfg::Normal => command,
-        };
+            StdioCfg::Ignore => Stdio::null(),
+            StdioCfg::ToFile(_) => Stdio::piped(),
+            StdioCfg::Normal => Stdio::inherit(),
+        }
     }
+}
 
+impl StdioCfg {
     fn write(&mut self, stdio: &mut Option<impl Read>) -> io::Result<()> {
         if let StdioCfg::ToFile(file) = self {
             if let Some(mut stream) = stdio.take() {
@@ -97,19 +99,27 @@ impl Order {
         let status_mutex = Arc::clone(&self.status);
         thread::spawn(move || {
             let get_status = || status_mutex.lock().unwrap();
-            let exec = |mut command| {
+            let exec = |mut command: Command| {
                 let mut status = get_status();
-                status.stdout.set_command(&mut command);
-                status.stderr.set_command(&mut command);
+
+                command.stdout(&status.stdout);
+                command.stderr(&status.stderr);
+
                 let mut child = command.spawn()?;
                 status.childs[index] = Some(child.id());
-                drop(status);
+
+                drop(status); // Drop here to free the mutex
+
                 let wait_result = child.wait();
+
                 let mut status = get_status();
+
                 status.childs[index] = None; // MUST clear pid immediately!
+
                 status.stdout.write(&mut child.stdout)?;
                 status.stderr.write(&mut child.stderr)?;
-                wait_result?;
+
+                wait_result?; // Delay to throw error
                 Ok(())
             };
             while let Some(command) = {
@@ -272,6 +282,8 @@ impl Order {
             // Overwrite
             if cfg.output_overwrite.unwrap() {
                 let _ = fs::remove_file(&output_file);
+                // fs::remove_file(&output_file)
+                // fs::metadata(&output_file);
                 // fs::remove_file(&output_file).map_err(|e| Error {
                 //     kind: ErrorKind::ConfigIllegal,
                 //     inner: Box::new(e),
