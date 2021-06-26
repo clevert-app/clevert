@@ -25,7 +25,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     fs::remove_dir_all(&test_dir)?;
     fs::create_dir_all(test_dir.join("input"))?;
 
-    for i in 0..3 {
+    for i in 0..4 {
         let file_path = test_dir.join("input").join(i.to_string());
         fs::write(file_path, "")?;
     }
@@ -41,7 +41,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
 
     let toml_str = r#"
     [presets.default]
-    threads_count = 2
+    threads_count = 4
     repeat_count = 10
     skip_panic = false
 
@@ -65,9 +65,9 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     order.start();
     let time_now = SystemTime::now();
 
-    thread::sleep(Duration::from_millis(100));
+    thread::sleep(Duration::from_millis(70));
     order.pause();
-    thread::sleep(Duration::from_millis(500));
+    thread::sleep(Duration::from_millis(300));
     order.resume();
 
     let result = order.wait_result();
@@ -77,7 +77,19 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     );
     result?;
 
-    // fs::read(path)
+    let stdout = fs::read(test_dir.join("stdout.log"))?;
+    let mut stdout_sum = 0;
+    for part in String::from_utf8(stdout)?.split_whitespace() {
+        stdout_sum += part.parse::<i32>()?;
+    }
+    assert_eq!(stdout_sum, 20);
+
+    let stderr = fs::read(test_dir.join("stderr.log"))?;
+    let mut stderr_sum = 0;
+    for part in String::from_utf8(stderr)?.split_whitespace() {
+        stderr_sum += part.parse::<i32>()?;
+    }
+    assert_eq!(stderr_sum, 20);
 
     Ok(())
 }

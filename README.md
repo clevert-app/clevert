@@ -14,5 +14,4 @@ This project is still developing.
 0. Linux / Unix support.
 1. Help document and Intro.
 2. GUI using wxWidgets.
-3. Pause(Suspend) and Resume.
-4. StdIn.
+3. StdIn.
