@@ -50,12 +50,12 @@ fn cui_run() -> Result<(), Error> {
                 }
                 "p" => {
                     log::info("user pause the cmdfactory");
-                    order.pause();
+                    order.pause().unwrap();
                     break;
                 }
                 "r" => {
                     log::info("user resume the cmdfactory");
-                    order.resume();
+                    order.resume().unwrap();
                     break;
                 }
                 "i" => {

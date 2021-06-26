@@ -11,7 +11,6 @@ This project is still developing.
 
 ### Todo List
 
-0. Linux / Unix support.
-1. Help document and Intro.
-2. GUI using wxWidgets.
-3. StdIn.
+0. Help document and Intro.
+1. GUI using wxWidgets.
+2. StdIn.

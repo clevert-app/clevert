@@ -191,22 +191,24 @@ impl Order {
         Ok(())
     }
 
-    pub fn pause(&self) {
+    pub fn pause(&self) -> io::Result<()> {
         let status = self.get_status();
         for pid_opt in &status.childs {
             if let Some(pid) = *pid_opt {
-                child_kit::suspend(pid);
+                child_kit::suspend(pid)?;
             }
         }
+        Ok(())
     }
 
-    pub fn resume(&self) {
+    pub fn resume(&self) -> io::Result<()> {
         let status = self.get_status();
         for pid_opt in &status.childs {
             if let Some(pid) = *pid_opt {
-                child_kit::resume(pid);
+                child_kit::resume(pid)?;
             }
         }
+        Ok(())
     }
 
     pub fn new(cfg: &Config) -> Result<Self, Error> {

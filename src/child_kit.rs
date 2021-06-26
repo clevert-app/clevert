@@ -13,6 +13,14 @@ mod sys {
         }
     }
 
+    pub fn suspend(pid: u32) -> io::Result<()> {
+        send_signal(pid, libc::SIGTSTP)
+    }
+
+    pub fn resume(pid: u32) -> io::Result<()> {
+        send_signal(pid, libc::SIGCONT)
+    }
+
     pub fn kill(pid: u32) -> io::Result<()> {
         send_signal(pid, libc::SIGABRT)
     }
@@ -24,7 +32,7 @@ mod sys {
 mod sys {
     use std::io;
     use std::mem::transmute;
-    use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
+    use std::os::raw::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
 
     type BOOL = c_int;
     type UINT = c_uint;
@@ -33,7 +41,8 @@ mod sys {
     type HMODULE = *mut c_void;
     type LPCSTR = *const c_char;
     type FARPROC = *mut c_void;
-    type FnNtProcess = extern "stdcall" fn(HANDLE);
+    type NTSTATUS = c_long;
+    type FnNtProcess = extern "stdcall" fn(HANDLE) -> NTSTATUS;
 
     const TRUE: BOOL = true as BOOL;
     const FALSE: BOOL = false as BOOL;
@@ -69,13 +78,19 @@ mod sys {
         }
     }
 
-    pub fn suspend(pid: u32) {
+    pub fn suspend(pid: u32) -> io::Result<()> {
         let handle = get_handle(pid);
-        getNtFn(b"NtSuspendProcess\0")(handle);
+        match unsafe { getNtFn(b"NtSuspendProcess\0")(handle) } {
+            TRUE => Ok(()),
+            _ => Err(io::Error::last_os_error()),
+        }
     }
 
-    pub fn resume(pid: u32) {
+    pub fn resume(pid: u32) -> io::Result<()> {
         let handle = get_handle(pid);
-        getNtFn(b"NtResumeProcess\0")(handle);
+        match unsafe { getNtFn(b"NtResumeProcess\0")(handle) } {
+            TRUE => Ok(()),
+            _ => Err(io::Error::last_os_error()),
+        }
     }
 }

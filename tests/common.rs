@@ -66,9 +66,9 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     let time_now = SystemTime::now();
 
     thread::sleep(Duration::from_millis(70));
-    order.pause();
+    order.pause()?;
     thread::sleep(Duration::from_millis(300));
-    order.resume();
+    order.resume()?;
 
     let result = order.wait_result();
     println!(
