@@ -1,6 +1,6 @@
 use cmdfactory::*;
-use std::env;
 use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use std::thread;
@@ -9,40 +9,33 @@ use std::time::{Duration, SystemTime};
 #[test]
 pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     let src_content = r#"
-        fn main() {
-            let arg = std::env::args().last().unwrap();
-            let num: u64 = arg.parse().expect("need number argument");
-            let remainder = num % 2; // 0 or 1
-            println!("{}", &remainder);
-            eprintln!("{}", &remainder);
-            let millis = remainder * 50 + 100;
-            let dur = std::time::Duration::from_millis(millis);
-            std::thread::sleep(dur);
-        }
+    fn main() {
+        let arg = std::env::args().last().unwrap();
+        let num: u64 = arg.parse().expect("need number argument");
+        let remainder = num % 2; // 0 or 1
+        println!("{}", &remainder);
+        eprintln!("{}", &remainder);
+        let millis = remainder * 50 + 100;
+        let dur = std::time::Duration::from_millis(millis);
+        std::thread::sleep(dur);
+    }
     "#;
 
-    let mut dir = env::current_dir()?;
-    dir.extend(["target", "_test_temp"]);
-    fs::remove_dir_all(&dir)?;
+    let test_dir = PathBuf::from("./target/_test_temp");
+    fs::remove_dir_all(&test_dir)?;
+    fs::create_dir_all(test_dir.join("input"))?;
 
-    dir.push("input");
-    fs::create_dir_all(&dir)?;
-
-    for index in 0..3 {
-        let mut p = dir.clone();
-        p.push(index.to_string() + "");
-        fs::write(p, "")?;
+    for i in 0..3 {
+        let file_path = test_dir.join("input").join(i.to_string());
+        fs::write(file_path, "")?;
     }
 
-    let src_path = dir.with_file_name("sleeper.rs");
-    fs::write(&src_path, src_content)?;
-
-    let exe_path = dir.with_file_name("sleeper");
-
+    fs::write(test_dir.join("sleeper.rs"), src_content)?;
     let mut command = Command::new("rustc");
-    command.arg("-o");
-    command.arg(&exe_path);
-    command.arg(&src_path);
+    command
+        .arg("-o")
+        .arg(test_dir.join("sleeper")) // Executable
+        .arg(test_dir.join("sleeper.rs")); // Source
     let child = command.spawn()?;
     child.wait_with_output()?;
 
@@ -58,11 +51,8 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     stderr_type = 'file'
     stderr_file = './target/_test_temp/stderr.log'
     program = './target/_test_temp/sleeper'
-    args_template = '{repeat_position}'
-    args_switches = '-m 6'
-    input_recursive = true
-    output_recursive = true
-    output_overwrite = true
+    args_template = '{args_switches} {repeat_position}'
+    args_switches = '--example-switch'
 
     [order]
     parent = 'test'
@@ -74,9 +64,21 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     let order = Arc::new(Order::new(&cfg)?);
     order.start();
     let time_now = SystemTime::now();
+
+    thread::sleep(Duration::from_millis(100));
+    order.pause();
+    thread::sleep(Duration::from_millis(500));
+    order.resume();
+
     let result = order.wait_result();
-    println!("order took {:} ms", time_now.elapsed().unwrap().as_millis(),);
+    println!(
+        "test order took {:} ms",
+        time_now.elapsed().unwrap().as_millis(),
+    );
     result?;
+
+    // fs::read(path)
+
     Ok(())
 }
 
