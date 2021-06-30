@@ -11,7 +11,7 @@ fn main() {
 }
 
 fn cui_run() -> Result<(), Error> {
-    // Order is one-off, Config is not one-off, change cfg on GUI and then new an Order.
+    // Order is one-off, change config on UI and then create a new Order.
     let cfg = Config::new()?;
     let order = Arc::new(Order::new(&cfg)?);
     order.start();
@@ -39,31 +39,31 @@ fn cui_run() -> Result<(), Error> {
             println!();
             match input.trim() {
                 "t" => {
-                    log::info("user terminate the cmdfactory");
+                    log::info("op : terminate");
                     order.terminate().unwrap();
                     break;
                 }
                 "c" => {
-                    log::info("user cease the cmdfactory");
+                    log::info("op : cease");
                     order.cease();
                     break;
                 }
                 "p" => {
-                    log::info("user pause the cmdfactory");
+                    log::info("op : pause");
                     order.pause().unwrap();
                     break;
                 }
                 "r" => {
-                    log::info("user resume the cmdfactory");
+                    log::info("op : resume");
                     order.resume().unwrap();
                     break;
                 }
                 "i" => {
-                    log::info("user turn off the command op");
+                    log::info("user turn off the command operation");
                     break;
                 }
                 _ => {
-                    log::warn("unknown op");
+                    log::warn("unknown operation");
                 }
             };
         });

@@ -192,6 +192,7 @@ impl Order {
     }
 
     pub fn pause(&self) -> io::Result<()> {
+        // BUG: miss thread
         let status = self.get_status();
         for pid_opt in &status.childs {
             if let Some(pid) = *pid_opt {
