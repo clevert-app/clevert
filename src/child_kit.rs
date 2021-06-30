@@ -6,8 +6,7 @@ mod sys {
     use std::io;
 
     fn send_signal(pid: u32, signal: libc::c_int) -> io::Result<()> {
-        let pid = pid as libc::pid_t;
-        match unsafe { libc::kill(pid, signal) } {
+        match unsafe { libc::kill(pid as libc::pid_t, signal) } {
             -1 => Err(io::Error::last_os_error()),
             _ => Ok(()),
         }
@@ -36,6 +35,7 @@ mod sys {
 
     type BOOL = c_int;
     type UINT = c_uint;
+    type LONG = c_long;
     type DWORD = c_ulong;
     type HANDLE = *mut c_void;
     type HMODULE = *mut c_void;
@@ -46,6 +46,7 @@ mod sys {
 
     const TRUE: BOOL = true as BOOL;
     const FALSE: BOOL = false as BOOL;
+    const NTSTATUS_SUCCESS: LONG = 0x00000000;
     const STANDARD_RIGHTS_REQUIRED: DWORD = 0x000F0000;
     const SYNCHRONIZE: DWORD = 0x00100000;
     const PROCESS_ALL_ACCESS: DWORD = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF;
@@ -62,12 +63,10 @@ mod sys {
         unsafe { OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid) }
     }
 
-    fn getNtFn(name: &[u8]) -> FnNtProcess {
-        unsafe {
-            let module_handle = GetModuleHandleA(b"ntdll\0".as_ptr() as LPCSTR);
-            let address = GetProcAddress(module_handle, name.as_ptr() as LPCSTR);
-            transmute::<*const usize, FnNtProcess>(address as *const usize)
-        }
+    unsafe fn getNtFn(name: &[u8]) -> FnNtProcess {
+        let module_handle = GetModuleHandleA(b"ntdll\0".as_ptr() as LPCSTR);
+        let address = GetProcAddress(module_handle, name.as_ptr() as LPCSTR);
+        transmute::<*const usize, FnNtProcess>(address as *const usize)
     }
 
     pub fn kill(pid: u32) -> io::Result<()> {
@@ -81,7 +80,7 @@ mod sys {
     pub fn suspend(pid: u32) -> io::Result<()> {
         let handle = get_handle(pid);
         match unsafe { getNtFn(b"NtSuspendProcess\0")(handle) } {
-            TRUE => Ok(()),
+            NTSTATUS_SUCCESS => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
     }
@@ -89,7 +88,7 @@ mod sys {
     pub fn resume(pid: u32) -> io::Result<()> {
         let handle = get_handle(pid);
         match unsafe { getNtFn(b"NtResumeProcess\0")(handle) } {
-            TRUE => Ok(()),
+            NTSTATUS_SUCCESS => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
     }

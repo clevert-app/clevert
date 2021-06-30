@@ -1,4 +1,4 @@
-// mod gui;
+mod gui;
 mod log;
 use cmdfactory::*;
 use std::sync::Arc;

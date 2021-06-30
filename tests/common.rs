@@ -45,11 +45,14 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     repeat_count = 10
     skip_panic = false
 
-    [presets.test]
+    [presets.test_base]
     stdout_type = 'file'
     stdout_file = './target/_test_temp/stdout.log'
     stderr_type = 'file'
     stderr_file = './target/_test_temp/stderr.log'
+
+    [presets.test]
+    parent = 'test_base'
     program = './target/_test_temp/sleeper'
     args_template = '{args_switches} {repeat_position}'
     args_switches = '--example-switch'
