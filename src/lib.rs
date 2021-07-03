@@ -7,7 +7,7 @@ use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::vec::IntoIter;
 
@@ -90,10 +90,6 @@ pub struct Order {
 }
 
 impl Order {
-    fn get_status(&self) -> MutexGuard<Status> {
-        self.status.lock().unwrap()
-    }
-
     fn spawn(&self, index: usize) {
         let skip_panic = self.skip_panic;
         let status_mutex = Arc::clone(&self.status);
@@ -113,7 +109,7 @@ impl Order {
                 let wait_result = child.wait();
 
                 let mut status = get_status();
-
+                // Still dangerous!
                 status.childs[index] = None; // MUST clear pid immediately!
 
                 status.stdout.write(&mut child.stdout)?;
@@ -140,7 +136,7 @@ impl Order {
     }
 
     pub fn start(&self) {
-        let status = self.get_status();
+        let status = self.status.lock().unwrap();
         for index in 0..status.actives_count {
             self.spawn(index);
         }
@@ -148,7 +144,7 @@ impl Order {
 
     /// Return the progress of order as `(finished, total)`.
     pub fn progress(&self) -> (usize, usize) {
-        let status = self.get_status();
+        let status = self.status.lock().unwrap();
         let total = self.commands_count;
         let idle = status.commands.len();
         let active = status.actives_count;
@@ -157,7 +153,7 @@ impl Order {
     }
 
     pub fn wait(&self) -> io::Result<()> {
-        let status = self.get_status();
+        let status = self.status.lock().unwrap();
         let cvar = Arc::clone(&status.cvar);
         let condition = |s: &mut Status| s.actives_count > 0 && s.error.is_none();
         drop(cvar.wait_while(status, condition).unwrap());
@@ -168,7 +164,7 @@ impl Order {
     /// Must be called at least and most once.
     pub fn wait_result(&self) -> io::Result<()> {
         self.wait()?;
-        if let Some(e) = self.get_status().error.take() {
+        if let Some(e) = self.status.lock().unwrap().error.take() {
             return Err(e);
         }
         Ok(())
@@ -176,13 +172,13 @@ impl Order {
 
     // Should call `wait` afterwards.
     pub fn cease(&self) {
-        self.get_status().commands.nth(usize::MAX);
+        self.status.lock().unwrap().commands.nth(usize::MAX);
     }
 
     // Should call `wait` afterwards.
     pub fn terminate(&self) -> io::Result<()> {
         self.cease();
-        let status = self.get_status();
+        let status = self.status.lock().unwrap();
         for pid_opt in &status.childs {
             if let Some(pid) = *pid_opt {
                 child_kit::kill(pid)?;
@@ -193,7 +189,7 @@ impl Order {
 
     pub fn pause(&self) -> io::Result<()> {
         // BUG: miss thread
-        let status = self.get_status();
+        let status = self.status.lock().unwrap();
         for pid_opt in &status.childs {
             if let Some(pid) = *pid_opt {
                 child_kit::suspend(pid)?;
@@ -203,7 +199,7 @@ impl Order {
     }
 
     pub fn resume(&self) -> io::Result<()> {
-        let status = self.get_status();
+        let status = self.status.lock().unwrap();
         for pid_opt in &status.childs {
             if let Some(pid) = *pid_opt {
                 child_kit::resume(pid)?;

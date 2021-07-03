@@ -1,3 +1,4 @@
+/* This module is design to  */
 pub use sys::*;
 
 #[cfg(unix)]
@@ -67,6 +68,12 @@ mod sys {
         let module_handle = GetModuleHandleA(b"ntdll\0".as_ptr() as LPCSTR);
         let address = GetProcAddress(module_handle, name.as_ptr() as LPCSTR);
         transmute::<*const usize, FnNtProcess>(address as *const usize)
+    }
+
+    pub fn wait() {
+        // [oconnor663 / shared_child.rs] said:
+        // Windows has actually always supported this, by preventing PID reuse
+        // while there are still open handles to a child process.
     }
 
     pub fn kill(pid: u32) -> io::Result<()> {
