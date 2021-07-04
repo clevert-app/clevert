@@ -173,7 +173,7 @@ impl Config {
         let mut input_list = Vec::new();
         for arg in env::args().skip(1).rev() {
             // Skip switches in tests
-            if arg.starts_with("-") {
+            if arg.starts_with('-') {
                 break;
             }
             input_list.push(arg);

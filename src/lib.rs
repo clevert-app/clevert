@@ -50,9 +50,9 @@ enum StdioCfg {
     ToFile(File),
 }
 
-impl Into<Stdio> for &StdioCfg {
-    fn into(self) -> Stdio {
-        match self {
+impl From<&StdioCfg> for Stdio {
+    fn from(s: &StdioCfg) -> Stdio {
+        match s {
             StdioCfg::Ignore => Stdio::null(),
             StdioCfg::ToFile(_) => Stdio::piped(),
             StdioCfg::Normal => Stdio::inherit(),

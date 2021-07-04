@@ -70,7 +70,7 @@ mod sys {
     const TRUE: BOOL = true as BOOL;
     const FALSE: BOOL = false as BOOL;
     const INFINITE: DWORD = 0xFFFFFFFF;
-    const WAIT_OBJECT_0: DWORD = 0x00000000 as u32;
+    const WAIT_OBJECT_0: DWORD = 0x00000000_u32;
     const STATUS_SUCCESS: LONG = 0x00000000;
     const STANDARD_RIGHTS_REQUIRED: DWORD = 0x000F0000;
     const SYNCHRONIZE: DWORD = 0x00100000;
