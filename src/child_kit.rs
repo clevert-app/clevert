@@ -1,4 +1,4 @@
-/* Refer to [shared_child](https://github.com/oconnor663/shared_child.rs), thanks! */
+/* Based on [shared_child](https://github.com/oconnor663/shared_child.rs), thanks! */
 pub use sys::*;
 
 #[cfg(unix)]
@@ -19,7 +19,7 @@ mod sys {
                 let mut siginfo = std::mem::zeroed();
                 libc::waitid(
                     libc::P_PID,
-                    handle.0 as libc::id_t,
+                    pid as libc::id_t,
                     &mut siginfo,
                     libc::WEXITED | libc::WNOWAIT,
                 )
