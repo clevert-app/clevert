@@ -161,7 +161,16 @@ impl Order {
     pub fn wait(&self) -> io::Result<()> {
         let status = self.status.lock().unwrap();
         let cvar = Arc::clone(&status.cvar);
-        let condition = |s: &mut Status| s.actives_count > 0 && s.result.is_none();
+        let condition = |s: &mut Status| {
+            // `false` means stop waiting
+            if s.actives_count == 0 {
+                false
+            } else if let Some(r) = &s.result {
+                r.is_ok()
+            } else {
+                false
+            }
+        };
         drop(cvar.wait_while(status, condition).unwrap());
         self.terminate()?;
         Ok(())
@@ -171,7 +180,8 @@ impl Order {
     pub fn wait_result(&self) -> io::Result<()> {
         self.wait()?;
         // Because `io::Result` does not implement the `Clone` trait
-        self.status.lock().unwrap().result.take().unwrap()
+        let msg = "`order.wait_result` be called more than once";
+        self.status.lock().unwrap().result.take().expect(msg)
     }
 
     // Should call `wait` afterwards.
