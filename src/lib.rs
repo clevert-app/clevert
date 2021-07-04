@@ -80,7 +80,11 @@ struct Status {
     cvar: Arc<Condvar>,
     stdout: StdioCfg,
     stderr: StdioCfg,
-    error: Option<io::Error>,
+
+    // Some(Ok) => Successed or running
+    // Some(Err) => Failed
+    // None => Before start or be taken
+    result: Option<io::Result<()>>,
 }
 
 pub struct Order {
@@ -125,7 +129,7 @@ impl Order {
             } {
                 let result = exec(command);
                 if !skip_panic && result.is_err() {
-                    get_status().error = result.err();
+                    get_status().result = Some(result);
                     break;
                 }
             }
@@ -137,7 +141,8 @@ impl Order {
     }
 
     pub fn start(&self) {
-        let status = self.status.lock().unwrap();
+        let mut status = self.status.lock().unwrap();
+        status.result = Some(Ok(()));
         for index in 0..status.actives_count {
             self.spawn(index);
         }
@@ -156,7 +161,7 @@ impl Order {
     pub fn wait(&self) -> io::Result<()> {
         let status = self.status.lock().unwrap();
         let cvar = Arc::clone(&status.cvar);
-        let condition = |s: &mut Status| s.actives_count > 0 && s.error.is_none();
+        let condition = |s: &mut Status| s.actives_count > 0 && s.result.is_none();
         drop(cvar.wait_while(status, condition).unwrap());
         self.terminate()?;
         Ok(())
@@ -165,10 +170,8 @@ impl Order {
     /// Must be called at least and most once.
     pub fn wait_result(&self) -> io::Result<()> {
         self.wait()?;
-        if let Some(e) = self.status.lock().unwrap().error.take() {
-            return Err(e);
-        }
-        Ok(())
+        // Because `io::Result` does not implement the `Clone` trait
+        self.status.lock().unwrap().result.take().unwrap()
     }
 
     // Should call `wait` afterwards.
@@ -307,7 +310,7 @@ impl Order {
             }
 
             if input_file == output_file {
-                // Add `output_allow_samepath` ?
+                // TODO: Add `output_allow_samepath` ?
             }
 
             pairs.push((input_file, output_file));
@@ -399,7 +402,7 @@ impl Order {
             cvar: Arc::new(Condvar::new()),
             stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
             stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
-            error: None,
+            result: None,
         };
         Ok(Self {
             commands_count,
