@@ -1,4 +1,4 @@
-/* This module is design to  */
+/* Refer to [shared_child](https://github.com/oconnor663/shared_child.rs), thanks! */
 pub use sys::*;
 
 #[cfg(unix)]
@@ -13,16 +13,38 @@ mod sys {
         }
     }
 
+    pub fn wait(pid: u32) -> io::Result<()> {
+        loop {
+            let ret = unsafe {
+                let mut siginfo = std::mem::zeroed();
+                libc::waitid(
+                    libc::P_PID,
+                    handle.0 as libc::id_t,
+                    &mut siginfo,
+                    libc::WEXITED | libc::WNOWAIT,
+                )
+            };
+            if ret == 0 {
+                return Ok(());
+            }
+            let e = io::Error::last_os_error();
+            if e.kind() != io::ErrorKind::Interrupted {
+                return Err(e);
+            }
+            // We were interrupted. Loop and retry.
+        }
+    }
+
+    pub fn kill(pid: u32) -> io::Result<()> {
+        send_signal(pid, libc::SIGABRT)
+    }
+
     pub fn suspend(pid: u32) -> io::Result<()> {
         send_signal(pid, libc::SIGTSTP)
     }
 
     pub fn resume(pid: u32) -> io::Result<()> {
         send_signal(pid, libc::SIGCONT)
-    }
-
-    pub fn kill(pid: u32) -> io::Result<()> {
-        send_signal(pid, libc::SIGABRT)
     }
 }
 
@@ -47,7 +69,9 @@ mod sys {
 
     const TRUE: BOOL = true as BOOL;
     const FALSE: BOOL = false as BOOL;
-    const NTSTATUS_SUCCESS: LONG = 0x00000000;
+    const INFINITE: DWORD = 0xFFFFFFFF;
+    const WAIT_OBJECT_0: DWORD = 0x00000000 as u32;
+    const STATUS_SUCCESS: LONG = 0x00000000;
     const STANDARD_RIGHTS_REQUIRED: DWORD = 0x000F0000;
     const SYNCHRONIZE: DWORD = 0x00100000;
     const PROCESS_ALL_ACCESS: DWORD = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF;
@@ -58,6 +82,7 @@ mod sys {
         fn TerminateProcess(hProcess: HANDLE, uExitCode: UINT) -> BOOL;
         fn GetProcAddress(hModule: HMODULE, lpProcName: LPCSTR) -> FARPROC;
         fn GetModuleHandleA(lpModuleName: LPCSTR) -> HMODULE;
+        fn WaitForSingleObject(hHandle: HANDLE, dwMilliseconds: DWORD) -> DWORD;
     }
 
     fn get_handle(pid: u32) -> HANDLE {
@@ -70,10 +95,15 @@ mod sys {
         transmute::<*const usize, FnNtProcess>(address as *const usize)
     }
 
-    pub fn wait() {
+    pub fn wait(pid: u32) -> io::Result<()> {
         // [oconnor663 / shared_child.rs] said:
         // Windows has actually always supported this, by preventing PID reuse
         // while there are still open handles to a child process.
+        let handle = get_handle(pid);
+        match unsafe { WaitForSingleObject(handle, INFINITE) } {
+            WAIT_OBJECT_0 => Ok(()),
+            _ => Err(io::Error::last_os_error()),
+        }
     }
 
     pub fn kill(pid: u32) -> io::Result<()> {
@@ -87,7 +117,7 @@ mod sys {
     pub fn suspend(pid: u32) -> io::Result<()> {
         let handle = get_handle(pid);
         match unsafe { getNtFn(b"NtSuspendProcess\0")(handle) } {
-            NTSTATUS_SUCCESS => Ok(()),
+            STATUS_SUCCESS => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
     }
@@ -95,7 +125,7 @@ mod sys {
     pub fn resume(pid: u32) -> io::Result<()> {
         let handle = get_handle(pid);
         match unsafe { getNtFn(b"NtResumeProcess\0")(handle) } {
-            NTSTATUS_SUCCESS => Ok(()),
+            STATUS_SUCCESS => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
     }

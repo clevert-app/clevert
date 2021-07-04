@@ -102,20 +102,21 @@ impl Order {
                 command.stderr(&status.stderr);
 
                 let mut child = command.spawn()?;
-                status.childs[index] = Some(child.id());
+                let id = child.id();
+                status.childs[index] = Some(id);
 
                 drop(status); // Drop here to free the mutex
 
-                let wait_result = child.wait();
+                let wait_result = child_kit::wait(id);
 
                 let mut status = get_status();
-                // Still dangerous!
+
                 status.childs[index] = None; // MUST clear pid immediately!
 
                 status.stdout.write(&mut child.stdout)?;
                 status.stderr.write(&mut child.stderr)?;
 
-                wait_result?; // Delay to throw error
+                wait_result?; // Defer throwing error
                 Ok(())
             };
             while let Some(command) = {
@@ -171,8 +172,8 @@ impl Order {
     }
 
     // Should call `wait` afterwards.
-    pub fn cease(&self) {
-        self.status.lock().unwrap().commands.nth(usize::MAX);
+    pub fn cease(&self) -> usize {
+        self.status.lock().unwrap().commands.by_ref().count()
     }
 
     // Should call `wait` afterwards.
