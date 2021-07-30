@@ -50,16 +50,6 @@ enum StdioCfg {
     ToFile(File),
 }
 
-impl From<&StdioCfg> for Stdio {
-    fn from(s: &StdioCfg) -> Stdio {
-        match s {
-            StdioCfg::Ignore => Stdio::null(),
-            StdioCfg::ToFile(_) => Stdio::piped(),
-            StdioCfg::Normal => Stdio::inherit(),
-        }
-    }
-}
-
 impl StdioCfg {
     fn write(&mut self, stdio: &mut Option<impl Read>) -> io::Result<()> {
         if let StdioCfg::ToFile(file) = self {
@@ -70,6 +60,16 @@ impl StdioCfg {
             }
         }
         Ok(())
+    }
+}
+
+impl From<&StdioCfg> for Stdio {
+    fn from(s: &StdioCfg) -> Stdio {
+        match s {
+            StdioCfg::Ignore => Stdio::null(),
+            StdioCfg::ToFile(_) => Stdio::piped(),
+            StdioCfg::Normal => Stdio::inherit(),
+        }
     }
 }
 
@@ -292,18 +292,6 @@ impl Order {
                 output_file.push(file_name);
             }
 
-            // Overwrite
-            if cfg.output_overwrite.unwrap() {
-                let _ = fs::remove_file(&output_file);
-                // fs::remove_file(&output_file)
-                // fs::metadata(&output_file);
-                // fs::remove_file(&output_file).map_err(|e| Error {
-                //     kind: ErrorKind::ConfigIllegal,
-                //     inner: Box::new(e),
-                //     message: "failed to delete the file which will be overwrite".to_string(),
-                // })?;
-            }
-
             // Set extension name
             if let Some(extension) = &cfg.output_extension {
                 output_file.set_extension(extension);
@@ -319,9 +307,37 @@ impl Order {
                 output_file = current_dir.join(&output_file);
             }
 
-            if input_file == output_file {
-                // TODO: Add `output_allow_samepath` ?
-            }
+            // Overwrite
+            match cfg.output_overwrite.as_ref().unwrap().as_str() {
+                "allow" => {}
+                "forbid" => {
+                    if input_file == output_file {
+                        return Err(Error {
+                            kind: ErrorKind::ConfigIllegal,
+                            message: "output overwrite forbidden".to_string(),
+                            ..Error::default()
+                        });
+                    }
+                }
+                "force" => {
+                    if let Err(e) = fs::remove_file(&output_file) {
+                        if e.kind() != io::ErrorKind::NotFound {
+                            return Err(Error {
+                                kind: ErrorKind::ConfigIllegal,
+                                message: "remove output overwrite file failed".to_string(),
+                                inner: Box::new(e),
+                            });
+                        }
+                    };
+                }
+                _ => {
+                    return Err(Error {
+                        kind: ErrorKind::ConfigIllegal,
+                        message: "`output_overwrite` value invalid".to_string(),
+                        ..Error::default()
+                    });
+                }
+            };
 
             pairs.push((input_file, output_file));
         }

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 #[test]
 pub fn common() -> Result<(), Box<dyn std::error::Error>> {
@@ -15,14 +15,14 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
         let remainder = num % 2; // 0 or 1
         println!("{}", &remainder);
         eprintln!("{}", &remainder);
-        let millis = remainder * 50 + 100;
+        let millis = remainder * 25 + 50;
         let dur = std::time::Duration::from_millis(millis);
         std::thread::sleep(dur);
     }
     "#;
 
     let test_dir = PathBuf::from("./target/_test_temp");
-    fs::remove_dir_all(&test_dir)?;
+    let _ = fs::remove_dir_all(&test_dir); // Ignore error when dir not exists
     fs::create_dir_all(test_dir.join("input"))?;
 
     for i in 0..4 {
@@ -66,19 +66,13 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::from_toml(toml_str)?;
     let order = Arc::new(Order::new(&cfg)?);
     order.start();
-    let time_now = SystemTime::now();
 
-    thread::sleep(Duration::from_millis(70));
+    thread::sleep(Duration::from_millis(75));
     order.pause()?;
-    thread::sleep(Duration::from_millis(300));
+    thread::sleep(Duration::from_millis(200));
     order.resume()?;
 
-    let result = order.wait_result();
-    println!(
-        "test order took {:} ms",
-        time_now.elapsed().unwrap().as_millis(),
-    );
-    result?;
+    order.wait_result()?;
 
     let stdout = fs::read(test_dir.join("stdout.log"))?;
     let mut stdout_sum = 0;
@@ -136,4 +130,5 @@ output_dir = './target/cmdfactory_test/output_dir'
 output_prefix = 'out_'
 output_suffix = '_out'
 "#
-.to_string();*/
+.to_string();
+*/

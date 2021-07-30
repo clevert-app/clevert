@@ -25,7 +25,7 @@ pub struct Config {
     pub output_dir: Option<String>,
     pub output_absolute: Option<bool>,
     pub output_recursive: Option<bool>,
-    pub output_overwrite: Option<bool>,
+    pub output_overwrite: Option<String>,
     pub output_extension: Option<String>,
     pub output_prefix: Option<String>,
     pub output_suffix: Option<String>,
@@ -92,7 +92,7 @@ impl Config {
             output_dir: v.seek_str("output_dir"),
             output_absolute: v.seek_bool("output_absolute"),
             output_recursive: v.seek_bool("output_recursive"),
-            output_overwrite: v.seek_bool("output_overwrite"),
+            output_overwrite: v.seek_str("output_overwrite"),
             output_extension: v.seek_str("output_extension"),
             output_prefix: v.seek_str("output_prefix"),
             output_suffix: v.seek_str("output_suffix"),
@@ -120,7 +120,7 @@ impl Config {
             threads_count: Some(1),
             skip_panic: Some(false),
             repeat_count: Some(1),
-            stdout_type: Some("ignore".to_string()),
+            stdout_type: Some("ignore".to_string()), // normal | ignore | file
             stdout_file: None,
             stderr_type: Some("ignore".to_string()),
             stderr_file: None,
@@ -134,7 +134,7 @@ impl Config {
             output_dir: None,
             output_absolute: Some(false),
             output_recursive: Some(true), // Auto create output dir also
-            output_overwrite: Some(false),
+            output_overwrite: Some("allow".to_string()), // allow | forbid | force
             output_extension: None,
             output_prefix: None,
             output_suffix: None,
@@ -148,9 +148,9 @@ impl Config {
         fn inherit_fill(
             order: &mut Config,
             presets: &HashMap<String, Config>,
-            deep: i32,
+            depth: i32,
         ) -> Result<(), Error> {
-            if deep > 64 {
+            if depth > 64 {
                 return Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     message: "preset deep > 64, loop reference?".to_string(),
@@ -161,7 +161,7 @@ impl Config {
                 if let Some(parent) = presets.get(k) {
                     order.complement(parent);
                     order.parent = parent.parent.clone();
-                    inherit_fill(order, presets, deep + 1)?;
+                    inherit_fill(order, presets, depth + 1)?;
                 }
             }
             Ok(())
@@ -170,17 +170,12 @@ impl Config {
         order.parent = Some("default".to_string());
         inherit_fill(order, &presets, 0)?;
         order.complement(&Self::default());
-        let mut input_list = Vec::new();
-        for arg in env::args().skip(1).rev() {
-            // Skip switches in tests
-            if arg.starts_with('-') {
-                break;
-            }
-            input_list.push(arg);
-        }
-        input_list.reverse();
-        if !input_list.is_empty() {
-            order.input_list = Some(input_list);
+        let args_input: Vec<String> = env::args()
+            .skip(1) // Skip argv[0]
+            .filter(|arg| !arg.starts_with('-')) // Skip switches
+            .collect();
+        if !args_input.is_empty() {
+            order.input_list = Some(args_input);
         }
         Ok(())
     }
