@@ -1,6 +1,6 @@
 [package]
 name = "cmdfactory"
-version = "0.4.3"
+version = "0.4.5"
 edition = "2018"
 
 [profile.release]
@@ -14,4 +14,4 @@ toml = "0.5.8"
 # anyhow = "1.0.38"
 
 [target."cfg(not(windows))".dependencies.libc]
-version = "0.2.98"
+version = "0.2.99"

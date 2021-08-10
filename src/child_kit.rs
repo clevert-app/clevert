@@ -1,10 +1,14 @@
-/* Based on [shared_child](https://github.com/oconnor663/shared_child.rs), thanks! */
+// Based on [shared_child](https://github.com/oconnor663/shared_child.rs), thanks!
+
 pub use sys::*;
 
 #[cfg(unix)]
 mod sys {
     extern crate libc;
     use std::io;
+
+    #[derive(Copy, Clone)]
+    pub struct Handle(u32);
 
     fn send_signal(pid: u32, signal: libc::c_int) -> io::Result<()> {
         match unsafe { libc::kill(pid as libc::pid_t, signal) } {
@@ -13,13 +17,21 @@ mod sys {
         }
     }
 
-    pub fn wait(pid: u32) -> io::Result<()> {
+    pub fn get_handle(child: &std::process::Child) -> Handle {
+        Handle(child.id())
+    }
+
+    pub fn close_handle(_: Handle) -> io::Result<()> {
+        Ok(())
+    }
+
+    pub fn wait(h: Handle) -> io::Result<()> {
         loop {
             let ret = unsafe {
                 let mut siginfo = std::mem::zeroed();
                 libc::waitid(
                     libc::P_PID,
-                    pid as libc::id_t,
+                    h.0 as libc::id_t,
                     &mut siginfo,
                     libc::WEXITED | libc::WNOWAIT,
                 )
@@ -35,16 +47,16 @@ mod sys {
         }
     }
 
-    pub fn kill(pid: u32) -> io::Result<()> {
-        send_signal(pid, libc::SIGABRT)
+    pub fn kill(h: Handle) -> io::Result<()> {
+        send_signal(h.0, libc::SIGABRT)
     }
 
-    pub fn suspend(pid: u32) -> io::Result<()> {
-        send_signal(pid, libc::SIGTSTP)
+    pub fn suspend(h: Handle) -> io::Result<()> {
+        send_signal(h.0, libc::SIGTSTP)
     }
 
-    pub fn resume(pid: u32) -> io::Result<()> {
-        send_signal(pid, libc::SIGCONT)
+    pub fn resume(h: Handle) -> io::Result<()> {
+        send_signal(h.0, libc::SIGCONT)
     }
 }
 
