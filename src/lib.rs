@@ -75,7 +75,7 @@ impl From<&StdioCfg> for Stdio {
 
 struct Status {
     commands: IntoIter<Command>,
-    childs: Vec<Option<u32>>,
+    childs: Vec<Option<child_kit::Handle>>,
     actives_count: usize,
     cvar: Arc<Condvar>,
     stdout: StdioCfg,
@@ -106,16 +106,19 @@ impl Order {
                 command.stderr(&status.stderr);
 
                 let mut child = command.spawn()?;
-                let id = child.id();
-                status.childs[index] = Some(id);
+                let handle = child_kit::get_handle(&child);
+                status.childs[index] = Some(handle);
 
                 drop(status); // Drop here to free the mutex
 
-                let wait_result = child_kit::wait(id);
+                let wait_result = child_kit::wait(handle);
 
                 let mut status = get_status();
 
-                status.childs[index] = None; // MUST clear pid immediately!
+                let handle = status.childs[index].take(); // MUST clear pid immediately!
+                if let Some(h) = handle {
+                    child_kit::close_handle(h)?;
+                }
 
                 status.stdout.write(&mut child.stdout)?;
                 status.stderr.write(&mut child.stderr)?;
@@ -192,10 +195,11 @@ impl Order {
     // Should call `wait` afterwards.
     pub fn terminate(&self) -> io::Result<()> {
         self.cease();
-        let status = self.status.lock().unwrap();
-        for pid_opt in &status.childs {
-            if let Some(pid) = *pid_opt {
-                child_kit::kill(pid)?;
+        let mut status = self.status.lock().unwrap();
+        for handle_opt in &mut status.childs {
+            if let Some(h) = handle_opt.take() {
+                child_kit::kill(h)?;
+                child_kit::close_handle(h)?;
             }
         }
         Ok(())
@@ -204,9 +208,9 @@ impl Order {
     pub fn pause(&self) -> io::Result<()> {
         // BUG: miss thread
         let status = self.status.lock().unwrap();
-        for pid_opt in &status.childs {
-            if let Some(pid) = *pid_opt {
-                child_kit::suspend(pid)?;
+        for handle_opt in &status.childs {
+            if let Some(h) = *handle_opt {
+                child_kit::suspend(h)?;
             }
         }
         Ok(())
@@ -214,9 +218,9 @@ impl Order {
 
     pub fn resume(&self) -> io::Result<()> {
         let status = self.status.lock().unwrap();
-        for pid_opt in &status.childs {
-            if let Some(pid) = *pid_opt {
-                child_kit::resume(pid)?;
+        for handle_opt in &status.childs {
+            if let Some(h) = *handle_opt {
+                child_kit::resume(h)?;
             }
         }
         Ok(())

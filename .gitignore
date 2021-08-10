@@ -1,4 +1,3 @@
+/.vscode
 /target
 **/*.rs.bk
-/.vscode
-*.code-workspace

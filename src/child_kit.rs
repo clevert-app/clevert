@@ -52,10 +52,15 @@ mod sys {
 #[allow(clippy::upper_case_acronyms)]
 #[allow(non_snake_case)]
 mod sys {
+    // [oconnor663 / shared_child.rs] said:
+    // Windows has actually always supported this, by preventing PID reuse
+    // while there are still open handles to a child process.
+
     use std::io;
     use std::mem::transmute;
     use std::os::raw::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
 
+    // From winapi-rs
     type BOOL = c_int;
     type UINT = c_uint;
     type LONG = c_long;
@@ -67,7 +72,6 @@ mod sys {
     type NTSTATUS = c_long;
     type FnNtProcess = extern "stdcall" fn(HANDLE) -> NTSTATUS;
 
-    const TRUE: BOOL = true as BOOL;
     const FALSE: BOOL = false as BOOL;
     const INFINITE: DWORD = 0xFFFFFFFF;
     const WAIT_OBJECT_0: DWORD = 0x00000000_u32;
@@ -79,52 +83,58 @@ mod sys {
     #[link(name = "kernel32", kind = "dylib")]
     extern "C" {
         fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
+        fn CloseHandle(hObject: HANDLE) -> BOOL;
         fn TerminateProcess(hProcess: HANDLE, uExitCode: UINT) -> BOOL;
         fn GetProcAddress(hModule: HMODULE, lpProcName: LPCSTR) -> FARPROC;
         fn GetModuleHandleA(lpModuleName: LPCSTR) -> HMODULE;
         fn WaitForSingleObject(hHandle: HANDLE, dwMilliseconds: DWORD) -> DWORD;
     }
 
-    fn get_handle(pid: u32) -> HANDLE {
-        unsafe { OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid) }
+    #[derive(Copy, Clone)]
+    pub struct Handle(HANDLE);
+
+    unsafe impl std::marker::Send for Handle {}
+
+    pub fn get_handle(child: &std::process::Child) -> Handle {
+        Handle(unsafe { OpenProcess(PROCESS_ALL_ACCESS, FALSE, child.id()) })
     }
 
-    unsafe fn getNtFn(name: &[u8]) -> FnNtProcess {
-        let module_handle = GetModuleHandleA(b"ntdll\0".as_ptr() as LPCSTR);
-        let address = GetProcAddress(module_handle, name.as_ptr() as LPCSTR);
-        transmute::<*const usize, FnNtProcess>(address as *const usize)
+    pub fn close_handle(h: Handle) -> io::Result<()> {
+        match unsafe { CloseHandle(h.0) } {
+            FALSE => Err(io::Error::last_os_error()),
+            _ => Ok(()),
+        }
     }
 
-    pub fn wait(pid: u32) -> io::Result<()> {
-        // [oconnor663 / shared_child.rs] said:
-        // Windows has actually always supported this, by preventing PID reuse
-        // while there are still open handles to a child process.
-        let handle = get_handle(pid);
-        match unsafe { WaitForSingleObject(handle, INFINITE) } {
+    pub fn wait(h: Handle) -> io::Result<()> {
+        match unsafe { WaitForSingleObject(h.0, INFINITE) } {
             WAIT_OBJECT_0 => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
     }
 
-    pub fn kill(pid: u32) -> io::Result<()> {
-        let handle = get_handle(pid);
-        match unsafe { TerminateProcess(handle, 0) } {
-            TRUE => Ok(()),
-            _ => Err(io::Error::last_os_error()),
+    pub fn kill(h: Handle) -> io::Result<()> {
+        match unsafe { TerminateProcess(h.0, 0) } {
+            FALSE => Err(io::Error::last_os_error()),
+            _ => Ok(()),
         }
     }
 
-    pub fn suspend(pid: u32) -> io::Result<()> {
-        let handle = get_handle(pid);
-        match unsafe { getNtFn(b"NtSuspendProcess\0")(handle) } {
+    unsafe fn get_nt_function(name: &[u8]) -> FnNtProcess {
+        let module_handle = GetModuleHandleA(b"ntdll\0".as_ptr() as LPCSTR);
+        let address = GetProcAddress(module_handle, name.as_ptr() as LPCSTR);
+        transmute::<*const usize, FnNtProcess>(address as *const usize)
+    }
+
+    pub fn suspend(h: Handle) -> io::Result<()> {
+        match unsafe { get_nt_function(b"NtSuspendProcess\0")(h.0) } {
             STATUS_SUCCESS => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
     }
 
-    pub fn resume(pid: u32) -> io::Result<()> {
-        let handle = get_handle(pid);
-        match unsafe { getNtFn(b"NtResumeProcess\0")(handle) } {
+    pub fn resume(h: Handle) -> io::Result<()> {
+        match unsafe { get_nt_function(b"NtResumeProcess\0")(h.0) } {
             STATUS_SUCCESS => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
