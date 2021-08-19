@@ -75,7 +75,7 @@ impl From<&StdioCfg> for Stdio {
 
 struct Status {
     commands: IntoIter<Command>,
-    childs: Vec<Option<child_kit::Handle>>,
+    childs: Vec<Option<child_kit::ChildHandle>>,
     actives_count: usize,
     cvar: Arc<Condvar>,
     stdout: StdioCfg,
@@ -115,10 +115,7 @@ impl Order {
 
                 let mut status = get_status();
 
-                let handle = status.childs[index].take(); // MUST clear pid immediately!
-                if let Some(h) = handle {
-                    child_kit::close_handle(h)?;
-                }
+                status.childs[index] = None; // Immediately!
 
                 status.stdout.write(&mut child.stdout)?;
                 status.stderr.write(&mut child.stderr)?;
@@ -199,7 +196,6 @@ impl Order {
         for handle_opt in &mut status.childs {
             if let Some(h) = handle_opt.take() {
                 child_kit::kill(h)?;
-                child_kit::close_handle(h)?;
             }
         }
         Ok(())

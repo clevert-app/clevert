@@ -17,15 +17,11 @@ mod sys {
         }
     }
 
-    pub fn get_handle(child: &std::process::Child) -> Handle {
+    pub fn get_handle(child: &std::process::Child) -> ChildHandle {
         Handle(child.id())
     }
 
-    pub fn close_handle(_: Handle) -> io::Result<()> {
-        Ok(())
-    }
-
-    pub fn wait(h: Handle) -> io::Result<()> {
+    pub fn wait(h: ChildHandle) -> io::Result<()> {
         loop {
             let ret = unsafe {
                 let mut siginfo = std::mem::zeroed();
@@ -47,15 +43,15 @@ mod sys {
         }
     }
 
-    pub fn kill(h: Handle) -> io::Result<()> {
+    pub fn kill(h: ChildHandle) -> io::Result<()> {
         send_signal(h.0, libc::SIGABRT)
     }
 
-    pub fn suspend(h: Handle) -> io::Result<()> {
+    pub fn suspend(h: ChildHandle) -> io::Result<()> {
         send_signal(h.0, libc::SIGTSTP)
     }
 
-    pub fn resume(h: Handle) -> io::Result<()> {
+    pub fn resume(h: ChildHandle) -> io::Result<()> {
         send_signal(h.0, libc::SIGCONT)
     }
 }
@@ -95,7 +91,6 @@ mod sys {
     #[link(name = "kernel32", kind = "dylib")]
     extern "C" {
         fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
-        fn CloseHandle(hObject: HANDLE) -> BOOL;
         fn TerminateProcess(hProcess: HANDLE, uExitCode: UINT) -> BOOL;
         fn GetProcAddress(hModule: HMODULE, lpProcName: LPCSTR) -> FARPROC;
         fn GetModuleHandleA(lpModuleName: LPCSTR) -> HMODULE;
@@ -103,29 +98,22 @@ mod sys {
     }
 
     #[derive(Copy, Clone)]
-    pub struct Handle(HANDLE);
+    pub struct ChildHandle(HANDLE);
 
-    unsafe impl std::marker::Send for Handle {}
+    unsafe impl std::marker::Send for ChildHandle {}
 
-    pub fn get_handle(child: &std::process::Child) -> Handle {
-        Handle(unsafe { OpenProcess(PROCESS_ALL_ACCESS, FALSE, child.id()) })
+    pub fn get_handle(child: &std::process::Child) -> ChildHandle {
+        ChildHandle(unsafe { OpenProcess(PROCESS_ALL_ACCESS, FALSE, child.id()) })
     }
 
-    pub fn close_handle(h: Handle) -> io::Result<()> {
-        match unsafe { CloseHandle(h.0) } {
-            FALSE => Err(io::Error::last_os_error()),
-            _ => Ok(()),
-        }
-    }
-
-    pub fn wait(h: Handle) -> io::Result<()> {
+    pub fn wait(h: ChildHandle) -> io::Result<()> {
         match unsafe { WaitForSingleObject(h.0, INFINITE) } {
             WAIT_OBJECT_0 => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
     }
 
-    pub fn kill(h: Handle) -> io::Result<()> {
+    pub fn kill(h: ChildHandle) -> io::Result<()> {
         match unsafe { TerminateProcess(h.0, 0) } {
             FALSE => Err(io::Error::last_os_error()),
             _ => Ok(()),
@@ -138,14 +126,14 @@ mod sys {
         transmute::<*const usize, FnNtProcess>(address as *const usize)
     }
 
-    pub fn suspend(h: Handle) -> io::Result<()> {
+    pub fn suspend(h: ChildHandle) -> io::Result<()> {
         match unsafe { get_nt_function(b"NtSuspendProcess\0")(h.0) } {
             STATUS_SUCCESS => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
     }
 
-    pub fn resume(h: Handle) -> io::Result<()> {
+    pub fn resume(h: ChildHandle) -> io::Result<()> {
         match unsafe { get_nt_function(b"NtResumeProcess\0")(h.0) } {
             STATUS_SUCCESS => Ok(()),
             _ => Err(io::Error::last_os_error()),
