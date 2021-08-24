@@ -1,0 +1,32 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run tests
+      run: cargo test --verbose
+
+    # - name: Run tests on x86_64-apple-darwin
+    #   run: cargo test --verbose --target=x86_64-apple-darwin
+
+    # - name: Build
+    #   run: cargo build --release
+
+    # - name: Upload Artifacts
+    #   uses: actions/upload-artifact@v2
+    #   with:
+    #     name: build
+    #     path: target/release/cmdfactory

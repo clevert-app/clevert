@@ -1,17 +1,17 @@
 [package]
 name = "cmdfactory"
-version = "0.4.5"
+version = "0.4.6"
 edition = "2018"
 
 [profile.release]
 panic = "abort"
 lto = "fat"
-codegen-units = 1
-# strip cmdfactory.exe
+# codegen-units = 1
+# cargo build --release && strip target/release/cmdfactory.exe
 
 [dependencies]
 toml = "0.5.8"
 # anyhow = "1.0.38"
 
 [target."cfg(not(windows))".dependencies.libc]
-version = "0.2.99"
+version = "0.2.100"

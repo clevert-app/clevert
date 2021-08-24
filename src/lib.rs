@@ -371,7 +371,14 @@ impl Order {
                     match *part {
                         "{args_switches}" => c.args(&args_switches),
                         "{input_file}" => c.arg(&input_file),
-                        "{output_file}" => c.arg(&output_file),
+                        "{output_file}" => {
+                            if cfg.output_suffix_of_repeat.unwrap() && index != 0 {
+                                let stem = output_file.file_stem().unwrap().to_str().unwrap();
+                                c.arg(output_file.with_file_name(format!("{}_{}", stem, index)))
+                            } else {
+                                c.arg(&output_file)
+                            }
+                        }
                         "{output_dir}" => c.arg(output_file.parent().unwrap()),
                         "{repeat_index}" => c.arg(index.to_string()),
                         "{repeat_position}" => c.arg((index + 1).to_string()),

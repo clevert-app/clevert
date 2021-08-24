@@ -29,6 +29,7 @@ pub struct Config {
     pub output_extension: Option<String>,
     pub output_prefix: Option<String>,
     pub output_suffix: Option<String>,
+    pub output_suffix_of_repeat: Option<bool>,
     // Console UI
     pub cui_operation: Option<bool>,
     pub cui_msg_level: Option<i32>,
@@ -67,6 +68,7 @@ impl Config {
         c(&mut t.output_extension, &s.output_extension);
         c(&mut t.output_prefix, &s.output_prefix);
         c(&mut t.output_suffix, &s.output_suffix);
+        c(&mut t.output_suffix_of_repeat, &s.output_suffix_of_repeat);
         c(&mut t.cui_operation, &s.cui_operation);
         c(&mut t.cui_msg_level, &s.cui_msg_level);
         c(&mut t.cui_msg_interval, &s.cui_msg_interval);
@@ -96,6 +98,7 @@ impl Config {
             output_extension: v.seek_str("output_extension"),
             output_prefix: v.seek_str("output_prefix"),
             output_suffix: v.seek_str("output_suffix"),
+            output_suffix_of_repeat: v.seek_bool("output_suffix_of_repeat"),
             cui_operation: v.seek_bool("cui_operation"),
             cui_msg_level: v.seek_i32("cui_msg_level"),
             cui_msg_interval: v.seek_i32("cui_msg_interval"),
@@ -138,6 +141,7 @@ impl Config {
             output_extension: None,
             output_prefix: None,
             output_suffix: None,
+            output_suffix_of_repeat: Some(false),
             cui_operation: Some(true),
             cui_msg_level: Some(2),
             cui_msg_interval: Some(1000),
@@ -170,13 +174,6 @@ impl Config {
         order.parent = Some("default".to_string());
         inherit_fill(order, &presets, 0)?;
         order.complement(&Self::default());
-        let args_input: Vec<String> = env::args()
-            .skip(1) // Skip argv[0]
-            .filter(|arg| !arg.starts_with('-')) // Skip switches
-            .collect();
-        if !args_input.is_empty() {
-            order.input_list = Some(args_input);
-        }
         Ok(())
     }
 

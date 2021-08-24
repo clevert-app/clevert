@@ -74,19 +74,17 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
 
     order.wait_result()?;
 
-    let stdout = fs::read(test_dir.join("stdout.log"))?;
-    let mut stdout_sum = 0;
-    for part in String::from_utf8(stdout)?.split_whitespace() {
-        stdout_sum += part.parse::<i32>()?;
-    }
-    assert_eq!(stdout_sum, 20);
+    let read_log_sum = |name: &str| -> Result<i32, Box<dyn std::error::Error>> {
+        let vec = fs::read(test_dir.join(name))?;
+        let mut sum = 0;
+        for part in String::from_utf8(vec)?.split_whitespace() {
+            sum += part.parse::<i32>()?;
+        }
+        Ok(sum)
+    };
 
-    let stderr = fs::read(test_dir.join("stderr.log"))?;
-    let mut stderr_sum = 0;
-    for part in String::from_utf8(stderr)?.split_whitespace() {
-        stderr_sum += part.parse::<i32>()?;
-    }
-    assert_eq!(stderr_sum, 20);
+    assert_eq!(read_log_sum("stdout.log")?, 20);
+    assert_eq!(read_log_sum("stderr.log")?, 20);
 
     Ok(())
 }

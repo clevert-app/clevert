@@ -11,8 +11,19 @@ fn main() {
 }
 
 fn cui_run() -> Result<(), Error> {
-    // Order is one-off, change config on UI and then create a new Order.
-    let cfg = Config::new()?;
+    let cfg = {
+        let mut config = Config::new()?;
+        // eprintln!("std::env::args = {:?}", std::env::args());
+        let args_input: Vec<String> = std::env::args()
+            .skip(1) // Skip argv[0]
+            .filter(|arg| !arg.starts_with('-')) // Skip switches
+            .collect();
+        if !args_input.is_empty() {
+            config.input_list = Some(args_input);
+        }
+        config
+    };
+    // `Order` is one-off, change config on UI and then create a new `Order`.
     let order = Arc::new(Order::new(&cfg)?);
     order.start();
 
