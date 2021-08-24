@@ -8,7 +8,7 @@ mod sys {
     use std::io;
 
     #[derive(Copy, Clone)]
-    pub struct Handle(u32);
+    pub struct ChildHandle(u32);
 
     fn send_signal(pid: u32, signal: libc::c_int) -> io::Result<()> {
         match unsafe { libc::kill(pid as libc::pid_t, signal) } {
@@ -18,7 +18,7 @@ mod sys {
     }
 
     pub fn get_handle(child: &std::process::Child) -> ChildHandle {
-        Handle(child.id())
+        ChildHandle(child.id())
     }
 
     pub fn wait(h: ChildHandle) -> io::Result<()> {

@@ -16,17 +16,21 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+
+    - name: List installed targets
+      run: rustup target list --installed
+
     - name: Run tests
       run: cargo test --verbose
 
     # - name: Run tests on x86_64-apple-darwin
     #   run: cargo test --verbose --target=x86_64-apple-darwin
 
-    # - name: Build
-    #   run: cargo build --release
+    - name: Build
+      run: cargo build --release && strip ./target/release/cmdfactory
 
-    # - name: Upload Artifacts
-    #   uses: actions/upload-artifact@v2
-    #   with:
-    #     name: build
-    #     path: target/release/cmdfactory
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: build-release
+        path: target/release/cmdfactory
