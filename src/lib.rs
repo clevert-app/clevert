@@ -366,27 +366,30 @@ impl Order {
         let mut commands = Vec::new();
         for (input_file, output_file) in pairs {
             for index in 0..cfg.repeat_count.unwrap() {
-                let mut c = Command::new(cfg.program.as_ref().unwrap());
+                let mut command = Command::new(cfg.program.as_ref().unwrap());
                 for part in &args_template {
                     match *part {
-                        "{args_switches}" => c.args(&args_switches),
-                        "{input_file}" => c.arg(&input_file),
+                        "{args_switches}" => command.args(&args_switches),
+                        "{input_file}" => command.arg(&input_file),
                         "{output_file}" => {
-                            if cfg.output_suffix_of_repeat.unwrap() && cfg.repeat_count.unwrap() > 0
-                            {
+                            if cfg.output_suffix_serial.unwrap() {
                                 let stem = output_file.file_stem().unwrap().to_str().unwrap();
-                                // BUG: extension?
-                                c.arg(output_file.with_file_name(format!("{}_{}", stem, index + 1)))
+                                let name = format!("{}_{}", stem, index + 1);
+                                let mut path = output_file.with_file_name(name);
+                                if let Some(ext) = output_file.extension() {
+                                    path.set_extension(ext);
+                                }
+                                command.arg(path)
                             } else {
-                                c.arg(&output_file)
+                                command.arg(&output_file)
                             }
                         }
-                        "{output_dir}" => c.arg(output_file.parent().unwrap()),
-                        "{repeat_position}" => c.arg((index + 1).to_string()),
-                        _ => c.arg(part),
+                        "{output_dir}" => command.arg(output_file.parent().unwrap()),
+                        "{repeat_num}" => command.arg((index + 1).to_string()),
+                        _ => command.arg(part),
                     };
                 }
-                commands.push(c);
+                commands.push(command);
             }
         }
 

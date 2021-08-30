@@ -54,7 +54,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     [presets.test]
     parent = 'test_base'
     program = './target/_test_temp/sleeper'
-    args_template = '{args_switches} {repeat_position}'
+    args_template = '{args_switches} {repeat_num}'
     args_switches = '--example-switch'
 
     [order]
