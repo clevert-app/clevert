@@ -5,19 +5,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-fn main() {
-    // gui::gui_run();
-    cui_main();
-}
-
 fn cui_run() -> Result<(), Error> {
     let cfg = {
         let mut config = Config::new()?;
         // eprintln!("std::env::args = {:?}", std::env::args());
-        let args_input: Vec<String> = std::env::args()
-            .skip(1) // Skip argv[0]
-            .filter(|arg| !arg.starts_with('-')) // Skip switches
-            .collect();
+        let args_input: Vec<String> = std::env::args().skip(1).collect();
         if !args_input.is_empty() {
             config.input_list = Some(args_input);
         }
@@ -99,4 +91,9 @@ fn cui_main() {
         "took {:.2} seconds",
         time_now.elapsed().unwrap().as_secs_f64(),
     ));
+}
+
+fn main() {
+    // gui::gui_run();
+    cui_main();
 }

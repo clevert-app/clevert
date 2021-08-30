@@ -1,9 +1,5 @@
-<div align="center">
-<h1>cmdfactory</h1>
-<p>Multi-threaded extensible cli assistant for file conversion, etc.</p>
-<img src="https://flat.badgen.net/github/release/kkocdko/cmdfactory?color=4caf50">
-<img src="https://flat.badgen.net/github/license/kkocdko/cmdfactory?color=4caf50">
-</div>
+> ## *cmdfactory*
+> *Multi-threaded extensible cli assistant for file conversion, etc.*
 
 ### Warning
 

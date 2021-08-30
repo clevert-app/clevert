@@ -94,46 +94,46 @@ pub struct Order {
 }
 
 impl Order {
+    fn exec_command(mut command: Command, index: usize, mutex: &Mutex<Status>) -> io::Result<()> {
+        let mut status = mutex.lock().unwrap();
+
+        command.stdout(&status.stdout);
+        command.stderr(&status.stderr);
+
+        let mut child = command.spawn()?;
+        let handle = child_kit::get_handle(&child);
+        status.childs[index] = Some(handle);
+
+        drop(status); // Drop here to free the mutex
+
+        let wait_result = child_kit::wait(handle);
+
+        let mut status = mutex.lock().unwrap();
+
+        status.childs[index] = None; // Immediately!
+
+        status.stdout.write(&mut child.stdout)?;
+        status.stderr.write(&mut child.stderr)?;
+
+        wait_result?; // Defer throwing error
+        Ok(())
+    }
+
     fn spawn(&self, index: usize) {
         let skip_panic = self.skip_panic;
-        let status_mutex = Arc::clone(&self.status);
+        let mutex = Arc::clone(&self.status);
         thread::spawn(move || {
-            let get_status = || status_mutex.lock().unwrap();
-            let exec = |mut command: Command| {
-                let mut status = get_status();
-
-                command.stdout(&status.stdout);
-                command.stderr(&status.stderr);
-
-                let mut child = command.spawn()?;
-                let handle = child_kit::get_handle(&child);
-                status.childs[index] = Some(handle);
-
-                drop(status); // Drop here to free the mutex
-
-                let wait_result = child_kit::wait(handle);
-
-                let mut status = get_status();
-
-                status.childs[index] = None; // Immediately!
-
-                status.stdout.write(&mut child.stdout)?;
-                status.stderr.write(&mut child.stderr)?;
-
-                wait_result?; // Defer throwing error
-                Ok(())
-            };
             while let Some(command) = {
-                let mut status = get_status();
+                let mut status = mutex.lock().unwrap();
                 status.commands.next()
             } {
-                let result = exec(command);
+                let result = Self::exec_command(command, index, &mutex);
                 if !skip_panic && result.is_err() {
-                    get_status().result = Some(result);
+                    mutex.lock().unwrap().result = Some(result);
                     break;
                 }
             }
-            let mut status = get_status();
+            let mut status = mutex.lock().unwrap();
             status.childs[index] = None; // Maybe useless?
             status.actives_count -= 1;
             status.cvar.notify_one();
@@ -372,15 +372,16 @@ impl Order {
                         "{args_switches}" => c.args(&args_switches),
                         "{input_file}" => c.arg(&input_file),
                         "{output_file}" => {
-                            if cfg.output_suffix_of_repeat.unwrap() && index != 0 {
+                            if cfg.output_suffix_of_repeat.unwrap() && cfg.repeat_count.unwrap() > 0
+                            {
                                 let stem = output_file.file_stem().unwrap().to_str().unwrap();
-                                c.arg(output_file.with_file_name(format!("{}_{}", stem, index)))
+                                // BUG: extension?
+                                c.arg(output_file.with_file_name(format!("{}_{}", stem, index + 1)))
                             } else {
                                 c.arg(&output_file)
                             }
                         }
                         "{output_dir}" => c.arg(output_file.parent().unwrap()),
-                        "{repeat_index}" => c.arg(index.to_string()),
                         "{repeat_position}" => c.arg((index + 1).to_string()),
                         _ => c.arg(part),
                     };
