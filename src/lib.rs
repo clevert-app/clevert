@@ -47,12 +47,12 @@ impl std::error::Error for Error {}
 enum StdioCfg {
     Normal,
     Ignore,
-    ToFile(File),
+    File(File),
 }
 
 impl StdioCfg {
     fn write(&mut self, stdio: &mut Option<impl Read>) -> io::Result<()> {
-        if let StdioCfg::ToFile(file) = self {
+        if let StdioCfg::File(file) = self {
             if let Some(mut stream) = stdio.take() {
                 let buf = &mut Vec::new();
                 stream.read_to_end(buf)?;
@@ -67,7 +67,7 @@ impl From<&StdioCfg> for Stdio {
     fn from(s: &StdioCfg) -> Stdio {
         match s {
             StdioCfg::Ignore => Stdio::null(),
-            StdioCfg::ToFile(_) => Stdio::piped(),
+            StdioCfg::File(_) => Stdio::piped(),
             StdioCfg::Normal => Stdio::inherit(),
         }
     }
@@ -94,40 +94,39 @@ pub struct Order {
 }
 
 impl Order {
-    fn exec_command(mut command: Command, index: usize, mutex: &Mutex<Status>) -> io::Result<()> {
-        let mut status = mutex.lock().unwrap();
-
-        command.stdout(&status.stdout);
-        command.stderr(&status.stderr);
-
-        let mut child = command.spawn()?;
-        let handle = child_kit::get_handle(&child);
-        status.childs[index] = Some(handle);
-
-        drop(status); // Drop here to free the mutex
-
-        let wait_result = child_kit::wait(handle);
-
-        let mut status = mutex.lock().unwrap();
-
-        status.childs[index] = None; // Immediately!
-
-        status.stdout.write(&mut child.stdout)?;
-        status.stderr.write(&mut child.stderr)?;
-
-        wait_result?; // Defer throwing error
-        Ok(())
-    }
-
     fn spawn(&self, index: usize) {
         let skip_panic = self.skip_panic;
         let mutex = Arc::clone(&self.status);
         thread::spawn(move || {
+            let exec = |mut command: Command| {
+                let mut status = mutex.lock().unwrap();
+
+                command.stdout(&status.stdout);
+                command.stderr(&status.stderr);
+
+                let mut child = command.spawn()?;
+                let handle = child_kit::get_handle(&child);
+                status.childs[index] = Some(handle);
+
+                drop(status); // Drop here to free the mutex
+
+                let wait_result = child_kit::wait(handle);
+
+                let mut status = mutex.lock().unwrap();
+
+                status.childs[index] = None; // Immediately!
+
+                status.stdout.write(&mut child.stdout)?;
+                status.stderr.write(&mut child.stderr)?;
+
+                wait_result?; // Defer throwing error
+                Ok(())
+            };
             while let Some(command) = {
                 let mut status = mutex.lock().unwrap();
                 status.commands.next()
             } {
-                let result = Self::exec_command(command, index, &mutex);
+                let result = exec(command);
                 if !skip_panic && result.is_err() {
                     mutex.lock().unwrap().result = Some(result);
                     break;
@@ -396,7 +395,7 @@ impl Order {
         if commands.is_empty() {
             return Err(Error {
                 kind: ErrorKind::ConfigIllegal,
-                message: "no commands generated with order".to_string(),
+                message: "order did not generate any commands".to_string(),
                 ..Error::default()
             });
         }
@@ -421,7 +420,7 @@ impl Order {
                             inner: Box::new(e),
                             message: "stdio file can't write".to_string(),
                         })?;
-                    Ok(StdioCfg::ToFile(file))
+                    Ok(StdioCfg::File(file))
                 }
                 _ => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
@@ -448,3 +447,16 @@ impl Order {
         })
     }
 }
+
+// struct Order2 {
+//     commands: Vec<Command>,
+// }
+
+// impl Order2 {
+//     fn start(self) {
+//         for mut c in self.commands {
+//             let child = c.spawn().unwrap();
+//             child.wait_with_output();
+//         }
+//     }
+// }
