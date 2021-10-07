@@ -1,17 +1,16 @@
 name: CI
 
-on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
-
-env:
-  CARGO_TERM_COLOR: always
+on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.rust }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable]
 
     steps:
       - uses: actions/checkout@v2
@@ -22,14 +21,12 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
 
-      # - name: Run tests on x86_64-apple-darwin
-      #   run: cargo test --verbose --target=x86_64-apple-darwin
-
       - name: Build
-        run: cargo build --release && strip ./target/release/cmdfactory
+        # run: cargo build --release && strip ./target/release/cmdfactory
+        run: cargo build --release
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: build-release
+          name: build-release-${{ matrix.os }}
           path: target/release/cmdfactory

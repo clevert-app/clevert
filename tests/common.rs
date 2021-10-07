@@ -31,6 +31,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     fs::write(test_dir.join("sleeper.rs"), src_content)?;
+
     let mut command = Command::new("rustc");
     command
         .arg("-o")

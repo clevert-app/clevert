@@ -1,10 +1,12 @@
 mod child_kit;
 mod config;
+// mod order_next;
 mod toml_seek;
+use child_kit::ChildHandle;
 pub use config::Config;
 use std::fmt;
-use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::fs;
+use std::io;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
@@ -47,36 +49,23 @@ impl std::error::Error for Error {}
 enum StdioCfg {
     Normal,
     Ignore,
-    File(File),
-}
-
-impl StdioCfg {
-    fn write(&mut self, stdio: &mut Option<impl Read>) -> io::Result<()> {
-        if let StdioCfg::File(file) = self {
-            if let Some(mut stream) = stdio.take() {
-                let buf = &mut Vec::new();
-                stream.read_to_end(buf)?;
-                file.write_all(buf)?;
-            }
-        }
-        Ok(())
-    }
+    File(fs::File),
 }
 
 impl From<&StdioCfg> for Stdio {
     fn from(s: &StdioCfg) -> Stdio {
         match s {
-            StdioCfg::Ignore => Stdio::null(),
-            StdioCfg::File(_) => Stdio::piped(),
             StdioCfg::Normal => Stdio::inherit(),
+            StdioCfg::Ignore => Stdio::null(),
+            StdioCfg::File(file) => file.try_clone().unwrap().into(),
         }
     }
 }
 
 struct Status {
     commands: IntoIter<Command>,
-    childs: Vec<Option<child_kit::ChildHandle>>,
-    actives_count: usize,
+    actions: Vec<(Option<thread::JoinHandle<()>>, Option<ChildHandle>)>,
+    paused: bool,
     cvar: Arc<Condvar>,
     stdout: StdioCfg,
     stderr: StdioCfg,
@@ -97,33 +86,28 @@ impl Order {
     fn spawn(&self, index: usize) {
         let skip_panic = self.skip_panic;
         let mutex = Arc::clone(&self.status);
-        thread::spawn(move || {
+        let handle = thread::spawn(move || {
             let exec = |mut command: Command| {
                 let mut status = mutex.lock().unwrap();
-
-                command.stdout(&status.stdout);
-                command.stderr(&status.stderr);
-
-                let mut child = command.spawn()?;
-                let handle = child_kit::get_handle(&child);
-                status.childs[index] = Some(handle);
-
+                command.stdout(&status.stdout).stderr(&status.stderr);
+                let child_handle = ChildHandle::from(command.spawn()?);
+                status.actions[index].1 = Some(child_handle);
                 drop(status); // Drop here to free the mutex
 
-                let wait_result = child_kit::wait(handle);
+                let wait_result = child_handle.wait();
 
                 let mut status = mutex.lock().unwrap();
-
-                status.childs[index] = None; // Immediately!
-
-                status.stdout.write(&mut child.stdout)?;
-                status.stderr.write(&mut child.stderr)?;
-
+                status.actions[index].1 = None; // Immediately!
                 wait_result?; // Defer throwing error
                 Ok(())
             };
             while let Some(command) = {
                 let mut status = mutex.lock().unwrap();
+                if status.paused {
+                    drop(status);
+                    thread::park();
+                    status = mutex.lock().unwrap();
+                }
                 status.commands.next()
             } {
                 let result = exec(command);
@@ -133,16 +117,19 @@ impl Order {
                 }
             }
             let mut status = mutex.lock().unwrap();
-            status.childs[index] = None; // Maybe useless?
-            status.actives_count -= 1;
+            status.actions[index] = (None, None);
             status.cvar.notify_one();
         });
+        let mut status = self.status.lock().unwrap();
+        status.actions[index].0 = Some(handle);
     }
 
     pub fn start(&self) {
         let mut status = self.status.lock().unwrap();
         status.result = Some(Ok(()));
-        for index in 0..status.actives_count {
+        let actions_count = status.actions.len();
+        drop(status);
+        for index in 0..actions_count {
             self.spawn(index);
         }
     }
@@ -152,7 +139,7 @@ impl Order {
         let status = self.status.lock().unwrap();
         let total = self.commands_count;
         let idle = status.commands.len();
-        let active = status.actives_count;
+        let active = status.actions.iter().filter(|o| o.0.is_some()).count();
         let finished = (total - idle).saturating_sub(active);
         (finished, total)
     }
@@ -162,7 +149,8 @@ impl Order {
         let cvar = Arc::clone(&status.cvar);
         let condition = |s: &mut Status| {
             // `false` means stop waiting
-            if s.actives_count == 0 {
+            if s.actions.iter().all(|i| i.0.is_none() && i.1.is_none()) {
+                // all actions finished
                 false
             } else if let Some(r) = &s.result {
                 r.is_ok()
@@ -192,30 +180,34 @@ impl Order {
     pub fn terminate(&self) -> io::Result<()> {
         self.cease();
         let mut status = self.status.lock().unwrap();
-        for handle_opt in &mut status.childs {
+        for (_, handle_opt) in &mut status.actions {
             if let Some(h) = handle_opt.take() {
-                child_kit::kill(h)?;
+                h.kill()?;
             }
         }
         Ok(())
     }
 
     pub fn pause(&self) -> io::Result<()> {
-        // BUG: miss thread
-        let status = self.status.lock().unwrap();
-        for handle_opt in &status.childs {
-            if let Some(h) = *handle_opt {
-                child_kit::suspend(h)?;
+        let mut status = self.status.lock().unwrap();
+        status.paused = true;
+        for (_, child) in &status.actions {
+            if let Some(h) = child {
+                h.suspend()?;
             }
         }
         Ok(())
     }
 
     pub fn resume(&self) -> io::Result<()> {
-        let status = self.status.lock().unwrap();
-        for handle_opt in &status.childs {
-            if let Some(h) = *handle_opt {
-                child_kit::resume(h)?;
+        let mut status = self.status.lock().unwrap();
+        status.paused = false;
+        for (thread, child) in &status.actions {
+            if let Some(h) = thread {
+                h.thread().unpark();
+            }
+            if let Some(h) = child {
+                h.resume()?;
             }
         }
         Ok(())
@@ -433,8 +425,8 @@ impl Order {
         let commands_count = commands.len();
         let status = Status {
             commands: commands.into_iter(),
-            childs: (0..actives_count).map(|_| None).collect(),
-            actives_count,
+            actions: (0..actives_count).map(|_| (None, None)).collect(), // TODO
+            paused: false,
             cvar: Arc::new(Condvar::new()),
             stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
             stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
@@ -447,16 +439,3 @@ impl Order {
         })
     }
 }
-
-// struct Order2 {
-//     commands: Vec<Command>,
-// }
-
-// impl Order2 {
-//     fn start(self) {
-//         for mut c in self.commands {
-//             let child = c.spawn().unwrap();
-//             child.wait_with_output();
-//         }
-//     }
-// }
