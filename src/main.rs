@@ -65,8 +65,8 @@ fn cui_run() -> Result<(), Error> {
                     log::info("user turn off the command operation");
                     break;
                 }
-                _ => {
-                    log::warn("unknown operation");
+                unop => {
+                    log::warn(format!("unknown operation: {}", unop));
                 }
             };
         });

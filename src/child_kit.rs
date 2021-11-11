@@ -8,7 +8,7 @@ mod sys {
     use std::io;
 
     fn send_signal(pid: u32, signal: libc::c_int) -> io::Result<()> {
-        match unsafe { libc::kill(pid as libc::pid_t, signal) } {
+        match unsafe { libc::kill(pid as _, signal) } {
             -1 => Err(io::Error::last_os_error()),
             _ => Ok(()),
         }
@@ -28,7 +28,7 @@ mod sys {
                     let mut siginfo = std::mem::zeroed();
                     libc::waitid(
                         libc::P_PID,
-                        self.0 as libc::id_t,
+                        self.0 as _,
                         &mut siginfo,
                         libc::WEXITED | libc::WNOWAIT,
                     )
@@ -82,7 +82,7 @@ mod sys {
     type NTSTATUS = c_long;
     type FnNtProcess = extern "stdcall" fn(HANDLE) -> NTSTATUS;
 
-    const FALSE: BOOL = false as BOOL;
+    const FALSE: BOOL = false as _;
     const INFINITE: DWORD = 0xFFFFFFFF;
     const WAIT_OBJECT_0: DWORD = 0x00000000_u32;
     const STATUS_SUCCESS: LONG = 0x00000000;
@@ -100,9 +100,9 @@ mod sys {
     }
 
     unsafe fn get_nt_function(name: &[u8]) -> FnNtProcess {
-        let module_handle = GetModuleHandleA(b"ntdll\0".as_ptr() as LPCSTR);
-        let address = GetProcAddress(module_handle, name.as_ptr() as LPCSTR);
-        transmute::<*const usize, FnNtProcess>(address as *const usize)
+        let module_handle = GetModuleHandleA(b"ntdll\0".as_ptr() as _);
+        let address = GetProcAddress(module_handle, name.as_ptr() as _);
+        transmute::<*const usize, FnNtProcess>(address as _)
     }
 
     #[derive(Copy, Clone)]
