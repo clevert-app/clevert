@@ -16,6 +16,7 @@ pub struct Config {
     pub stderr_type: Option<String>,
     pub stderr_file: Option<String>,
     pub program: Option<String>,
+    pub current_dir: Option<String>,
     pub args_template: Option<String>,
     pub args_switches: Option<String>,
     pub input_list: Option<Vec<String>>,
@@ -55,6 +56,7 @@ impl Config {
         c(&mut t.stderr_type, &s.stderr_type);
         c(&mut t.stderr_file, &s.stderr_file);
         c(&mut t.program, &s.program);
+        c(&mut t.current_dir, &s.current_dir);
         c(&mut t.args_template, &s.args_template);
         c(&mut t.args_switches, &s.args_switches);
         c(&mut t.input_list, &s.input_list);
@@ -85,6 +87,7 @@ impl Config {
             stderr_type: v.seek_str("stderr_type"),
             stderr_file: v.seek_str("stderr_file"),
             program: v.seek_str("program"),
+            current_dir: v.seek_str("current_dir"),
             args_template: v.seek_str("args_template"),
             args_switches: v.seek_str("args_switches"),
             input_list: v.seek_vec_str("input_list"),
@@ -128,6 +131,7 @@ impl Config {
             stderr_type: Some("ignore".to_string()),
             stderr_file: None,
             program: None,
+            current_dir: None,
             args_template: Some(String::new()),
             args_switches: Some(String::new()),
             input_list: None,

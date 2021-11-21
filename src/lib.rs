@@ -260,10 +260,10 @@ impl Order {
 
             // Set prefix and suffix
             if let Some(prefix) = &cfg.output_prefix {
-                file_name.insert_str(0, &prefix);
+                file_name.insert_str(0, prefix);
             }
             if let Some(suffix) = &cfg.output_suffix {
-                file_name.push_str(&suffix);
+                file_name.push_str(suffix);
             }
 
             let mut output_file = match &cfg.output_dir {
@@ -390,6 +390,12 @@ impl Order {
                 message: "order did not generate any commands".to_string(),
                 ..Error::default()
             });
+        }
+
+        if let Some(dir) = &cfg.current_dir {
+            for command in &mut commands {
+                command.current_dir(dir);
+            }
         }
 
         let stdpipe = |type_opt: &Option<String>, path_opt: &Option<String>| {

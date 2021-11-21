@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 fn message(kind: &str, content: impl Display) -> String {
-    format!("[ cmdfactory : {} ] {}", kind, content)
+    format!("[cmdfactory:{}] {}", kind, content)
 }
 
 pub fn info(msg: impl Display) {
