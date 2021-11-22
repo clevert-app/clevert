@@ -90,8 +90,7 @@ mod sys {
     const SYNCHRONIZE: DWORD = 0x00100000;
     const PROCESS_ALL_ACCESS: DWORD = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF;
 
-    #[link(name = "kernel32", kind = "dylib")]
-    extern "C" {
+    extern "system" {
         fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
         fn TerminateProcess(hProcess: HANDLE, uExitCode: UINT) -> BOOL;
         fn GetProcAddress(hModule: HMODULE, lpProcName: LPCSTR) -> FARPROC;

@@ -427,7 +427,7 @@ impl Order {
                 }),
             }
         };
-        let actives_count = cfg.threads_count.unwrap() as usize;
+        let actives_count = cfg.threads_count.unwrap();
         let commands_count = commands.len();
         let status = Status {
             commands: commands.into_iter(),

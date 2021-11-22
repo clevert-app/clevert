@@ -109,21 +109,21 @@ impl Config {
     }
 
     pub fn from_toml(toml_str: String) -> Result<Self, Error> {
-        let cfg: toml::Value = toml_str.parse().unwrap();
-        let mut order = Self::from_toml_value(cfg.get("order").unwrap());
+        let raw: toml::Value = toml_str.parse().unwrap();
+        let mut cfg = Self::from_toml_value(raw.get("order").unwrap());
         let mut presets = HashMap::new();
-        for (k, v) in cfg.get("presets").unwrap().as_table().unwrap() {
+        for (k, v) in raw.get("presets").unwrap().as_table().unwrap() {
             let preset = Self::from_toml_value(v);
             presets.insert(k.clone(), preset);
         }
-        Self::fit(&mut order, presets)?;
-        Ok(order)
+        Self::fit(&mut cfg, presets)?;
+        Ok(cfg)
     }
 
     pub fn default() -> Self {
         Self {
             parent: None,
-            threads_count: Some(1),
+            threads_count: Some(0), // 0 means count of processors
             skip_panic: Some(false),
             repeat_count: Some(1),
             stdout_type: Some("ignore".to_string()), // normal | ignore | file
@@ -152,9 +152,9 @@ impl Config {
         }
     }
 
-    fn fit(order: &mut Self, presets: HashMap<String, Self>) -> Result<(), Error> {
+    fn fit(cfg: &mut Self, presets: HashMap<String, Self>) -> Result<(), Error> {
         fn inherit_fill(
-            order: &mut Config,
+            cfg: &mut Config,
             presets: &HashMap<String, Config>,
             depth: i32,
         ) -> Result<(), Error> {
@@ -165,19 +165,36 @@ impl Config {
                     ..Error::default()
                 });
             }
-            if let Some(k) = &order.parent {
+            if let Some(k) = &cfg.parent {
                 if let Some(parent) = presets.get(k) {
-                    order.complement(parent);
-                    order.parent = parent.parent.clone();
-                    inherit_fill(order, presets, depth + 1)?;
+                    cfg.complement(parent);
+                    cfg.parent = parent.parent.clone();
+                    inherit_fill(cfg, presets, depth + 1)?;
                 }
             }
             Ok(())
         }
-        inherit_fill(order, &presets, 0)?;
-        order.parent = Some("default".to_string());
-        inherit_fill(order, &presets, 0)?;
-        order.complement(&Self::default());
+        inherit_fill(cfg, &presets, 0)?;
+        cfg.parent = Some("default".to_string());
+        inherit_fill(cfg, &presets, 0)?;
+        cfg.complement(&Self::default());
+
+        // 0 means count of processors
+        if cfg.threads_count.unwrap() == 0 {
+            #[cfg(unix)]
+            let count = fs::read_to_string("/proc/cpuinfo")
+                .unwrap()
+                .split('\n')
+                .filter(|line| line.starts_with("processor"))
+                .count() as _;
+            #[cfg(windows)]
+            let count = std::env::var("number_of_processors")
+                .unwrap()
+                .parse::<i32>()
+                .unwrap();
+            cfg.threads_count.replace(count);
+        };
+
         Ok(())
     }
 
