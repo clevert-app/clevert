@@ -2,7 +2,7 @@
 
 pub use sys::*;
 
-#[cfg(unix)]
+#[cfg(not(windows))]
 mod sys {
     extern crate libc;
     use std::io;
