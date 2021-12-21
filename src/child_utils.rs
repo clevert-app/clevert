@@ -6,6 +6,7 @@ pub use sys::*;
 mod sys {
     extern crate libc;
     use std::io;
+    use std::process::Child;
 
     fn send_signal(pid: u32, signal: libc::c_int) -> io::Result<()> {
         match unsafe { libc::kill(pid as _, signal) } {
@@ -15,7 +16,7 @@ mod sys {
     }
 
     pub struct WaitHandle(u32);
-    
+
     impl WaitHandle {
         pub fn from_child(child: &Child) -> Self {
             Self(child.id())
