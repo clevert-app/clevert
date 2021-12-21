@@ -162,7 +162,7 @@ impl Config {
                 return Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     message: "preset deep > 64, loop reference?".to_string(),
-                    ..Error::default()
+                    ..Default::default()
                 });
             }
             if let Some(k) = &cfg.parent {
@@ -214,7 +214,7 @@ impl Config {
         Err(Error {
             kind: ErrorKind::ConfigFileCanNotRead,
             message: "the config file was not found".to_string(),
-            ..Error::default()
+            ..Default::default()
         })
     }
 }

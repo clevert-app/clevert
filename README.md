@@ -16,11 +16,11 @@ But in my opinion, it's not enough and we couldn't stop at this. So *cmdfactory*
 
 * To be a universal solution. You should not care about different software's different behavior.
 
+* Parallelized. Let's take advantage of all of your CPU cores.
+
 * Flexible and extensible. Load file type supports from `profile pack`, you could even make your own `profile pack` to support more files.
 
-* Multi-threading. Let's take advantage of all of your CPU cores.
-
-## Usage
+## Note
 
 ```
 https://wiki.inkscape.org/wiki/Using_the_Command_Line
@@ -30,9 +30,14 @@ https://inkscape.org/doc/inkscape-man.html
 ## Todo List
 
 0. Help document and Intro.
-1. GUI using wxWidgets.
+1. TUI? Drag and drop supports.
 2. StdIn.
-3. Debug options, output command info.
+3. Debug options, output command info. But [seem troublesome](https://github.com/rust-lang/rust/issues/44434).
+4. Profile packs.
+
+## Mentions
+
+Do **NOT** use mixed toolchain for `cargo test` on Windows (such as `llvm-mingw` + `rust-x86_64-pc-windows-gnu`).
 
 ## Alternative
 

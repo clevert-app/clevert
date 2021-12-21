@@ -2,45 +2,35 @@ use cmdfactory::*;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 #[test]
 pub fn common() -> Result<(), Box<dyn std::error::Error>> {
-    let src_content = r#"
+    let dir = PathBuf::from("./target/_test_temp");
+    let _ = fs::remove_dir_all(&dir); // Ignore error when dir not exists
+    fs::create_dir_all(dir.join("input"))?;
+    for i in 0..4 {
+        fs::write(dir.join("input").join(i.to_string()), "")?;
+    }
+
+    let sleeper_src = r#"
     fn main() {
-        let arg = std::env::args().last().unwrap();
-        let num: u64 = arg.parse().expect("need number argument");
-        let remainder = num % 2; // 0 or 1
-        println!("{}", &remainder);
-        eprintln!("{}", &remainder);
-        let millis = remainder * 25 + 50;
-        let dur = std::time::Duration::from_millis(millis);
-        std::thread::sleep(dur);
+        let r = std::env::args().last().unwrap().parse::<u64>().unwrap() % 2;
+        std::thread::sleep(std::time::Duration::from_millis(r * 25 + 50));
+        print!("{}", r);
+        eprint!("{}", r);
     }
     "#;
-
-    let test_dir = PathBuf::from("./target/_test_temp");
-    let _ = fs::remove_dir_all(&test_dir); // Ignore error when dir not exists
-    fs::create_dir_all(test_dir.join("input"))?;
-
-    for i in 0..4 {
-        let file_path = test_dir.join("input").join(i.to_string());
-        fs::write(file_path, "")?;
-    }
-
-    fs::write(test_dir.join("sleeper.rs"), src_content)?;
-
-    let mut command = Command::new("rustc");
-    command
+    fs::write(dir.join("sleeper.rs"), sleeper_src)?;
+    let mut sleeper_build = Command::new("rustc");
+    sleeper_build
         .arg("-o")
-        .arg(test_dir.join("sleeper")) // Executable
-        .arg(test_dir.join("sleeper.rs")); // Source
-    let child = command.spawn()?;
-    child.wait_with_output()?;
+        .arg(dir.join("sleeper"))
+        .arg(dir.join("sleeper.rs"));
+    sleeper_build.spawn()?.wait_with_output()?;
 
-    let toml_str = r#"
+    let cfg_toml = r#"
     [presets.default]
     threads_count = 4
     repeat_count = 10
@@ -64,26 +54,19 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     output_dir = './target/_test_temp/output'
     "#
     .to_string();
-    let cfg = Config::from_toml(toml_str)?;
-    let order = Arc::new(Order::new(&cfg)?);
+    let cfg = Config::from_toml(cfg_toml)?;
+    let order = Order::new(&cfg)?;
     order.start();
-
     thread::sleep(Duration::from_millis(75));
     order.pause()?;
     thread::sleep(Duration::from_millis(200));
     order.resume()?;
-
     order.wait_result()?;
 
-    let read_log_sum = |name: &str| -> Result<i32, Box<dyn std::error::Error>> {
-        let vec = fs::read(test_dir.join(name))?;
-        let mut sum = 0;
-        for part in String::from_utf8(vec)?.split_whitespace() {
-            sum += part.parse::<i32>()?;
-        }
-        Ok(sum)
+    let read_log_sum = |name| -> Result<u8, Box<dyn std::error::Error>> {
+        let content = fs::read(dir.join(name))?;
+        Ok(content.iter().map(|ch| ch - '0' as u8).sum())
     };
-
     assert_eq!(read_log_sum("stdout.log")?, 20);
     assert_eq!(read_log_sum("stderr.log")?, 20);
 

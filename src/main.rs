@@ -42,31 +42,31 @@ fn cui_run() -> Result<(), Error> {
             println!();
             match input.trim() {
                 "t" => {
-                    log::info("op : terminate");
+                    log::info("<t> terminate triggered");
                     order.terminate().unwrap();
                     break;
                 }
                 "c" => {
-                    log::info("op : cease");
+                    log::info("<c> cease triggered");
                     order.cease();
                     break;
                 }
                 "p" => {
-                    log::info("op : pause");
+                    log::info("<p> pause triggered");
                     order.pause().unwrap();
                     break;
                 }
                 "r" => {
-                    log::info("op : resume");
+                    log::info("<r> resume triggered");
                     order.resume().unwrap();
                     break;
                 }
                 "i" => {
-                    log::info("user turn off the command operation");
+                    log::info("<i> user turn off the command operation");
                     break;
                 }
-                unop => {
-                    log::warn(format!("unknown operation: {}", unop));
+                op => {
+                    log::warn(format!("<{}> unknown operation", op));
                 }
             };
         });
@@ -75,7 +75,7 @@ fn cui_run() -> Result<(), Error> {
     order.wait_result().map_err(|e| Error {
         kind: ErrorKind::ExecutePanic,
         inner: Box::new(e),
-        ..Error::default()
+        ..Default::default()
     })?;
 
     Ok(())

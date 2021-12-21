@@ -28,8 +28,8 @@ pub struct Error {
     pub message: String,
 }
 
-impl Error {
-    pub fn default() -> Self {
+impl std::default::Default for Error {
+    fn default() -> Self {
         Self {
             kind: ErrorKind::UnknownError,
             inner: Box::new(Option::<()>::None),
@@ -306,7 +306,7 @@ impl Order {
                         return Err(Error {
                             kind: ErrorKind::ConfigIllegal,
                             message: "output overwrite forbidden".to_string(),
-                            ..Error::default()
+                            ..Default::default()
                         });
                     }
                 }
@@ -325,7 +325,7 @@ impl Order {
                     return Err(Error {
                         kind: ErrorKind::ConfigIllegal,
                         message: "`output_overwrite` value invalid".to_string(),
-                        ..Error::default()
+                        ..Default::default()
                     });
                 }
             };
@@ -339,7 +339,7 @@ impl Order {
                 return Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     message: "args' quotation mask is not closed".to_string(),
-                    ..Error::default()
+                    ..Default::default()
                 });
             }
             let mut vec = Vec::new();
@@ -380,6 +380,7 @@ impl Order {
                         _ => command.arg(part),
                     };
                 }
+                // command.get_args(); // https://github.com/rust-lang/rust/issues/44434
                 commands.push(command);
             }
         }
@@ -388,7 +389,7 @@ impl Order {
             return Err(Error {
                 kind: ErrorKind::ConfigIllegal,
                 message: "order did not generate any commands".to_string(),
-                ..Error::default()
+                ..Default::default()
             });
         }
 
@@ -407,7 +408,7 @@ impl Order {
                     let path = path_opt.as_ref().ok_or_else(|| Error {
                         kind: ErrorKind::ConfigIllegal,
                         message: "stdio file unknown".to_string(),
-                        ..Error::default()
+                        ..Default::default()
                     })?;
                     let file = fs::OpenOptions::new()
                         .write(true)
@@ -423,25 +424,24 @@ impl Order {
                 _ => Err(Error {
                     kind: ErrorKind::ConfigIllegal,
                     message: "stdio type unknown".to_string(),
-                    ..Error::default()
+                    ..Default::default()
                 }),
             }
         };
-        let actives_count = cfg.threads_count.unwrap();
-        let commands_count = commands.len();
-        let status = Status {
-            commands: commands.into_iter(),
-            actions: (0..actives_count).map(|_| (None, None)).collect(), // TODO
-            paused: false,
-            cvar: Arc::new(Condvar::new()),
-            stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
-            stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
-            result: None,
-        };
         Ok(Self {
-            commands_count,
+            commands_count: commands.len(),
             skip_panic: cfg.skip_panic.unwrap(),
-            status: Arc::new(Mutex::new(status)),
+            status: Arc::new(Mutex::new(Status {
+                commands: commands.into_iter(),
+                actions: (0..cfg.threads_count.unwrap())
+                    .map(|_| (None, None))
+                    .collect(),
+                paused: false,
+                cvar: Arc::new(Condvar::new()),
+                stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
+                stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
+                result: None,
+            })),
         })
     }
 }
