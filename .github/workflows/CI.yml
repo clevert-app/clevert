@@ -6,7 +6,7 @@ jobs:
   build:
     name: ${{ matrix.rust }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 5
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -15,11 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: List Targets
-        run: rustup target list --installed
+      - name: Show toolchain info
+        run: rustup toolchain list && rustup target list --installed 
 
       - name: Run cargo build
-        run: cargo build --release # && strip ./target/release/cmdfactory
+        run: cargo build # --release && strip ./target/release/cmdfactory
 
       - name: Run cargo test
         run: cargo test --verbose
@@ -27,5 +27,5 @@ jobs:
       # - name: Upload Artifacts
       #   uses: actions/upload-artifact@v2
       #   with:
-      #     name: build-release-${{ matrix.os }}
+      #     name: build-${{ matrix.os }}
       #     path: target/release/cmdfactory

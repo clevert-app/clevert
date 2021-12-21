@@ -1,14 +1,12 @@
-mod child_kit;
+mod child_utils;
 mod config;
-// mod order_next;
 mod toml_seek;
-use child_kit::ChildHandle;
 pub use config::Config;
 use std::fmt;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::vec::IntoIter;
@@ -64,7 +62,7 @@ impl From<&StdioCfg> for Stdio {
 
 struct Status {
     commands: IntoIter<Command>,
-    actions: Vec<(Option<thread::JoinHandle<()>>, Option<ChildHandle>)>,
+    actions: Vec<(Option<thread::JoinHandle<()>>, Option<Child>)>,
     paused: bool,
     cvar: Arc<Condvar>,
     stdout: StdioCfg,
@@ -90,11 +88,13 @@ impl Order {
             let exec = |mut command: Command| {
                 let mut status = mutex.lock().unwrap();
                 command.stdout(&status.stdout).stderr(&status.stderr);
-                let child_handle = ChildHandle::from(command.spawn()?);
-                status.actions[index].1 = Some(child_handle);
+                let child = command.spawn()?;
+                let wait_handle = child_utils::WaitHandle::from_child(&child);
+                status.actions[index].1 = Some(child);
                 drop(status); // Drop here to free the mutex
 
-                let wait_result = child_handle.wait();
+                // Dangerous!
+                let wait_result = wait_handle.wait();
 
                 let mut status = mutex.lock().unwrap();
                 status.actions[index].1 = None; // Immediately!
@@ -180,9 +180,9 @@ impl Order {
     pub fn terminate(&self) -> io::Result<()> {
         self.cease();
         let mut status = self.status.lock().unwrap();
-        for (_, handle_opt) in &mut status.actions {
-            if let Some(h) = handle_opt.take() {
-                h.kill()?;
+        for (_, child) in &mut status.actions {
+            if let Some(c) = &mut child.take() {
+                c.kill()?;
             }
         }
         Ok(())
@@ -191,9 +191,9 @@ impl Order {
     pub fn pause(&self) -> io::Result<()> {
         let mut status = self.status.lock().unwrap();
         status.paused = true;
-        for (_, child) in &status.actions {
-            if let Some(h) = child {
-                h.suspend()?;
+        for (_, child) in &mut status.actions {
+            if let Some(c) = child {
+                child_utils::suspend(c)?;
             }
         }
         Ok(())
@@ -202,12 +202,12 @@ impl Order {
     pub fn resume(&self) -> io::Result<()> {
         let mut status = self.status.lock().unwrap();
         status.paused = false;
-        for (thread, child) in &status.actions {
-            if let Some(h) = thread {
-                h.thread().unpark();
+        for (thread, child) in &mut status.actions {
+            if let Some(t) = thread {
+                t.thread().unpark();
             }
-            if let Some(h) = child {
-                h.resume()?;
+            if let Some(c) = child {
+                child_utils::resume(c)?;
             }
         }
         Ok(())

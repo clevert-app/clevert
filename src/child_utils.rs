@@ -14,11 +14,10 @@ mod sys {
         }
     }
 
-    #[derive(Copy, Clone)]
-    pub struct ChildHandle(u32);
-
-    impl ChildHandle {
-        pub fn from(child: std::process::Child) -> Self {
+    pub struct WaitHandle(u32);
+    
+    impl WaitHandle {
+        pub fn from_child(child: &Child) -> Self {
             Self(child.id())
         }
 
@@ -43,18 +42,22 @@ mod sys {
                 // We were interrupted. Loop and retry.
             }
         }
+    }
 
-        pub fn kill(&self) -> io::Result<()> {
-            send_signal(self.0, libc::SIGABRT)
+    pub fn suspend(child: &mut Child) -> io::Result<()> {
+        if let Ok(None) = child.try_wait() {
+        } else {
+            return Ok(());
         }
+        send_signal(child.id(), libc::SIGTSTP)
+    }
 
-        pub fn suspend(&self) -> io::Result<()> {
-            send_signal(self.0, libc::SIGTSTP)
+    pub fn resume(child: &mut Child) -> io::Result<()> {
+        if let Ok(None) = child.try_wait() {
+        } else {
+            return Ok(());
         }
-
-        pub fn resume(&self) -> io::Result<()> {
-            send_signal(self.0, libc::SIGCONT)
-        }
+        send_signal(child.id(), libc::SIGCONT)
     }
 }
 
@@ -68,11 +71,11 @@ mod sys {
 
     use std::io;
     use std::mem::transmute;
-    use std::os::raw::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
+    use std::os::raw::{c_char, c_long, c_ulong, c_void};
+    use std::os::windows::prelude::AsRawHandle;
+    use std::process::Child;
 
     // Copy from [winapi-rs](https://github.com/retep998/winapi-rs)
-    type BOOL = c_int;
-    type UINT = c_uint;
     type LONG = c_long;
     type DWORD = c_ulong;
     type HANDLE = *mut c_void;
@@ -82,17 +85,10 @@ mod sys {
     type NTSTATUS = c_long;
     type FnNtProcess = extern "stdcall" fn(HANDLE) -> NTSTATUS;
 
-    const FALSE: BOOL = false as _;
     const INFINITE: DWORD = 0xFFFFFFFF;
     const WAIT_OBJECT_0: DWORD = 0x00000000_u32;
     const STATUS_SUCCESS: LONG = 0x00000000;
-    const STANDARD_RIGHTS_REQUIRED: DWORD = 0x000F0000;
-    const SYNCHRONIZE: DWORD = 0x00100000;
-    const PROCESS_ALL_ACCESS: DWORD = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF;
-
     extern "system" {
-        fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
-        fn TerminateProcess(hProcess: HANDLE, uExitCode: UINT) -> BOOL;
         fn GetProcAddress(hModule: HMODULE, lpProcName: LPCSTR) -> FARPROC;
         fn GetModuleHandleA(lpModuleName: LPCSTR) -> HMODULE;
         fn WaitForSingleObject(hHandle: HANDLE, dwMilliseconds: DWORD) -> DWORD;
@@ -104,42 +100,41 @@ mod sys {
         transmute::<*const usize, FnNtProcess>(address as _)
     }
 
-    #[derive(Copy, Clone)]
-    pub struct ChildHandle(HANDLE);
+    pub struct WaitHandle(std::os::windows::io::RawHandle);
 
-    impl ChildHandle {
-        pub fn from(child: std::process::Child) -> Self {
-            Self(unsafe { OpenProcess(PROCESS_ALL_ACCESS, FALSE, child.id()) })
+    impl WaitHandle {
+        pub fn from_child(child: &Child) -> Self {
+            Self(child.as_raw_handle())
         }
-
         pub fn wait(&self) -> io::Result<()> {
             match unsafe { WaitForSingleObject(self.0, INFINITE) } {
                 WAIT_OBJECT_0 => Ok(()),
                 _ => Err(io::Error::last_os_error()),
             }
         }
+    }
 
-        pub fn kill(&self) -> io::Result<()> {
-            match unsafe { TerminateProcess(self.0, 0) } {
-                FALSE => Err(io::Error::last_os_error()),
-                _ => Ok(()),
-            }
+    pub fn suspend(child: &mut Child) -> io::Result<()> {
+        if let Ok(None) = child.try_wait() {
+        } else {
+            return Ok(());
         }
-
-        pub fn suspend(&self) -> io::Result<()> {
-            match unsafe { get_nt_function(b"NtSuspendProcess\0")(self.0) } {
-                STATUS_SUCCESS => Ok(()),
-                _ => Err(io::Error::last_os_error()),
-            }
-        }
-
-        pub fn resume(&self) -> io::Result<()> {
-            match unsafe { get_nt_function(b"NtResumeProcess\0")(self.0) } {
-                STATUS_SUCCESS => Ok(()),
-                _ => Err(io::Error::last_os_error()),
-            }
+        let raw_handle = child.as_raw_handle();
+        match unsafe { get_nt_function(b"NtSuspendProcess\0")(raw_handle) } {
+            STATUS_SUCCESS => Ok(()),
+            _ => Err(io::Error::last_os_error()),
         }
     }
 
-    unsafe impl std::marker::Send for ChildHandle {}
+    pub fn resume(child: &mut Child) -> io::Result<()> {
+        if let Ok(None) = child.try_wait() {
+        } else {
+            return Ok(());
+        }
+        let raw_handle = child.as_raw_handle();
+        match unsafe { get_nt_function(b"NtResumeProcess\0")(raw_handle) } {
+            STATUS_SUCCESS => Ok(()),
+            _ => Err(io::Error::last_os_error()),
+        }
+    }
 }
