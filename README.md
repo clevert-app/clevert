@@ -34,6 +34,7 @@ https://inkscape.org/doc/inkscape-man.html
 2. StdIn.
 3. Debug options, output command info. But [seem troublesome](https://github.com/rust-lang/rust/issues/44434).
 4. Profile packs.
+5. Test on MacOS.
 
 ## Mentions
 

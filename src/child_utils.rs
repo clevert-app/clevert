@@ -107,6 +107,7 @@ mod sys {
         pub fn from_child(child: &Child) -> Self {
             Self(child.as_raw_handle())
         }
+
         pub fn wait(&self) -> io::Result<()> {
             match unsafe { WaitForSingleObject(self.0, INFINITE) } {
                 WAIT_OBJECT_0 => Ok(()),
