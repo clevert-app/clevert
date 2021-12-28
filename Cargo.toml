@@ -1,17 +1,18 @@
 [package]
-name = "cmdfactory"
-version = "0.5.1"
+name = "convevo"
+version = "0.5.2"
 edition = "2021"
 
 [profile.release]
 panic = "abort"
 lto = "fat"
 codegen-units = 1
-# cargo build --release && strip ./target/release/cmdfactory.exe
+# cargo build --release && strip ./target/release/convevo.exe
 
 [dependencies]
 toml = "0.5.8"
-# anyhow = "1.0.44"
 
-[target."cfg(not(windows))".dependencies.libc]
-version = "0.2.112"
+# modified version of `shared_child`
+shared_child = { git = "https://github.com/convevo/shared_child.rs.git" }
+
+# anyhow = "1.0.44"

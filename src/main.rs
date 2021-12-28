@@ -1,6 +1,6 @@
 mod gui;
 mod log;
-use cmdfactory::*;
+use convevo::*;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};

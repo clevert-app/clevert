@@ -1,7 +1,7 @@
-mod child_utils;
 mod config;
 mod toml_seek;
 pub use config::Config;
+use shared_child::SharedChild;
 use std::fmt;
 use std::fs;
 use std::io;
@@ -94,11 +94,13 @@ impl Order {
                 drop(status); // Drop here to free the mutex
 
                 // Dangerous!
-                let wait_result = wait_handle.wait();
+                wait_handle.wait();
 
                 let mut status = mutex.lock().unwrap();
-                status.actions[index].1 = None; // Immediately!
-                wait_result?; // Defer throwing error
+                // Immediately!
+                if let Some(mut child) = status.actions[index].1.take() {
+                    child.wait()?;
+                }
                 Ok(())
             };
             while let Some(command) = {

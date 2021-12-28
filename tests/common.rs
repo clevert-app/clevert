@@ -1,4 +1,4 @@
-use cmdfactory::*;
+use convevo::*;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -57,10 +57,10 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::from_toml(cfg_toml)?;
     let order = Order::new(&cfg)?;
     order.start();
-    // thread::sleep(Duration::from_millis(75));
-    // order.pause()?;
-    // thread::sleep(Duration::from_millis(200));
-    // order.resume()?;
+    thread::sleep(Duration::from_millis(75));
+    order.pause()?;
+    thread::sleep(Duration::from_millis(200));
+    order.resume()?;
     order.wait_result()?;
 
     let read_log_sum = |name| -> Result<u8, Box<dyn std::error::Error>> {
@@ -82,9 +82,9 @@ skip_panic = false
 
 [presets.test_common]
 stdout_type = 'file' # normal | ignore | file
-stdout_file = './target/cmdfactory_test/stdout.log.txt'
+stdout_file = './target/convevo_test/stdout.log.txt'
 stderr_type = 'file'
-stderr_file = './target/cmdfactory_test/stderr.log.txt'
+stderr_file = './target/convevo_test/stderr.log.txt'
 program = 'test_common_'
 args_template = '{args_switches} {input_file} -o {output_file}'
 args_switches = '-m 6'
@@ -107,8 +107,8 @@ output_absolute = true
 
 [order]
 parent = 'cwebp'
-input_dir = './target/cmdfactory_test/input_dir'
-output_dir = './target/cmdfactory_test/output_dir'
+input_dir = './target/convevo_test/input_dir'
+output_dir = './target/convevo_test/output_dir'
 output_prefix = 'out_'
 output_suffix = '_out'
 "#

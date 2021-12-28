@@ -1,10 +1,10 @@
 > # ***WARNING: This project is still developing***
 
-# cmdfactory
+# convevo
 
-[![CI](https://img.shields.io/github/workflow/status/kkocdko/cmdfactory/CI?color=2a4)](https://github.com/kkocdko/cmdfactory/actions)
-[![Download](https://img.shields.io/github/downloads/kkocdko/cmdfactory/total?color=2a4)](https://github.com/kkocdko/cmdfactory/releases#:~:text=Assets)
-[![License](https://img.shields.io/github/license/kkocdko/cmdfactory?color=2a4)](LICENSE)
+[![CI](https://img.shields.io/github/workflow/status/convevo/convevo/CI?color=2a4)](https://github.com/convevo/convevo/actions)
+[![Download](https://img.shields.io/github/downloads/convevo/convevo/total?color=2a4)](https://github.com/convevo/convevo/releases#:~:text=Assets)
+[![License](https://img.shields.io/github/license/convevo/convevo?color=2a4)](LICENSE)
 
 Flexible cli assistant for file conversion, etc.
 
@@ -12,7 +12,7 @@ Flexible cli assistant for file conversion, etc.
 
 Today's file convertors always focus on a few file types, they build in some library like FFmpeg and provide a GUI for users.
 
-But in my opinion, it's not enough and we couldn't stop at this. So *cmdfactory* was born:
+But in my opinion, it's not enough and we couldn't stop at this. So *convevo* was born:
 
 * To be a universal solution. You should not care about different software's different behavior.
 
