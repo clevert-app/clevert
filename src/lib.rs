@@ -6,7 +6,7 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::vec::IntoIter;
@@ -62,7 +62,7 @@ impl From<&StdioCfg> for Stdio {
 
 struct Status {
     commands: IntoIter<Command>,
-    actions: Vec<(Option<thread::JoinHandle<()>>, Option<Child>)>,
+    actions: Vec<(Option<thread::JoinHandle<()>>, Option<Arc<SharedChild>>)>,
     paused: bool,
     cvar: Arc<Condvar>,
     stdout: StdioCfg,
@@ -88,19 +88,16 @@ impl Order {
             let exec = |mut command: Command| {
                 let mut status = mutex.lock().unwrap();
                 command.stdout(&status.stdout).stderr(&status.stderr);
-                let child = command.spawn()?;
-                let wait_handle = child_utils::WaitHandle::from_child(&child);
-                status.actions[index].1 = Some(child);
+                let child = SharedChild::spawn(&mut command)?;
+                let child = Arc::new(child);
+                status.actions[index].1 = Some(Arc::clone(&child));
                 drop(status); // Drop here to free the mutex
 
-                // Dangerous!
-                wait_handle.wait();
+                let wait_result = child.wait();
 
                 let mut status = mutex.lock().unwrap();
-                // Immediately!
-                if let Some(mut child) = status.actions[index].1.take() {
-                    child.wait()?;
-                }
+                status.actions[index].1 = None;
+                wait_result?; // defer throw
                 Ok(())
             };
             while let Some(command) = {
@@ -195,7 +192,7 @@ impl Order {
         status.paused = true;
         for (_, child) in &mut status.actions {
             if let Some(c) = child {
-                child_utils::suspend(c)?;
+                c.suspend()?;
             }
         }
         Ok(())
@@ -209,7 +206,7 @@ impl Order {
                 t.thread().unpark();
             }
             if let Some(c) = child {
-                child_utils::resume(c)?;
+                c.resume()?;
             }
         }
         Ok(())
