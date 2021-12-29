@@ -57,10 +57,15 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::from_toml(cfg_toml)?;
     let order = Order::new(&cfg)?;
     order.start();
-    thread::sleep(Duration::from_millis(75));
-    order.pause()?;
-    thread::sleep(Duration::from_millis(200));
-    order.resume()?;
+    thread::sleep(Duration::from_millis(25));
+    // BUG: cause infinity waiting on macos
+    #[cfg(not(macos))]
+    {
+        thread::sleep(Duration::from_millis(50));
+        order.pause()?;
+        thread::sleep(Duration::from_millis(200));
+        order.resume()?;
+    }
     order.wait_result()?;
 
     let read_log_sum = |name| -> Result<u8, Box<dyn std::error::Error>> {

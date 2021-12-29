@@ -11,8 +11,14 @@ codegen-units = 1
 
 [dependencies]
 toml = "0.5.8"
+serde = { version = "1.0.132", features = ["derive"] }
 
 # modified version of `shared_child`
 shared_child = { git = "https://github.com/convevo/shared_child.rs.git" }
 
 # anyhow = "1.0.44"
+
+# [dependencies.cursive]
+# version = "0.16.3"
+# default-features = false
+# features = ["crossterm-backend"]

@@ -36,10 +36,6 @@ https://inkscape.org/doc/inkscape-man.html
 4. Profile packs.
 5. Test on MacOS.
 
-## Mentions
-
-Do **NOT** use mixed toolchain for `cargo test` on Windows (such as `llvm-mingw` + `rust-x86_64-pc-windows-gnu`).
-
 ## Alternative
 
 - [Format Factory](https://pcfreetime.com/formatfactory/)

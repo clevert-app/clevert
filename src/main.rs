@@ -1,5 +1,5 @@
-mod gui;
 mod log;
+mod tui;
 use convevo::*;
 use std::sync::Arc;
 use std::thread;
@@ -94,6 +94,6 @@ fn cui_main() {
 }
 
 fn main() {
-    // gui::gui_run();
+    // tui::_tui_run();
     cui_main();
 }

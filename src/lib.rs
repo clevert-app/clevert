@@ -60,9 +60,15 @@ impl From<&StdioCfg> for Stdio {
     }
 }
 
+#[derive(Default)]
+struct Action {
+    thread: Option<thread::JoinHandle<()>>,
+    child: Option<Arc<SharedChild>>,
+}
+
 struct Status {
     commands: IntoIter<Command>,
-    actions: Vec<(Option<thread::JoinHandle<()>>, Option<Arc<SharedChild>>)>,
+    actions: Vec<Action>,
     paused: bool,
     cvar: Arc<Condvar>,
     stdout: StdioCfg,
@@ -90,13 +96,13 @@ impl Order {
                 command.stdout(&status.stdout).stderr(&status.stderr);
                 let child = SharedChild::spawn(&mut command)?;
                 let child = Arc::new(child);
-                status.actions[index].1 = Some(Arc::clone(&child));
+                status.actions[index].child = Some(Arc::clone(&child));
                 drop(status); // Drop here to free the mutex
 
                 let wait_result = child.wait();
 
                 let mut status = mutex.lock().unwrap();
-                status.actions[index].1 = None;
+                status.actions[index].child = None;
                 wait_result?; // defer throw
                 Ok(())
             };
@@ -116,11 +122,11 @@ impl Order {
                 }
             }
             let mut status = mutex.lock().unwrap();
-            status.actions[index] = (None, None);
+            status.actions[index] = Action::default();
             status.cvar.notify_one();
         });
         let mut status = self.status.lock().unwrap();
-        status.actions[index].0 = Some(handle);
+        status.actions[index].thread = Some(handle);
     }
 
     pub fn start(&self) {
@@ -138,7 +144,7 @@ impl Order {
         let status = self.status.lock().unwrap();
         let total = self.commands_count;
         let idle = status.commands.len();
-        let active = status.actions.iter().filter(|o| o.0.is_some()).count();
+        let active = status.actions.iter().filter(|o| o.thread.is_some()).count();
         let finished = (total - idle).saturating_sub(active);
         (finished, total)
     }
@@ -148,7 +154,10 @@ impl Order {
         let cvar = Arc::clone(&status.cvar);
         let condition = |s: &mut Status| {
             // `false` means stop waiting
-            if s.actions.iter().all(|i| i.0.is_none() && i.1.is_none()) {
+            if s.actions
+                .iter()
+                .all(|i| i.thread.is_none() && i.child.is_none())
+            {
                 // all actions finished
                 false
             } else if let Some(r) = &s.result {
@@ -166,7 +175,7 @@ impl Order {
     pub fn wait_result(&self) -> io::Result<()> {
         self.wait()?;
         // Because `io::Result` does not implement the `Clone` trait
-        let msg = "`order.wait_result` be called more than once";
+        let msg = "`order.wait_result()` be called more than once";
         self.status.lock().unwrap().result.take().expect(msg)
     }
 
@@ -179,8 +188,8 @@ impl Order {
     pub fn terminate(&self) -> io::Result<()> {
         self.cease();
         let mut status = self.status.lock().unwrap();
-        for (_, child) in &mut status.actions {
-            if let Some(c) = &mut child.take() {
+        for action in &mut status.actions {
+            if let Some(c) = &mut action.child.take() {
                 c.kill()?;
             }
         }
@@ -190,8 +199,8 @@ impl Order {
     pub fn pause(&self) -> io::Result<()> {
         let mut status = self.status.lock().unwrap();
         status.paused = true;
-        for (_, child) in &mut status.actions {
-            if let Some(c) = child {
+        for action in &mut status.actions {
+            if let Some(c) = &action.child {
                 c.suspend()?;
             }
         }
@@ -201,11 +210,11 @@ impl Order {
     pub fn resume(&self) -> io::Result<()> {
         let mut status = self.status.lock().unwrap();
         status.paused = false;
-        for (thread, child) in &mut status.actions {
-            if let Some(t) = thread {
+        for action in &mut status.actions {
+            if let Some(t) = &action.thread {
                 t.thread().unpark();
             }
-            if let Some(c) = child {
+            if let Some(c) = &action.child {
                 c.resume()?;
             }
         }
@@ -249,7 +258,7 @@ impl Order {
             input_files.append(&mut read_dir(input_dir)?);
         }
 
-        // Current dir is different with Exe dir
+        // Current dir is different with exe dir
         let current_dir = std::env::current_dir().unwrap();
         let mut pairs = Vec::new(); // (from, to)
         for mut input_file in input_files {
@@ -433,7 +442,7 @@ impl Order {
             status: Arc::new(Mutex::new(Status {
                 commands: commands.into_iter(),
                 actions: (0..cfg.threads_count.unwrap())
-                    .map(|_| (None, None))
+                    .map(|_| Default::default())
                     .collect(),
                 paused: false,
                 cvar: Arc::new(Condvar::new()),
