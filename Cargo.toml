@@ -13,6 +13,9 @@ codegen-units = 1
 toml = "0.5.8"
 serde = { version = "1.0.132", features = ["derive"] }
 
+# will be switched to origin `serde_merge` after pull request merged
+serde_merge = { git = "https://github.com/convevo/serde_merge.git" }
+
 # modified version of `shared_child`
 shared_child = { git = "https://github.com/convevo/shared_child.rs.git" }
 

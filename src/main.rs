@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime};
 
 fn cui_run() -> Result<(), Error> {
     let cfg = {
-        let mut config = Config::new()?;
+        let mut config = Config::from_default_file()?;
         // eprintln!("std::env::args = {:?}", std::env::args());
         let args_input: Vec<String> = std::env::args().skip(1).collect();
         if !args_input.is_empty() {

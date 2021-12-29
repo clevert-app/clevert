@@ -1,10 +1,11 @@
-use crate::toml_seek::Seek;
 use crate::Error;
 use crate::ErrorKind;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     // Common
     pub parent: Option<String>,
@@ -37,90 +38,8 @@ pub struct Config {
     pub cui_msg_interval: Option<i32>,
 }
 
-impl Config {
-    fn complement(&mut self, default: &Self) {
-        // TODO: Use macro instead?
-        fn c<T: Clone>(target: &mut Option<T>, source: &Option<T>) {
-            if let Some(v) = source {
-                target.get_or_insert(v.clone());
-            }
-        }
-        let t = self;
-        let s = default;
-        c(&mut t.parent, &s.parent);
-        c(&mut t.threads_count, &s.threads_count);
-        c(&mut t.skip_panic, &s.skip_panic);
-        c(&mut t.repeat_count, &s.repeat_count);
-        c(&mut t.stdout_type, &s.stdout_type);
-        c(&mut t.stdout_file, &s.stdout_file);
-        c(&mut t.stderr_type, &s.stderr_type);
-        c(&mut t.stderr_file, &s.stderr_file);
-        c(&mut t.program, &s.program);
-        c(&mut t.current_dir, &s.current_dir);
-        c(&mut t.args_template, &s.args_template);
-        c(&mut t.args_switches, &s.args_switches);
-        c(&mut t.input_list, &s.input_list);
-        c(&mut t.input_dir, &s.input_dir);
-        c(&mut t.input_absolute, &s.input_absolute);
-        c(&mut t.input_recursive, &s.input_recursive);
-        c(&mut t.output_dir, &s.output_dir);
-        c(&mut t.output_absolute, &s.output_absolute);
-        c(&mut t.output_recursive, &s.output_recursive);
-        c(&mut t.output_overwrite, &s.output_overwrite);
-        c(&mut t.output_extension, &s.output_extension);
-        c(&mut t.output_prefix, &s.output_prefix);
-        c(&mut t.output_suffix, &s.output_suffix);
-        c(&mut t.output_suffix_serial, &s.output_suffix_serial);
-        c(&mut t.cui_operation, &s.cui_operation);
-        c(&mut t.cui_msg_level, &s.cui_msg_level);
-        c(&mut t.cui_msg_interval, &s.cui_msg_interval);
-    }
-
-    fn from_toml_value(v: &toml::Value) -> Self {
-        Self {
-            parent: v.seek_str("parent"),
-            threads_count: v.seek_i32("threads_count"),
-            skip_panic: v.seek_bool("skip_panic"),
-            repeat_count: v.seek_i32("repeat_count"),
-            stdout_type: v.seek_str("stdout_type"),
-            stdout_file: v.seek_str("stdout_file"),
-            stderr_type: v.seek_str("stderr_type"),
-            stderr_file: v.seek_str("stderr_file"),
-            program: v.seek_str("program"),
-            current_dir: v.seek_str("current_dir"),
-            args_template: v.seek_str("args_template"),
-            args_switches: v.seek_str("args_switches"),
-            input_list: v.seek_vec_str("input_list"),
-            input_dir: v.seek_str("input_dir"),
-            input_absolute: v.seek_bool("input_absolute"),
-            input_recursive: v.seek_bool("input_recursive"),
-            output_dir: v.seek_str("output_dir"),
-            output_absolute: v.seek_bool("output_absolute"),
-            output_recursive: v.seek_bool("output_recursive"),
-            output_overwrite: v.seek_str("output_overwrite"),
-            output_extension: v.seek_str("output_extension"),
-            output_prefix: v.seek_str("output_prefix"),
-            output_suffix: v.seek_str("output_suffix"),
-            output_suffix_serial: v.seek_bool("output_suffix_serial"),
-            cui_operation: v.seek_bool("cui_operation"),
-            cui_msg_level: v.seek_i32("cui_msg_level"),
-            cui_msg_interval: v.seek_i32("cui_msg_interval"),
-        }
-    }
-
-    pub fn from_toml(toml_str: String) -> Result<Self, Error> {
-        let raw: toml::Value = toml_str.parse().unwrap();
-        let mut cfg = Self::from_toml_value(raw.get("order").unwrap());
-        let mut presets = HashMap::new();
-        for (k, v) in raw.get("presets").unwrap().as_table().unwrap() {
-            let preset = Self::from_toml_value(v);
-            presets.insert(k.clone(), preset);
-        }
-        Self::fit(&mut cfg, presets)?;
-        Ok(cfg)
-    }
-
-    pub fn default() -> Self {
+impl std::default::Default for Config {
+    fn default() -> Self {
         Self {
             parent: None,
             threads_count: Some(0), // 0 means count of processors
@@ -151,36 +70,56 @@ impl Config {
             cui_msg_interval: Some(1000),
         }
     }
+}
 
-    fn fit(cfg: &mut Self, presets: HashMap<String, Self>) -> Result<(), Error> {
-        fn inherit_fill(
-            cfg: &mut Config,
-            presets: &HashMap<String, Config>,
-            depth: i32,
-        ) -> Result<(), Error> {
+#[derive(Deserialize, Debug)]
+pub struct Profile {
+    presets: HashMap<String, Config>,
+    order: Config,
+}
+
+impl Profile {
+    fn merge(&mut self, preset_name: &str) -> Result<(), Error> {
+        if self.presets.get(preset_name).is_none() {
+            return Err(Error {
+                kind: ErrorKind::ConfigError,
+                message: format!("preset `{}` for merging not found", preset_name),
+                ..Default::default()
+            });
+        }
+        let parent = self.presets.get(preset_name).unwrap();
+        self.order = serde_merge::omerge(&self.order, parent).unwrap();
+        Ok(())
+    }
+
+    fn inherit_fill(&mut self) -> Result<(), Error> {
+        let mut depth = 0;
+        let mut parent_name = self.order.parent.clone();
+        while let Some(name) = &parent_name {
             if depth > 64 {
                 return Err(Error {
-                    kind: ErrorKind::ConfigIllegal,
-                    message: "preset deep > 64, loop reference?".to_string(),
+                    kind: ErrorKind::ConfigError,
+                    message: "preset depth > 64, loop inherit?".to_string(),
                     ..Default::default()
                 });
             }
-            if let Some(k) = &cfg.parent {
-                if let Some(parent) = presets.get(k) {
-                    cfg.complement(parent);
-                    cfg.parent = parent.parent.clone();
-                    inherit_fill(cfg, presets, depth + 1)?;
-                }
-            }
-            Ok(())
+
+            self.merge(name)?;
+            // parent's parent
+            parent_name = self.presets.get(name).unwrap().parent.clone();
+            depth += 1;
         }
-        inherit_fill(cfg, &presets, 0)?;
-        cfg.parent = Some("default".to_string());
-        inherit_fill(cfg, &presets, 0)?;
-        cfg.complement(&Self::default());
+        Ok(())
+    }
+
+    fn fit(mut cfg: Self) -> Result<Self, Error> {
+        cfg.presets.insert("default".into(), Default::default());
+        cfg.merge("default")?;
+        cfg.merge("global")?; // don't set global.parent!
+        cfg.inherit_fill()?;
 
         // 0 means count of processors
-        if cfg.threads_count.unwrap() == 0 {
+        if cfg.order.threads_count.unwrap() == 0 {
             #[cfg(unix)]
             let count = fs::read_to_string("/proc/cpuinfo")
                 .unwrap()
@@ -192,13 +131,21 @@ impl Config {
                 .unwrap()
                 .parse::<i32>()
                 .unwrap();
-            cfg.threads_count.replace(count);
+            cfg.order.threads_count.replace(count);
         };
 
-        Ok(())
+        Ok(cfg)
     }
 
-    pub fn new() -> Result<Self, Error> {
+    pub fn from_toml(toml_str: String) -> Result<Self, Error> {
+        Self::fit(toml::from_str(&toml_str).map_err(|e| Error {
+            kind: ErrorKind::ConfigError,
+            inner: Box::new(e),
+            message: "error while Deserialize".to_string(),
+        })?)
+    }
+
+    pub fn from_default_file() -> Result<Self, Error> {
         let mut file_path = env::current_exe().unwrap();
 
         file_path.set_extension("toml");
@@ -212,9 +159,19 @@ impl Config {
         // }
 
         Err(Error {
-            kind: ErrorKind::ConfigFileCanNotRead,
+            kind: ErrorKind::ConfigError,
             message: "the config file was not found".to_string(),
             ..Default::default()
         })
+    }
+}
+
+impl Config {
+    pub fn from_toml(toml_str: String) -> Result<Self, Error> {
+        Ok(Profile::from_toml(toml_str)?.order)
+    }
+
+    pub fn from_default_file() -> Result<Self, Error> {
+        Ok(Profile::from_default_file()?.order)
     }
 }

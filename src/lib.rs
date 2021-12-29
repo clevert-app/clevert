@@ -1,5 +1,4 @@
 mod config;
-mod toml_seek;
 pub use config::Config;
 use shared_child::SharedChild;
 use std::fmt;
@@ -13,8 +12,7 @@ use std::vec::IntoIter;
 
 #[derive(Debug)]
 pub enum ErrorKind {
-    ConfigIllegal,
-    ConfigFileCanNotRead,
+    ConfigError,
     UnknownError,
     ExecutePanic,
 }
@@ -237,7 +235,7 @@ impl Order {
             let mut vec = Vec::new();
             let recursive = cfg.input_recursive.unwrap();
             visit_dir(dir, &mut vec, recursive).map_err(|e| Error {
-                kind: ErrorKind::ConfigIllegal,
+                kind: ErrorKind::ConfigError,
                 inner: Box::new(e),
                 message: "read input dir failed".to_string(),
             })?;
@@ -312,7 +310,7 @@ impl Order {
                 "forbid" => {
                     if input_file == output_file {
                         return Err(Error {
-                            kind: ErrorKind::ConfigIllegal,
+                            kind: ErrorKind::ConfigError,
                             message: "output overwrite forbidden".to_string(),
                             ..Default::default()
                         });
@@ -322,7 +320,7 @@ impl Order {
                     if let Err(e) = fs::remove_file(&output_file) {
                         if e.kind() != io::ErrorKind::NotFound {
                             return Err(Error {
-                                kind: ErrorKind::ConfigIllegal,
+                                kind: ErrorKind::ConfigError,
                                 message: "remove output overwrite file failed".to_string(),
                                 inner: Box::new(e),
                             });
@@ -331,7 +329,7 @@ impl Order {
                 }
                 _ => {
                     return Err(Error {
-                        kind: ErrorKind::ConfigIllegal,
+                        kind: ErrorKind::ConfigError,
                         message: "`output_overwrite` value invalid".to_string(),
                         ..Default::default()
                     });
@@ -345,7 +343,7 @@ impl Order {
             let parts = args.split('"');
             if parts.size_hint().0 % 2 == 1 {
                 return Err(Error {
-                    kind: ErrorKind::ConfigIllegal,
+                    kind: ErrorKind::ConfigError,
                     message: "args' quotation mask is not closed".to_string(),
                     ..Default::default()
                 });
@@ -395,7 +393,7 @@ impl Order {
 
         if commands.is_empty() {
             return Err(Error {
-                kind: ErrorKind::ConfigIllegal,
+                kind: ErrorKind::ConfigError,
                 message: "order did not generate any commands".to_string(),
                 ..Default::default()
             });
@@ -414,7 +412,7 @@ impl Order {
                 "normal" => Ok(StdioCfg::Normal),
                 "file" => {
                     let path = path_opt.as_ref().ok_or_else(|| Error {
-                        kind: ErrorKind::ConfigIllegal,
+                        kind: ErrorKind::ConfigError,
                         message: "stdio file unknown".to_string(),
                         ..Default::default()
                     })?;
@@ -423,14 +421,14 @@ impl Order {
                         .create(true)
                         .open(path)
                         .map_err(|e| Error {
-                            kind: ErrorKind::ConfigIllegal,
+                            kind: ErrorKind::ConfigError,
                             inner: Box::new(e),
                             message: "stdio file can't write".to_string(),
                         })?;
                     Ok(StdioCfg::File(file))
                 }
                 _ => Err(Error {
-                    kind: ErrorKind::ConfigIllegal,
+                    kind: ErrorKind::ConfigError,
                     message: "stdio type unknown".to_string(),
                     ..Default::default()
                 }),

@@ -31,7 +31,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     sleeper_build.spawn()?.wait_with_output()?;
 
     let cfg_toml = r#"
-    [presets.default]
+    [presets.global]
     threads_count = 4
     repeat_count = 10
     skip_panic = false
@@ -80,7 +80,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
 
 /*
 let toml_str = r#"
-[presets.default]
+[presets.global]
 threads_count = 2
 repeat_count = 1
 skip_panic = false
