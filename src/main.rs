@@ -8,7 +8,9 @@ use std::time::{Duration, SystemTime};
 fn cui_run() -> Result<(), Error> {
     let cfg = {
         let mut config = Config::from_default_file()?;
-        // eprintln!("std::env::args = {:?}", std::env::args());
+        if config.cui_msg_level.unwrap() >= 3 {
+            eprintln!("std::env::args = {:?}", std::env::args());
+        }
         let args_input: Vec<String> = std::env::args().skip(1).collect();
         if !args_input.is_empty() {
             config.input_list = Some(args_input);
@@ -54,12 +56,10 @@ fn cui_run() -> Result<(), Error> {
                 "p" => {
                     log::info("<p> pause triggered");
                     order.pause().unwrap();
-                    break;
                 }
                 "r" => {
                     log::info("<r> resume triggered");
                     order.resume().unwrap();
-                    break;
                 }
                 "i" => {
                     log::info("<i> user turn off the command operation");
@@ -72,11 +72,7 @@ fn cui_run() -> Result<(), Error> {
         });
     };
 
-    order.wait_result().map_err(|e| Error {
-        kind: ErrorKind::ExecutePanic,
-        inner: Box::new(e),
-        ..Default::default()
-    })?;
+    order.wait_result()?;
 
     Ok(())
 }

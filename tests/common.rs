@@ -68,7 +68,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     }
     order.wait_result()?;
 
-    let read_log_sum = |name| -> Result<u8, Box<dyn std::error::Error>> {
+    let read_log_sum = |name| -> std::io::Result<u8> {
         let content = fs::read(dir.join(name))?;
         Ok(content.iter().map(|ch| ch - '0' as u8).sum())
     };

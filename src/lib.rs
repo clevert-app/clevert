@@ -120,7 +120,7 @@ impl Order {
                 }
             }
             let mut status = mutex.lock().unwrap();
-            status.actions[index] = Action::default();
+            status.actions[index] = Default::default();
             status.cvar.notify_one();
         });
         let mut status = self.status.lock().unwrap();
@@ -170,11 +170,18 @@ impl Order {
     }
 
     /// Must be called at least and most once.
-    pub fn wait_result(&self) -> io::Result<()> {
-        self.wait()?;
-        // Because `io::Result` does not implement the `Clone` trait
-        let msg = "`order.wait_result()` be called more than once";
-        self.status.lock().unwrap().result.take().expect(msg)
+    pub fn wait_result(&self) -> Result<(), Error> {
+        (|| {
+            self.wait()?;
+            // Because `io::Result` does not implement the `Clone` trait
+            let msg = "`order.wait_result()` be called more than once";
+            self.status.lock().unwrap().result.take().expect(msg)
+        })()
+        .map_err(|e| Error {
+            kind: ErrorKind::ExecutePanic,
+            inner: Box::new(e),
+            ..Default::default()
+        })
     }
 
     // Should call `wait` afterwards.
@@ -196,6 +203,10 @@ impl Order {
 
     pub fn pause(&self) -> io::Result<()> {
         let mut status = self.status.lock().unwrap();
+        if status.paused {
+            // should this be added to `shared_child` ?
+            panic!("order.pause() called while status.paused == true");
+        }
         status.paused = true;
         for action in &mut status.actions {
             if let Some(c) = &action.child {
@@ -207,6 +218,9 @@ impl Order {
 
     pub fn resume(&self) -> io::Result<()> {
         let mut status = self.status.lock().unwrap();
+        if !status.paused {
+            panic!("order.resume() called while status.paused == false");
+        }
         status.paused = false;
         for action in &mut status.actions {
             if let Some(t) = &action.thread {
@@ -220,26 +234,26 @@ impl Order {
     }
 
     pub fn new(cfg: &Config) -> Result<Self, Error> {
-        fn visit_dir(dir: PathBuf, vec: &mut Vec<PathBuf>, recursive: bool) -> io::Result<()> {
+        fn visit_dir(dir: PathBuf, recursive: bool) -> io::Result<Vec<PathBuf>> {
+            let mut ret = Vec::new();
             for item in fs::read_dir(dir)? {
                 let item = item?.path();
                 if item.is_file() {
-                    vec.push(item);
+                    ret.push(item);
                 } else if recursive && item.is_dir() {
-                    visit_dir(item, vec, recursive)?;
+                    ret.append(&mut visit_dir(item, recursive)?);
                 }
             }
-            Ok(())
+            Ok(ret)
         }
         let read_dir = |dir| {
-            let mut vec = Vec::new();
             let recursive = cfg.input_recursive.unwrap();
-            visit_dir(dir, &mut vec, recursive).map_err(|e| Error {
+            let ret = visit_dir(dir, recursive).map_err(|e| Error {
                 kind: ErrorKind::Config,
                 inner: Box::new(e),
                 message: "read input dir failed".to_string(),
             })?;
-            Ok(vec)
+            Ok(ret)
         };
         let mut input_files = Vec::new();
         if let Some(input_list) = &cfg.input_list {
@@ -306,35 +320,27 @@ impl Order {
 
             // Overwrite
             match cfg.output_overwrite.as_ref().unwrap().as_str() {
-                "allow" => {}
-                "forbid" => {
-                    if input_file == output_file {
-                        return Err(Error {
-                            kind: ErrorKind::Config,
-                            message: "output overwrite forbidden".to_string(),
-                            ..Default::default()
-                        });
-                    }
-                }
-                "force" => {
-                    if let Err(e) = fs::remove_file(&output_file) {
-                        if e.kind() != io::ErrorKind::NotFound {
-                            return Err(Error {
-                                kind: ErrorKind::Config,
-                                message: "remove output overwrite file failed".to_string(),
-                                inner: Box::new(e),
-                            });
-                        }
-                    };
-                }
-                _ => {
-                    return Err(Error {
+                "allow" => Ok(()),
+                "forbid" if input_file == output_file => Err(Error {
+                    kind: ErrorKind::Config,
+                    message: "output overwrite forbidden".to_string(),
+                    ..Default::default()
+                }),
+                "forbid" => Ok(()),
+                "force" => match fs::remove_file(&output_file) {
+                    Err(e) if e.kind() != io::ErrorKind::NotFound => Err(Error {
                         kind: ErrorKind::Config,
-                        message: "`output_overwrite` value invalid".to_string(),
-                        ..Default::default()
-                    });
-                }
-            };
+                        inner: Box::new(e),
+                        message: "remove output overwrite file failed".to_string(),
+                    }),
+                    _ => Ok(()),
+                },
+                _ => Err(Error {
+                    kind: ErrorKind::Config,
+                    message: "`output_overwrite` value invalid".to_string(),
+                    ..Default::default()
+                }),
+            }?;
 
             pairs.push((input_file, output_file));
         }
@@ -416,9 +422,7 @@ impl Order {
                         message: "stdio file unknown".to_string(),
                         ..Default::default()
                     })?;
-                    let file = fs::OpenOptions::new()
-                        .write(true)
-                        .create(true)
+                    let file = { fs::OpenOptions::new().write(true).create(true) }
                         .open(path)
                         .map_err(|e| Error {
                             kind: ErrorKind::Config,
@@ -429,7 +433,7 @@ impl Order {
                 }
                 _ => Err(Error {
                     kind: ErrorKind::Config,
-                    message: "stdio type unknown".to_string(),
+                    message: "stdio type invalid".to_string(),
                     ..Default::default()
                 }),
             }
