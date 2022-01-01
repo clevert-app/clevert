@@ -92,32 +92,24 @@ impl Profile {
         Ok(())
     }
 
-    fn inherit_fill(&mut self) -> Result<(), Error> {
-        let mut depth = 0;
-        let mut parent = self.order.parent.clone();
-        while let Some(parent_name) = &parent {
-            depth += 1;
-            if depth > 64 {
-                return Err(Error {
-                    kind: ErrorKind::Config,
-                    message: "preset depth > 64, loop inherit?".to_string(),
-                    ..Default::default()
-                });
-            }
-
-            self.merge(parent_name)?;
-            // parent's parent
-            parent = self.presets.get(parent_name).unwrap().parent.clone();
-        }
-        Ok(())
-    }
-
     fn fit(mut cfg: Self) -> Result<Self, Error> {
         cfg.presets.insert("default".into(), Default::default());
         cfg.merge("default")?;
-        cfg.merge("global")?; // don't set global.parent!
-                              // TODO: add detect is `global.parent` set?
-        cfg.inherit_fill()?;
+        // don't set global.parent!
+        // TODO: add detect is `global.parent` set?
+        cfg.merge("global")?;
+
+        // inherit parent's parent
+        let mut parents = Vec::new();
+        while let Some(name) = cfg.order.parent.take() {
+            if let Some(parent) = cfg.presets.get_mut(&name) {
+                cfg.order.parent = parent.parent.take();
+            };
+            parents.push(name);
+        }
+        for name in parents.iter().rev() {
+            cfg.merge(name)?;
+        }
 
         // 0 means count of processors
         if cfg.order.threads_count.unwrap() == 0 {
@@ -142,23 +134,18 @@ impl Profile {
         Self::fit(toml::from_str(&toml_str).map_err(|e| Error {
             kind: ErrorKind::Config,
             inner: Box::new(e),
-            message: "error while Deserialize".to_string(),
+            message: "error while TOML Deserialize".to_string(),
         })?)
     }
 
     pub fn from_default_file() -> Result<Self, Error> {
-        let mut file_path = env::current_exe().unwrap();
-
-        file_path.set_extension("toml");
-        if let Ok(toml_str) = fs::read_to_string(&file_path) {
-            return Self::from_toml(toml_str);
+        let path = env::current_exe().unwrap();
+        if let Ok(text) = fs::read_to_string(&path.with_extension("toml")) {
+            return Self::from_toml(text);
         }
-
-        // file_path.set_extension("json");
-        // if let Ok(json_str) = fs::read_to_string(&file_path) {
-        //     return Self::from_json(json_str);
+        // if let Ok(text) = fs::read_to_string(&path.with_extension("json")) {
+        //     return Self::from_json(text);
         // }
-
         Err(Error {
             kind: ErrorKind::Config,
             message: "the config file was not found".to_string(),
