@@ -1,4 +1,4 @@
-pub fn _tui_run() {
-    // TITLE: "CMD Factory"
-    // TODO: Use cursive
-}
+/// TITLE: "CMD Factory"
+///
+/// TODO: Use `cursive`
+pub fn _tui_run() {}

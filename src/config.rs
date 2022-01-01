@@ -82,7 +82,7 @@ impl Profile {
     fn merge(&mut self, preset_name: &str) -> Result<(), Error> {
         if self.presets.get(preset_name).is_none() {
             return Err(Error {
-                kind: ErrorKind::ConfigError,
+                kind: ErrorKind::Config,
                 message: format!("preset `{}` for merging not found", preset_name),
                 ..Default::default()
             });
@@ -94,20 +94,20 @@ impl Profile {
 
     fn inherit_fill(&mut self) -> Result<(), Error> {
         let mut depth = 0;
-        let mut parent_name = self.order.parent.clone();
-        while let Some(name) = &parent_name {
+        let mut parent = self.order.parent.clone();
+        while let Some(parent_name) = &parent {
+            depth += 1;
             if depth > 64 {
                 return Err(Error {
-                    kind: ErrorKind::ConfigError,
+                    kind: ErrorKind::Config,
                     message: "preset depth > 64, loop inherit?".to_string(),
                     ..Default::default()
                 });
             }
 
-            self.merge(name)?;
+            self.merge(parent_name)?;
             // parent's parent
-            parent_name = self.presets.get(name).unwrap().parent.clone();
-            depth += 1;
+            parent = self.presets.get(parent_name).unwrap().parent.clone();
         }
         Ok(())
     }
@@ -116,6 +116,7 @@ impl Profile {
         cfg.presets.insert("default".into(), Default::default());
         cfg.merge("default")?;
         cfg.merge("global")?; // don't set global.parent!
+                              // TODO: add detect is `global.parent` set?
         cfg.inherit_fill()?;
 
         // 0 means count of processors
@@ -139,7 +140,7 @@ impl Profile {
 
     pub fn from_toml(toml_str: String) -> Result<Self, Error> {
         Self::fit(toml::from_str(&toml_str).map_err(|e| Error {
-            kind: ErrorKind::ConfigError,
+            kind: ErrorKind::Config,
             inner: Box::new(e),
             message: "error while Deserialize".to_string(),
         })?)
@@ -159,7 +160,7 @@ impl Profile {
         // }
 
         Err(Error {
-            kind: ErrorKind::ConfigError,
+            kind: ErrorKind::Config,
             message: "the config file was not found".to_string(),
             ..Default::default()
         })

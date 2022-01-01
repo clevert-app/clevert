@@ -20,21 +20,52 @@ But in my opinion, it's not enough and we couldn't stop at this. So *convevo* wa
 
 * Flexible and extensible. Load file type supports from `profile pack`, you could even make your own `profile pack` to support more files.
 
+## Examples
+
+```toml
+[order]
+parent = 'ffmpeg_mp3'
+
+[presets.global]
+input_dir = '.\input'
+output_dir = '.\output'
+threads_count = 0 # set to process count
+
+[presets.ffmpeg]
+program = 'D:\ffmpeg-n4.4-17-win64-gpl-shared\bin\ffmpeg.exe'
+args_template = '-y -i {input_file} {args_switches} {output_file}'
+
+[presets.ffmpeg_mp3]
+parent = 'ffmpeg'
+args_switches = '-c:a libmp3lame -b:a 192k -q:a 0'
+# args_switches = '-af volume=-10dB' # Change audio volume
+output_extension = 'mp3'
+
+[presets.ffmpeg_extract_audio]
+parent = 'ffmpeg'
+args_switches = '-vn -sn -c:a copy -y -map 0:a:0'
+output_extension = 'm4a'
+
+[presets.ffmpeg_slice]
+parent = 'ffmpeg'
+args_switches = '-ss 00:01:23.00 -to 00:02:34.00 ' # -ss <Start> | -to <End>
+```
+
+## Todo List
+
+0. Help document and Intro.
+1. TUI.
+2. Test on MacOS.
+3. Profile packs.
+4. Debug options, output command info. But [seem troublesome](https://github.com/rust-lang/rust/issues/44434).
+5. StdIn.
+
 ## Note
 
 ```
 https://wiki.inkscape.org/wiki/Using_the_Command_Line
 https://inkscape.org/doc/inkscape-man.html
 ```
-
-## Todo List
-
-0. Help document and Intro.
-1. TUI? Drag and drop supports.
-2. StdIn.
-3. Debug options, output command info. But [seem troublesome](https://github.com/rust-lang/rust/issues/44434).
-4. Profile packs.
-5. Test on MacOS.
 
 ## Alternative
 
