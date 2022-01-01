@@ -59,7 +59,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     order.start();
     thread::sleep(Duration::from_millis(25));
     // BUG: cause infinity waiting on macos
-    #[cfg(not(macos))]
+    #[cfg(not(target_os = "macos"))]
     {
         thread::sleep(Duration::from_millis(50));
         order.pause()?;
