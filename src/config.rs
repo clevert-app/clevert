@@ -32,10 +32,12 @@ pub struct Config {
     pub output_prefix: Option<String>,
     pub output_suffix: Option<String>,
     pub output_suffix_serial: Option<bool>,
-    // Console UI
-    pub cui_operation: Option<bool>,
+    // Command line configs
+    pub cli_operation: Option<bool>,
     pub cui_msg_level: Option<i32>,
     pub cui_msg_interval: Option<i32>,
+    // Terminal UI
+    pub tui: Option<bool>,
 }
 
 impl std::default::Default for Config {
@@ -65,9 +67,10 @@ impl std::default::Default for Config {
             output_prefix: None,
             output_suffix: None,
             output_suffix_serial: Some(false),
-            cui_operation: Some(true),
+            cli_operation: Some(true),
             cui_msg_level: Some(2),
             cui_msg_interval: Some(1000),
+            tui: Some(false),
         }
     }
 }

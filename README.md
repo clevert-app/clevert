@@ -32,7 +32,7 @@ output_dir = '.\output'
 threads_count = 0 # set to process count
 
 [presets.ffmpeg]
-program = 'D:\ffmpeg-n4.4-17-win64-gpl-shared\bin\ffmpeg.exe'
+program = 'Z:\ffmpeg-n4.4-17-win64-gpl-shared\bin\ffmpeg.exe'
 args_template = '-y -i {input_file} {args_switches} {output_file}'
 
 [presets.ffmpeg_mp3]
@@ -49,6 +49,17 @@ output_extension = 'm4a'
 [presets.ffmpeg_slice]
 parent = 'ffmpeg'
 args_switches = '-ss 00:01:23.00 -to 00:02:34.00 ' # -ss <Start> | -to <End>
+
+[presets.inkscape_pdf]
+program = 'Z:\inkscape-1.1-x64\bin\inkscape.exe'
+args_template = '--pdf-page {repeat_num} {args_switches} -o {output_file} {input_file}'
+output_suffix_serial = true
+# repeat_count = 50 # page count
+
+[presets.inkscape_pdf2png]
+parent = 'inkscape_pdf'
+args_switches = '--export-type png --export-width 2560  --export-background #ffffff --pdf-poppler'
+output_extension = 'png'
 ```
 
 ## Todo List
@@ -59,12 +70,14 @@ args_switches = '-ss 00:01:23.00 -to 00:02:34.00 ' # -ss <Start> | -to <End>
 3. Profile packs.
 4. Debug options, output command info. But [seem troublesome](https://github.com/rust-lang/rust/issues/44434).
 5. StdIn.
+6. Change some config fields to no-optional?
 
 ## Note
 
 ```
 https://wiki.inkscape.org/wiki/Using_the_Command_Line
 https://inkscape.org/doc/inkscape-man.html
+https://github.com/amadvance/advancecomp
 ```
 
 ## Alternative

@@ -174,7 +174,7 @@ impl Order {
         (|| {
             self.wait()?;
             // Because `io::Result` does not implement the `Clone` trait
-            let msg = "`order.wait_result()` be called more than once";
+            let msg = "`order.wait_result()` was called more than once";
             self.status.lock().unwrap().result.take().expect(msg)
         })()
         .map_err(|e| Error {
