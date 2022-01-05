@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     // Common
     pub parent: Option<String>,
@@ -36,7 +36,7 @@ pub struct Config {
     pub cli_operation: Option<bool>,
     pub cui_msg_level: Option<i32>,
     pub cui_msg_interval: Option<i32>,
-    // Terminal UI
+    // Terminal UI configs
     pub tui: Option<bool>,
 }
 
@@ -96,23 +96,34 @@ impl Profile {
     }
 
     fn fit(mut cfg: Self) -> Result<Self, Error> {
+        // backup
+        cfg.presets.insert("order".into(), cfg.order.clone());
+        // default and global
         cfg.presets.insert("default".into(), Default::default());
         cfg.merge("default")?;
-        // don't set global.parent!
-        // TODO: add detect is `global.parent` set?
-        cfg.merge("global")?;
-
+        if let Some(preset) = cfg.presets.get("global") {
+            if preset.parent.is_some() {
+                return Err(Error {
+                    kind: ErrorKind::Config,
+                    message: "presets.global.parent is not null".to_string(),
+                    ..Default::default()
+                });
+            }
+            cfg.merge("global")?
+        }
         // inherit parent's parent
         let mut parents = Vec::new();
         while let Some(name) = cfg.order.parent.take() {
             if let Some(parent) = cfg.presets.get_mut(&name) {
                 cfg.order.parent = parent.parent.take();
-            };
+            }
             parents.push(name);
         }
         for name in parents.iter().rev() {
             cfg.merge(name)?;
         }
+        // order itself
+        cfg.merge("order")?;
 
         // 0 means count of processors
         if cfg.order.threads_count.unwrap() == 0 {

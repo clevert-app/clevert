@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-fn normal_run(cfg: Config) -> Result<(), Error> {
+fn cli_run(cfg: Config) -> Result<(), Error> {
     // `Order` is one-off, change config on UI and then create a new `Order`.
     let order = Arc::new(Order::new(&cfg)?);
     order.start();
@@ -71,10 +71,10 @@ fn _get_help_text() -> &'static str {
     r#"Usage: convevo [switches] [input_items]"#
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let time_now = SystemTime::now();
 
-    let mut cfg = Config::from_default_file().unwrap();
+    let mut cfg = Config::from_default_file()?;
     let args: Vec<String> = std::env::args().skip(1).collect();
     if cfg.cui_msg_level.unwrap() >= 3 {
         log::info(format!("std::env::args = {:?}", &args));
@@ -93,23 +93,23 @@ fn main() {
             .is_none()
     {
         // manually panic handling, because the `catch_unwind` is not always
-        // stable and it's inapplicable when `panic=abort` on `Cargo.toml`
+        // stable and it's inapplicable when `panic='abort'` on `Cargo.toml`
         // drop local variables here to save memory?
-        let mut cmd = Command::new(std::env::current_exe().unwrap());
-        let _ = cmd.arg("--tui-inner").args(args).spawn().unwrap().wait();
+        let mut cmd = Command::new(std::env::current_exe()?);
+        let _ = cmd.arg("--tui-inner").args(args).spawn()?.wait();
         log::info("press any key to exit");
-        std::io::stdin().read_line(&mut String::new()).unwrap();
-        return;
+        std::io::stdin().read_line(&mut String::new())?;
+        return Ok(());
     }
     if cfg.tui.unwrap() {
-        tui::tui_run(cfg)
+        tui::tui_run(cfg)?;
     } else {
-        normal_run(cfg)
+        cli_run(cfg)?;
     }
-    .unwrap();
 
     log::info(format!(
         "took {:.2} seconds",
-        time_now.elapsed().unwrap().as_secs_f64(),
+        time_now.elapsed()?.as_secs_f64(),
     ));
+    Ok(())
 }
