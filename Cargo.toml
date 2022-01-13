@@ -1,6 +1,6 @@
 [package]
 name = "convevo"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 
 [profile.release]
@@ -20,6 +20,5 @@ shared_child = { git = "https://github.com/convevo/shared_child.rs.git" }
 cursive.version = "0.16.3"
 cursive.default-features = false
 cursive.features = ["crossterm-backend"]
-
 
 # anyhow = "1.0.44"

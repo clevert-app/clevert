@@ -6,7 +6,7 @@
 [![Download](https://img.shields.io/github/downloads/convevo/convevo/total?color=2a4)](https://github.com/convevo/convevo/releases#:~:text=Assets)
 [![License](https://img.shields.io/github/license/convevo/convevo?color=2a4)](LICENSE)
 
-Flexible cli assistant for file conversion, etc.
+Extensible file converter.
 
 ## Intro
 

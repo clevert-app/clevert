@@ -24,11 +24,11 @@ pub fn tui_run(cfg: Config) -> Result<(), Error> {
         theme.shadow = false;
         theme.borders = BorderStyle::Simple;
         theme.palette[Background] = Dark(Black);
-        theme.palette[Primary] = Light(White);
-        theme.palette[Secondary] = Light(White);
-        theme.palette[TitlePrimary] = Light(Yellow);
-        theme.palette[TitleSecondary] = Light(Yellow);
         theme.palette[View] = Dark(Black);
+        theme.palette[Primary] = Dark(White);
+        theme.palette[Secondary] = Dark(White);
+        theme.palette[TitlePrimary] = Dark(Yellow);
+        theme.palette[TitleSecondary] = Dark(Yellow);
         siv.set_theme(theme);
     }
 
