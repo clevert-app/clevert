@@ -33,23 +33,10 @@ fn cli_run(cfg: Config) -> Result<(), Error> {
             std::io::stdin().read_line(&mut input).unwrap();
             println!();
             match input.trim() {
-                "t" => {
-                    log::info("<t> terminate triggered");
-                    order.terminate().unwrap();
+                "s" => {
+                    log::info("<s> stop triggered");
+                    order.stop().unwrap();
                     break;
-                }
-                "c" => {
-                    log::info("<c> cease triggered");
-                    order.cease();
-                    break;
-                }
-                "p" => {
-                    log::info("<p> pause triggered");
-                    order.pause().unwrap();
-                }
-                "r" => {
-                    log::info("<r> resume triggered");
-                    order.resume().unwrap();
                 }
                 "i" => {
                     log::info("<i> user turn off the command operation");
@@ -62,7 +49,7 @@ fn cli_run(cfg: Config) -> Result<(), Error> {
         });
     };
 
-    order.wait_result()?;
+    order.wait()?;
 
     Ok(())
 }

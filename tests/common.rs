@@ -2,8 +2,9 @@ use convevo::*;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+// use std::time::Duration;
 
 #[test]
 pub fn common() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,7 +35,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     [presets.global]
     threads_count = 4
     repeat_count = 10
-    skip_panic = false
+    ignore_panic = false
 
     [presets.test_base]
     stdout_type = 'file'
@@ -57,16 +58,13 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::from_toml(cfg_toml)?;
     let order = Order::new(&cfg)?;
     order.start();
-    thread::sleep(Duration::from_millis(25));
-    // BUG: cause infinity waiting on macos
-    #[cfg(not(target_os = "macos"))]
-    {
-        thread::sleep(Duration::from_millis(50));
-        order.pause()?;
-        thread::sleep(Duration::from_millis(200));
-        order.resume()?;
-    }
-    order.wait_result()?;
+
+    thread::spawn({
+        let order = Arc::clone(&order);
+        move || order.wait().unwrap()
+    });
+
+    order.wait()?;
 
     let read_log_sum = |name| -> std::io::Result<u8> {
         let content = fs::read(dir.join(name))?;
@@ -83,7 +81,7 @@ let toml_str = r#"
 [presets.global]
 threads_count = 2
 repeat_count = 1
-skip_panic = false
+ignore_panic = false
 
 [presets.test_common]
 stdout_type = 'file' # normal | ignore | file

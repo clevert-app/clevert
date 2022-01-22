@@ -4,9 +4,9 @@ on: [push, pull_request]
 
 jobs:
   build:
+    timeout-minutes: 3
     name: ${{ matrix.rust }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -18,11 +18,11 @@ jobs:
       - name: Show toolchain info
         run: rustup toolchain list && rustup target list --installed 
 
-      - name: Run cargo build
-        run: cargo build # --release && strip ./target/release/convevo
+      - name: Run tests
+        run: cargo test
 
-      - name: Run cargo test
-        run: cargo test --verbose
+      # - name: Build
+      #   run: cargo build --release && strip ./target/release/convevo
 
       # - name: Upload Artifacts
       #   uses: actions/upload-artifact@v2

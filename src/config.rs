@@ -10,7 +10,7 @@ pub struct Config {
     // Common
     pub parent: Option<String>,
     pub threads_count: Option<i32>,
-    pub skip_panic: Option<bool>,
+    pub ignore_panic: Option<bool>,
     pub repeat_count: Option<i32>,
     pub stdout_type: Option<String>,
     pub stdout_file: Option<String>,
@@ -45,7 +45,7 @@ impl std::default::Default for Config {
         Self {
             parent: None,
             threads_count: Some(0), // 0 means count of processors
-            skip_panic: Some(false),
+            ignore_panic: Some(false),
             repeat_count: Some(1),
             stdout_type: Some("ignore".to_string()), // normal | ignore | file
             stdout_file: None,

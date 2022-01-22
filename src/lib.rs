@@ -20,7 +20,7 @@ pub enum ErrorKind {
 #[derive(Debug)]
 pub struct Error {
     pub kind: ErrorKind,
-    pub inner: Box<dyn fmt::Debug>,
+    pub inner: Box<dyn fmt::Debug + Send + Sync>,
     pub message: String,
 }
 
@@ -58,182 +58,120 @@ impl From<&StdioCfg> for Stdio {
     }
 }
 
-#[derive(Default)]
-struct Action {
-    thread: Option<thread::JoinHandle<()>>,
-    child: Option<Arc<SharedChild>>,
-}
-
-struct Status {
+pub struct Status {
     commands: IntoIter<Command>,
-    actions: Vec<Action>,
-    paused: bool,
-    cvar: Arc<Condvar>,
-    stdout: StdioCfg,
-    stderr: StdioCfg,
-
-    // Some(Ok) => Successed or running
-    // Some(Err) => Failed
-    // None => Before start or be taken
-    result: Option<io::Result<()>>,
+    childs: Vec<Option<Arc<SharedChild>>>,
+    result: Result<(), Arc<io::Error>>, // io::Result not impl Clone
 }
 
 pub struct Order {
     commands_count: usize,
-    skip_panic: bool,
-    status: Arc<Mutex<Status>>,
+    ignore_panic: bool,
+    wait_cvar: Condvar,
+    stdout: StdioCfg,
+    stderr: StdioCfg,
+
+    status: Mutex<Status>,
 }
 
 impl Order {
-    fn spawn(&self, index: usize) {
-        let skip_panic = self.skip_panic;
-        let mutex = Arc::clone(&self.status);
-        let handle = thread::spawn(move || {
-            let exec = |mut command: Command| {
-                let mut status = mutex.lock().unwrap();
-                command.stdout(&status.stdout).stderr(&status.stderr);
-                let child = SharedChild::spawn(&mut command)?;
-                let child = Arc::new(child);
-                status.actions[index].child = Some(Arc::clone(&child));
-                drop(status); // Drop here to free the mutex
+    fn once(&self, index: usize) -> io::Result<bool> {
+        let mut status = self.status.lock().unwrap();
+        let mut cmd = match status.commands.next() {
+            Some(v) => v,
+            None => return Ok(false),
+        };
+        cmd.stdout(&self.stdout).stderr(&self.stderr);
+        let child = Arc::new(SharedChild::spawn(&mut cmd)?);
+        status.childs[index] = Some(Arc::clone(&child));
+        drop(status);
+        let exit_status = child.wait()?;
+        match exit_status.success() {
+            true => Ok(true),
+            false => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("process exit with non-zero: {:?}", exit_status),
+            )),
+        }
+    }
 
-                let wait_result = child.wait();
+    fn spawn(self: Arc<Self>, index: usize) {
+        loop {
+            match Self::once(&self, index) {
+                // no next command, exit
+                Ok(false) => break,
 
-                let mut status = mutex.lock().unwrap();
-                status.actions[index].child = None;
-                wait_result?; // defer throw
-                Ok(())
-            };
-            while let Some(command) = {
-                let mut status = mutex.lock().unwrap();
-                if status.paused {
-                    drop(status);
-                    thread::park();
-                    status = mutex.lock().unwrap();
-                }
-                status.commands.next()
-            } {
-                let result = exec(command);
-                if !skip_panic && result.is_err() {
-                    mutex.lock().unwrap().result = Some(result);
+                // successfully
+                Ok(true) => continue,
+
+                // if `ignore_panic`, ignore exec error and no-zero exit
+                Err(_) if self.ignore_panic => continue,
+
+                // exec error or exit not successfully
+                Err(e) => {
+                    let _ = self.stop(); // make other threads to stop
+                    self.status.lock().unwrap().result = Err(Arc::new(e));
                     break;
                 }
             }
-            let mut status = mutex.lock().unwrap();
-            status.actions[index] = Default::default();
-            status.cvar.notify_one();
-        });
-        let mut status = self.status.lock().unwrap();
-        status.actions[index].thread = Some(handle);
+        }
+        self.wait_cvar.notify_all();
     }
 
-    pub fn start(&self) {
-        let mut status = self.status.lock().unwrap();
-        status.result = Some(Ok(()));
-        let actions_count = status.actions.len();
-        drop(status);
-        for index in 0..actions_count {
-            self.spawn(index);
+    pub fn start(self: &Arc<Self>) {
+        for index in 0..self.status.lock().unwrap().childs.len() {
+            let this = Arc::clone(self);
+            thread::spawn(move || Self::spawn(this, index));
         }
     }
 
-    /// Return the progress of order as `(finished, total)`.
+    /// Stop order. If killing the processes fails, return the first error.
+    pub fn stop(&self) -> io::Result<()> {
+        let mut status = self.status.lock().unwrap();
+        status.commands.by_ref().count(); // clean the command list
+        let mut result = Ok(());
+        for child in status.childs.iter().filter_map(|v| v.as_ref()) {
+            let kill_result = child.kill();
+            if kill_result.is_err() && result.is_ok() {
+                result = kill_result;
+            }
+        }
+        result
+    }
+
+    /// Return the progress as `(finished, total)`.
     pub fn progress(&self) -> (usize, usize) {
         let status = self.status.lock().unwrap();
         let total = self.commands_count;
-        let idle = status.commands.len();
-        let active = status.actions.iter().filter(|o| o.thread.is_some()).count();
-        let finished = (total - idle).saturating_sub(active);
+        let remain = status.commands.len();
+        let active_filter = |v: &Option<Arc<SharedChild>>| match v.as_ref()?.try_wait() {
+            Ok(None) => Some(()), // still running
+            _ => None,
+        };
+        let active = status.childs.iter().filter_map(active_filter).count();
+        let finished = (total - remain).saturating_sub(active);
         (finished, total)
     }
 
-    pub fn wait(&self) -> io::Result<()> {
-        let status = self.status.lock().unwrap();
-        let cvar = Arc::clone(&status.cvar);
-        let condition = |s: &mut Status| {
-            // `false` means stop waiting
-            if s.actions
-                .iter()
-                .all(|i| i.thread.is_none() && i.child.is_none())
-            {
-                // all actions finished
-                false
-            } else if let Some(r) = &s.result {
-                r.is_ok()
-            } else {
-                false
-            }
-        };
-        drop(cvar.wait_while(status, condition).unwrap());
-        self.terminate()?;
-        Ok(())
-    }
-
-    /// Must be called at least and most once.
-    pub fn wait_result(&self) -> Result<(), Error> {
-        (|| {
-            self.wait()?;
-            // Because `io::Result` does not implement the `Clone` trait
-            let msg = "`order.wait_result()` was called more than once";
-            self.status.lock().unwrap().result.take().expect(msg)
-        })()
-        .map_err(|e| Error {
-            kind: ErrorKind::ExecutePanic,
-            inner: Box::new(e),
-            ..Default::default()
-        })
-    }
-
-    // Should call `wait` afterwards.
-    pub fn cease(&self) -> usize {
-        self.status.lock().unwrap().commands.by_ref().count()
-    }
-
-    // Should call `wait` afterwards.
-    pub fn terminate(&self) -> io::Result<()> {
-        self.cease();
-        let mut status = self.status.lock().unwrap();
-        for action in &mut status.actions {
-            if let Some(c) = &mut action.child.take() {
-                c.kill()?;
+    pub fn wait(self: &Arc<Self>) -> Result<(), Error> {
+        loop {
+            drop(self.wait_cvar.wait(self.status.lock().unwrap()));
+            let progress = self.progress();
+            if progress.0 == progress.1 {
+                break;
             }
         }
-        Ok(())
+        match &self.status.lock().unwrap().result {
+            Ok(()) => Ok(()),
+            Err(e) => Err(Error {
+                kind: ErrorKind::ExecutePanic,
+                inner: Box::new(Arc::clone(&e)),
+                ..Default::default()
+            }),
+        }
     }
 
-    pub fn pause(&self) -> io::Result<()> {
-        let mut status = self.status.lock().unwrap();
-        if status.paused {
-            // should this be added to `shared_child` ?
-            panic!("order.pause() called while status.paused == true");
-        }
-        status.paused = true;
-        for action in &mut status.actions {
-            if let Some(c) = &action.child {
-                c.suspend()?;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn resume(&self) -> io::Result<()> {
-        let mut status = self.status.lock().unwrap();
-        if !status.paused {
-            panic!("order.resume() called while status.paused == false");
-        }
-        status.paused = false;
-        for action in &mut status.actions {
-            if let Some(t) = &action.thread {
-                t.thread().unpark();
-            }
-            if let Some(c) = &action.child {
-                c.resume()?;
-            }
-        }
-        Ok(())
-    }
-
-    pub fn new(cfg: &Config) -> Result<Self, Error> {
+    pub fn new(cfg: &Config) -> Result<Arc<Self>, Error> {
         fn visit_dir(dir: PathBuf, recursive: bool) -> io::Result<Vec<PathBuf>> {
             let mut ret = Vec::new();
             for item in fs::read_dir(dir)? {
@@ -438,20 +376,17 @@ impl Order {
                 }),
             }
         };
-        Ok(Self {
+        Ok(Arc::new(Self {
             commands_count: commands.len(),
-            skip_panic: cfg.skip_panic.unwrap(),
-            status: Arc::new(Mutex::new(Status {
+            ignore_panic: cfg.ignore_panic.unwrap(),
+            wait_cvar: Condvar::new(),
+            stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
+            stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
+            status: Mutex::new(Status {
                 commands: commands.into_iter(),
-                actions: (0..cfg.threads_count.unwrap())
-                    .map(|_| Default::default())
-                    .collect(),
-                paused: false,
-                cvar: Arc::new(Condvar::new()),
-                stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
-                stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
-                result: None,
-            })),
-        })
+                childs: (0..cfg.threads_count.unwrap()).map(|_| None).collect(),
+                result: Ok(()),
+            }),
+        }))
     }
 }
