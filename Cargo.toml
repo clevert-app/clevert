@@ -1,7 +1,9 @@
 [package]
 name = "convevo"
+description = "Extensible file converter."
 version = "0.6.2"
 edition = "2021"
+license = "MIT"
 
 [profile.release]
 panic = "abort"
