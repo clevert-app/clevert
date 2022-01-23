@@ -1,17 +1,17 @@
-use std::fmt::Display;
-
-fn message(kind: &str, content: impl Display) -> String {
-    format!("[ convevo : {} ] {}", kind, content)
-}
-
-pub fn info(msg: impl Display) {
-    println!("{}", message("info", msg));
-}
-
-pub fn warn(msg: impl Display) {
-    println!("{}", message("warn", msg));
-}
-
-pub fn error(msg: impl Display) {
-    eprintln!("{}", message("error", msg));
+#[macro_export]
+macro_rules! log {
+    (warn:$($arg:tt)*) => {
+        println!("{} {}", yansi::Paint::yellow("[convevo]"), format!($($arg)*));
+    };
+    (error:$($arg:tt)*) => {
+        println!("{} {}", yansi::Paint::red("[convevo]"), format!($($arg)*));
+    };
+    (state:$($arg:tt)*) => {
+        print!("\r{} {}\t", yansi::Paint::cyan("[convevo]"), format!($($arg)*));
+        use std::io::Write;
+        std::io::stdout().flush().unwrap();
+    };
+    ($($arg:tt)*) => {
+        println!("{} {}", yansi::Paint::cyan("[convevo]"), format!($($arg)*));
+    };
 }

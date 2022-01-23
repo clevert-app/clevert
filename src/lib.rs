@@ -1,4 +1,5 @@
 mod config;
+mod log;
 pub use config::Config;
 use shared_child::SharedChild;
 use std::fmt;
@@ -77,12 +78,12 @@ pub struct Order {
 impl Order {
     fn once(&self, index: usize) -> io::Result<bool> {
         let mut status = self.status.lock().unwrap();
-        let mut cmd = match status.commands.next() {
+        let mut command = match status.commands.next() {
             Some(v) => v,
             None => return Ok(false),
         };
-        cmd.stdout(&self.stdout).stderr(&self.stderr);
-        let child = Arc::new(SharedChild::spawn(&mut cmd)?);
+        command.stdout(&self.stdout).stderr(&self.stderr);
+        let child = Arc::new(SharedChild::spawn(&mut command)?);
         status.childs[index] = Some(Arc::clone(&child));
         drop(status);
         let exit_status = child.wait()?;
@@ -165,7 +166,7 @@ impl Order {
             Ok(()) => Ok(()),
             Err(e) => Err(Error {
                 kind: ErrorKind::ExecutePanic,
-                inner: Box::new(Arc::clone(&e)),
+                inner: Box::new(Arc::clone(e)),
                 ..Default::default()
             }),
         }
@@ -330,8 +331,19 @@ impl Order {
                         _ => command.arg(part),
                     };
                 }
-                // command.get_args(); // https://github.com/rust-lang/rust/issues/44434
                 commands.push(command);
+            }
+        }
+
+        if let Some(dir) = &cfg.current_dir {
+            for command in &mut commands {
+                command.current_dir(dir);
+            }
+        }
+
+        if cfg.cli_log_level.unwrap() >= 3 {
+            for command in &commands {
+                log!("command args = {:?}", command.get_args());
             }
         }
 
@@ -341,12 +353,6 @@ impl Order {
                 message: "order did not generate any commands".to_string(),
                 ..Default::default()
             });
-        }
-
-        if let Some(dir) = &cfg.current_dir {
-            for command in &mut commands {
-                command.current_dir(dir);
-            }
         }
 
         let stdpipe = |type_opt: &Option<String>, path_opt: &Option<String>| {

@@ -1,4 +1,4 @@
-> # ***WARNING: This project is still developing***
+> # **_WARNING: This project is still developing_**
 
 # convevo
 
@@ -12,13 +12,13 @@ Extensible file converter.
 
 Today's file convertors always focus on a few file types, they build in some library like FFmpeg and provide a GUI for users.
 
-But in my opinion, it's not enough and we couldn't stop at this. So *convevo* was born:
+But in my opinion, it's not enough and we couldn't stop at this. So _convevo_ was born:
 
-* To be a universal solution. You should not care about different software's different behavior.
+- To be a universal solution. You should not care about different software's different behavior.
 
-* Parallelized. Let's take advantage of all of your CPU cores.
+- Parallelized. Let's take advantage of all of your CPU cores.
 
-* Flexible and extensible. Load file type supports from `profile pack`, you could even make your own `profile pack` to support more files.
+- Flexible and extensible. Load file type supports from `profile pack`, you could even make your own `profile pack` to support more files.
 
 ## Examples
 
@@ -65,12 +65,14 @@ output_extension = 'png'
 ## Todo List
 
 0. Help document and Intro.
-1. TUI.
-2. Test on MacOS.
-3. Profile packs.
-4. Debug options, output command info. But [seem troublesome](https://github.com/rust-lang/rust/issues/44434).
-5. StdIn.
-6. Change some config fields to no-optional?
+
+1. Interactive cli.
+
+2. Profile packs.
+
+3. StdIn.
+
+4. Change some config fields to no-optional?
 
 ## Note
 
