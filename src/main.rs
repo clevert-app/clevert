@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-fn cli_run() -> Result<(), Box<dyn std::error::Error>> {
+fn cli_run() -> Result<(), Error> {
     let mut cfg = Config::from_default_file()?;
     let args: Vec<String> = std::env::args().skip(1).collect();
     if cfg.cli_log_level.unwrap() >= 3 {
@@ -24,38 +24,35 @@ fn cli_run() -> Result<(), Box<dyn std::error::Error>> {
     let order = Arc::new(Order::new(&cfg)?);
     order.start();
 
-    // progress message
-    if cfg.cli_log_level.unwrap() >= 2 {
-        let order = Arc::clone(&order);
-        thread::spawn(move || loop {
-            let (finished, total) = order.progress();
-            log!(state:"progress = {} / {}", finished, total);
-            if finished == total {
-                break;
-            }
-            thread::sleep(Duration::from_millis(1000));
-        });
-    }
-
     // command operation
     if cfg.cli_operation.unwrap() {
         let order = Arc::clone(&order);
         thread::spawn(move || loop {
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).unwrap();
-            println!();
             match input.trim() {
                 "s" => {
                     log!("operation <s> triggered, order stopped");
                     order.stop().unwrap();
                     break;
                 }
-                op => {
-                    log!(warn:"unknown operation {}", op);
-                }
+                op => log!(warn:"unknown operation {}", op),
             };
         });
     };
+
+    // progress message
+    if cfg.cli_log_level.unwrap() >= 2 {
+        let order = Arc::clone(&order);
+        thread::spawn(move || loop {
+            let (finished, total) = order.progress();
+            log!(state:"progress = {finished} / {total}");
+            if finished == total {
+                break;
+            }
+            thread::sleep(Duration::from_millis(1000));
+        });
+    }
 
     order.wait()?;
 
@@ -67,9 +64,7 @@ fn cli_run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn _get_help_text() -> &'static str {
-    r#"Usage: convevo [switches] [input_items]"#
-}
+// const HELP_TEXT: &str = r#"Usage: convevo [switches] [input_items]"#;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // https://github.com/SergioBenitez/yansi/issues/25

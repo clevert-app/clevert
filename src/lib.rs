@@ -14,7 +14,7 @@ use std::vec::IntoIter;
 #[derive(Debug)]
 pub enum ErrorKind {
     Config,
-    Unknown,
+    Other,
     ExecutePanic,
 }
 
@@ -28,7 +28,7 @@ pub struct Error {
 impl std::default::Default for Error {
     fn default() -> Self {
         Self {
-            kind: ErrorKind::Unknown,
+            kind: ErrorKind::Other,
             inner: Box::new(Option::<()>::None),
             message: String::new(),
         }
@@ -130,7 +130,7 @@ impl Order {
     pub fn stop(&self) -> io::Result<()> {
         let mut status = self.status.lock().unwrap();
         status.commands.by_ref().count(); // clean the command list
-        let mut result = Ok(());
+        let mut result = Ok(()); // only store the first error
         for child in status.childs.iter().filter_map(|v| v.as_ref()) {
             let kill_result = child.kill();
             if kill_result.is_err() && result.is_ok() {
@@ -355,39 +355,35 @@ impl Order {
             });
         }
 
-        let stdpipe = |type_opt: &Option<String>, path_opt: &Option<String>| {
-            let type_str = type_opt.as_ref().unwrap().as_str();
-            match type_str {
-                "ignore" => Ok(StdioCfg::Ignore),
-                "normal" => Ok(StdioCfg::Normal),
-                "file" => {
-                    let path = path_opt.as_ref().ok_or_else(|| Error {
-                        kind: ErrorKind::Config,
-                        message: "stdio file unknown".to_string(),
-                        ..Default::default()
-                    })?;
-                    let file = { fs::OpenOptions::new().write(true).create(true) }
-                        .open(path)
-                        .map_err(|e| Error {
-                            kind: ErrorKind::Config,
-                            inner: Box::new(e),
-                            message: "stdio file can't write".to_string(),
-                        })?;
-                    Ok(StdioCfg::File(file))
-                }
-                _ => Err(Error {
+        let stdio_gen = |kind: &String, path: Option<&String>| match kind.as_str() {
+            "ignore" => Ok(StdioCfg::Ignore),
+            "normal" => Ok(StdioCfg::Normal),
+            "file" => {
+                let mut open_option = fs::OpenOptions::new();
+                open_option.write(true).create(true);
+                let open_result = open_option.open(path.ok_or_else(|| Error {
                     kind: ErrorKind::Config,
-                    message: "stdio type invalid".to_string(),
+                    message: format!("{kind}_type = 'file', but {kind}_file = None"),
                     ..Default::default()
-                }),
+                })?);
+                Ok(StdioCfg::File(open_result.map_err(|e| Error {
+                    kind: ErrorKind::Config,
+                    inner: Box::new(e),
+                    message: format!("write to {kind}_file failed"),
+                })?))
             }
+            _ => Err(Error {
+                kind: ErrorKind::Config,
+                message: format!("{kind}_type invalid"),
+                ..Default::default()
+            }),
         };
         Ok(Arc::new(Self {
             commands_count: commands.len(),
             ignore_panic: cfg.ignore_panic.unwrap(),
             wait_cvar: Condvar::new(),
-            stdout: stdpipe(&cfg.stdout_type, &cfg.stdout_file)?,
-            stderr: stdpipe(&cfg.stderr_type, &cfg.stderr_file)?,
+            stdout: stdio_gen(cfg.stdout_type.as_ref().unwrap(), cfg.stdout_file.as_ref())?,
+            stderr: stdio_gen(cfg.stderr_type.as_ref().unwrap(), cfg.stderr_file.as_ref())?,
             status: Mutex::new(Status {
                 commands: commands.into_iter(),
                 childs: (0..cfg.threads_count.unwrap()).map(|_| None).collect(),
