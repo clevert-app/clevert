@@ -64,15 +64,15 @@ output_extension = 'png'
 
 ## Todo List
 
-0. Help document and Intro.
+0. Config structure. Change some config fields to no-optional?
 
-1. Interactive cli.
+1. Help document and Intro.
 
-2. Profile packs.
+2. Interactive cli.
 
-3. StdIn.
+3. Profile packs.
 
-4. Change some config fields to no-optional?
+4. StdIn.
 
 ## Note
 

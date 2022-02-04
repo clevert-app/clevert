@@ -36,7 +36,7 @@ fn cli_run() -> Result<(), Error> {
                     order.stop().unwrap();
                     break;
                 }
-                op => log!(warn:"unknown operation {}", op),
+                op => log!(warn:"unknown operation {op}"),
             };
         });
     };
@@ -73,10 +73,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         yansi::Paint::disable()
     }
 
-    let start_time = SystemTime::now();
+    let begin_time = SystemTime::now();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if !args.contains(&"--no-wrap".into()) {
+    #[cfg(windows)]
+    if !args.contains(&"--no-wrap".into()) && !std::env::var("PROMPT").is_ok() {
         // manually panic handling, because the `catch_unwind` is not always
         // stable and it's inapplicable when `panic='abort'` on `Cargo.toml`
         let mut cmd = Command::new(std::env::current_exe()?);
@@ -90,6 +91,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => log!(error:"error = {:?}",e),
     }
 
-    log!("took {:.2}s", start_time.elapsed()?.as_secs_f64());
+    log!("took {:.2}s", begin_time.elapsed()?.as_secs_f64());
     Ok(())
 }

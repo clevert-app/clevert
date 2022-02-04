@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct Config {
     // Common
     pub parent: Option<String>,
@@ -59,7 +59,7 @@ impl std::default::Default for Config {
             input_recursive: Some(false),
             output_dir: None,
             output_absolute: Some(false),
-            output_recursive: Some(true), // Auto create output dir also
+            output_recursive: Some(false),
             output_overwrite: Some("allow".to_string()), // allow | forbid | force
             output_extension: None,
             output_prefix: None,
@@ -72,7 +72,7 @@ impl std::default::Default for Config {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct Profile {
     presets: HashMap<String, Config>,
     order: Config,
@@ -88,39 +88,33 @@ impl Profile {
             });
         }
         let parent = self.presets.get(preset_name).unwrap();
-        self.order = serde_merge::omerge(&self.order, parent).unwrap();
+        // github.com/Z4RX/serde_merge
+        fn fill_vacant(top: &Config, base: &Config) -> Result<Config, serde_json::Error> {
+            let mut ret = serde_json::to_value(top)?.as_object().unwrap().to_owned();
+            for (k, v) in serde_json::to_value(base)?.as_object().unwrap() {
+                if ret[k].is_null() {
+                    ret[k] = v.clone();
+                }
+            }
+            serde_json::from_value(ret.into())
+        }
+        self.order = fill_vacant(&self.order, parent).unwrap();
         Ok(())
     }
 
     fn fit(mut cfg: Self) -> Result<Self, Error> {
-        // backup
-        cfg.presets.insert("order".into(), cfg.order.clone());
-        // default and global
-        cfg.presets.insert("default".into(), Default::default());
-        cfg.merge("default")?;
-        if let Some(preset) = cfg.presets.get("global") {
-            if preset.parent.is_some() {
-                return Err(Error {
-                    kind: ErrorKind::Config,
-                    message: "presets.global.parent is not null".to_string(),
-                    ..Default::default()
-                });
-            }
-            cfg.merge("global")?
-        }
         // inherit parent's parent
-        let mut parents = Vec::new();
         while let Some(name) = cfg.order.parent.take() {
             if let Some(parent) = cfg.presets.get_mut(&name) {
                 cfg.order.parent = parent.parent.take();
             }
-            parents.push(name);
+            cfg.merge(&name)?;
         }
-        for name in parents.iter().rev() {
-            cfg.merge(name)?;
-        }
-        // order itself
-        cfg.merge("order")?;
+
+        // inherit `global` and `default`
+        let _ = cfg.merge("global"); // may not found
+        cfg.presets.insert("default".into(), Default::default());
+        cfg.merge("default")?;
 
         // 0 means count of processors
         if cfg.order.threads_count.unwrap() == 0 {
@@ -144,7 +138,7 @@ impl Profile {
         Self::fit(toml::from_str(&toml_str).map_err(|e| Error {
             kind: ErrorKind::Config,
             inner: Box::new(e),
-            message: "error while TOML Deserialize".to_string(),
+            message: "error while config file deserialize".to_string(),
         })?)
     }
 

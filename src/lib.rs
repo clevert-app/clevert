@@ -59,19 +59,18 @@ impl From<&StdioCfg> for Stdio {
     }
 }
 
-pub struct Status {
+struct Status {
     commands: IntoIter<Command>,
     childs: Vec<Option<Arc<SharedChild>>>,
-    result: Result<(), Arc<io::Error>>, // io::Result not impl Clone
+    result: Result<(), Arc<io::Error>>, // io::Error not impl Clone
 }
 
 pub struct Order {
+    stdout: StdioCfg,
+    stderr: StdioCfg,
     commands_count: usize,
     ignore_panic: bool,
     wait_cvar: Condvar,
-    stdout: StdioCfg,
-    stderr: StdioCfg,
-
     status: Mutex<Status>,
 }
 
@@ -85,7 +84,7 @@ impl Order {
         command.stdout(&self.stdout).stderr(&self.stderr);
         let child = Arc::new(SharedChild::spawn(&mut command)?);
         status.childs[index] = Some(Arc::clone(&child));
-        drop(status);
+        drop(status); // hold mutex until spawned, otherwise `stop()` will miss child!
         let exit_status = child.wait()?;
         match exit_status.success() {
             true => Ok(true),
@@ -98,17 +97,17 @@ impl Order {
 
     fn spawn(self: Arc<Self>, index: usize) {
         loop {
-            match Self::once(&self, index) {
+            match self.once(index) {
                 // no next command, exit
                 Ok(false) => break,
 
                 // successfully
                 Ok(true) => continue,
 
-                // if `ignore_panic`, ignore exec error and no-zero exit
+                // if `ignore_panic`, ignore execute error and no-zero exit
                 Err(_) if self.ignore_panic => continue,
 
-                // exec error or exit not successfully
+                // execute error or no-zero exit
                 Err(e) => {
                     let _ = self.stop(); // make other threads to stop
                     self.status.lock().unwrap().result = Err(Arc::new(e));
@@ -116,7 +115,7 @@ impl Order {
                 }
             }
         }
-        self.wait_cvar.notify_all();
+        self.wait_cvar.notify_all(); // notify for `wait()`
     }
 
     pub fn start(self: &Arc<Self>) {
@@ -285,22 +284,22 @@ impl Order {
         }
 
         fn split_args(args: &str) -> Result<Vec<&str>, Error> {
-            let parts = args.split('"');
-            if parts.size_hint().0 % 2 == 1 {
+            let splitted = args.split('"');
+            if splitted.size_hint().0 % 2 == 1 {
                 return Err(Error {
                     kind: ErrorKind::Config,
                     message: "args' quotation mask is not closed".to_string(),
                     ..Default::default()
                 });
             }
-            let mut vec = Vec::new();
-            for (index, part) in parts.enumerate() {
+            let mut parts = Vec::new();
+            for (index, part) in splitted.enumerate() {
                 match index % 2 {
-                    1 => vec.push(part),
-                    _ => vec.extend(part.split_whitespace()),
+                    1 => parts.push(part),
+                    _ => parts.extend(part.split_whitespace()),
                 };
             }
-            Ok(vec)
+            Ok(parts)
         }
         let args_template = split_args(cfg.args_template.as_ref().unwrap())?;
         let args_switches = split_args(cfg.args_switches.as_ref().unwrap())?;
@@ -363,27 +362,27 @@ impl Order {
                 open_option.write(true).create(true);
                 let open_result = open_option.open(path.ok_or_else(|| Error {
                     kind: ErrorKind::Config,
-                    message: format!("{kind}_type = 'file', but {kind}_file = None"),
+                    message: "stdio_type = 'file', but stdio_file = None".to_string(),
                     ..Default::default()
                 })?);
                 Ok(StdioCfg::File(open_result.map_err(|e| Error {
                     kind: ErrorKind::Config,
                     inner: Box::new(e),
-                    message: format!("write to {kind}_file failed"),
+                    message: "write to stdio_file failed".to_string(),
                 })?))
             }
             _ => Err(Error {
                 kind: ErrorKind::Config,
-                message: format!("{kind}_type invalid"),
+                message: "stdio_type invalid".to_string(),
                 ..Default::default()
             }),
         };
         Ok(Arc::new(Self {
+            stdout: stdio_gen(cfg.stdout_type.as_ref().unwrap(), cfg.stdout_file.as_ref())?,
+            stderr: stdio_gen(cfg.stderr_type.as_ref().unwrap(), cfg.stderr_file.as_ref())?,
             commands_count: commands.len(),
             ignore_panic: cfg.ignore_panic.unwrap(),
             wait_cvar: Condvar::new(),
-            stdout: stdio_gen(cfg.stdout_type.as_ref().unwrap(), cfg.stdout_file.as_ref())?,
-            stderr: stdio_gen(cfg.stderr_type.as_ref().unwrap(), cfg.stderr_file.as_ref())?,
             status: Mutex::new(Status {
                 commands: commands.into_iter(),
                 childs: (0..cfg.threads_count.unwrap()).map(|_| None).collect(),
