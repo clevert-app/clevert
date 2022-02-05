@@ -306,7 +306,7 @@ impl Action {
 
         let mut commands = Vec::new();
         for (input_file, output_file) in pairs {
-            for index in 0..cfg.repeat_count.unwrap() {
+            for repeat_num in 1..cfg.repeat_count.unwrap() + 1 {
                 let mut command = Command::new(cfg.program.as_ref().unwrap());
                 for part in &args_template {
                     match *part {
@@ -314,19 +314,20 @@ impl Action {
                         "{input_file}" => command.arg(&input_file),
                         "{output_file}" => {
                             if cfg.output_suffix_serial.unwrap() {
-                                let stem = output_file.file_stem().unwrap().to_str().unwrap();
-                                let name = format!("{}_{}", stem, index + 1);
-                                let mut path = output_file.with_file_name(name);
-                                if let Some(ext) = output_file.extension() {
-                                    path.set_extension(ext);
+                                let mut name = format!("_{repeat_num}");
+                                if let Some(stem) = output_file.file_stem() {
+                                    name.insert_str(0, &stem.to_string_lossy());
                                 }
-                                command.arg(path)
+                                if let Some(ext) = output_file.extension() {
+                                    name.push_str(&ext.to_string_lossy());
+                                }
+                                command.arg(output_file.with_file_name(name))
                             } else {
                                 command.arg(&output_file)
                             }
                         }
                         "{output_dir}" => command.arg(output_file.parent().unwrap()),
-                        "{repeat_num}" => command.arg((index + 1).to_string()),
+                        "{repeat_num}" => command.arg(repeat_num.to_string()),
                         _ => command.arg(part),
                     };
                 }
@@ -362,18 +363,18 @@ impl Action {
                 open_option.write(true).create(true);
                 let open_result = open_option.open(path.ok_or_else(|| Error {
                     kind: ErrorKind::Config,
-                    message: "stdio_type = 'file', but stdio_file = None".to_string(),
+                    message: "stdio's _type = 'file', but _file = None".to_string(),
                     ..Default::default()
                 })?);
                 Ok(StdioCfg::File(open_result.map_err(|e| Error {
                     kind: ErrorKind::Config,
                     inner: Box::new(e),
-                    message: "write to stdio_file failed".to_string(),
+                    message: "write to stdio's _file failed".to_string(),
                 })?))
             }
             _ => Err(Error {
                 kind: ErrorKind::Config,
-                message: "stdio_type invalid".to_string(),
+                message: "stdio's _type invalid".to_string(),
                 ..Default::default()
             }),
         };
@@ -385,7 +386,7 @@ impl Action {
             wait_cvar: Condvar::new(),
             status: Mutex::new(Status {
                 commands: commands.into_iter(),
-                childs: (0..cfg.threads_count.unwrap()).map(|_| None).collect(),
+                childs: vec![None; cfg.threads_count.unwrap() as _],
                 result: Ok(()),
             }),
         }))
