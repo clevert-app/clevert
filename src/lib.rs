@@ -65,7 +65,7 @@ struct Status {
     result: Result<(), Arc<io::Error>>, // io::Error not impl Clone
 }
 
-pub struct Order {
+pub struct Action {
     stdout: StdioCfg,
     stderr: StdioCfg,
     commands_count: usize,
@@ -74,7 +74,7 @@ pub struct Order {
     status: Mutex<Status>,
 }
 
-impl Order {
+impl Action {
     fn once(&self, index: usize) -> io::Result<bool> {
         let mut status = self.status.lock().unwrap();
         let mut command = match status.commands.next() {
@@ -125,7 +125,7 @@ impl Order {
         }
     }
 
-    /// Stop order. If killing the processes fails, return the first error.
+    /// Stop action. If killing the processes fails, return the first error.
     pub fn stop(&self) -> io::Result<()> {
         let mut status = self.status.lock().unwrap();
         status.commands.by_ref().count(); // clean the command list
@@ -349,7 +349,7 @@ impl Order {
         if commands.is_empty() {
             return Err(Error {
                 kind: ErrorKind::Config,
-                message: "order did not generate any commands".to_string(),
+                message: "current config did not generate any commands".to_string(),
                 ..Default::default()
             });
         }

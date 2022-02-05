@@ -75,7 +75,7 @@ impl std::default::Default for Config {
 #[derive(Deserialize)]
 pub struct Profile {
     presets: HashMap<String, Config>,
-    order: Config,
+    current: Config,
 }
 
 impl Profile {
@@ -98,15 +98,15 @@ impl Profile {
             }
             serde_json::from_value(ret.into())
         }
-        self.order = fill_vacant(&self.order, parent).unwrap();
+        self.current = fill_vacant(&self.current, parent).unwrap();
         Ok(())
     }
 
     fn fit(mut cfg: Self) -> Result<Self, Error> {
         // inherit parent's parent
-        while let Some(name) = cfg.order.parent.take() {
+        while let Some(name) = cfg.current.parent.take() {
             if let Some(parent) = cfg.presets.get_mut(&name) {
-                cfg.order.parent = parent.parent.take();
+                cfg.current.parent = parent.parent.take();
             }
             cfg.merge(&name)?;
         }
@@ -117,7 +117,7 @@ impl Profile {
         cfg.merge("default")?;
 
         // 0 means count of processors
-        if cfg.order.threads_count.unwrap() == 0 {
+        if cfg.current.threads_count.unwrap() == 0 {
             #[cfg(unix)]
             let count = fs::read_to_string("/proc/cpuinfo")
                 .unwrap()
@@ -128,7 +128,7 @@ impl Profile {
                 .unwrap()
                 .parse::<i32>()
                 .unwrap();
-            cfg.order.threads_count.replace(count);
+            cfg.current.threads_count.replace(count);
         };
 
         Ok(cfg)
@@ -160,10 +160,10 @@ impl Profile {
 
 impl Config {
     pub fn from_toml(toml_str: String) -> Result<Self, Error> {
-        Ok(Profile::from_toml(toml_str)?.order)
+        Ok(Profile::from_toml(toml_str)?.current)
     }
 
     pub fn from_default_file() -> Result<Self, Error> {
-        Ok(Profile::from_default_file()?.order)
+        Ok(Profile::from_default_file()?.current)
     }
 }

@@ -23,7 +23,7 @@ But in my opinion, it's not enough and we couldn't stop at this. So _convevo_ wa
 ## Examples
 
 ```toml
-[order]
+[current]
 parent = 'ffmpeg_mp3'
 
 [presets.global]
@@ -32,7 +32,7 @@ output_dir = '.\output'
 threads_count = 0 # set to process count
 
 [presets.ffmpeg]
-program = 'Z:\ffmpeg-n4.4-17-win64-gpl-shared\bin\ffmpeg.exe'
+program = 'Z:\ffmpeg-5.0-gpl-shared\bin\ffmpeg.exe'
 args_template = '-y -i {input_file} {args_switches} {output_file}'
 
 [presets.ffmpeg_mp3]
@@ -48,7 +48,7 @@ output_extension = 'm4a'
 
 [presets.ffmpeg_slice]
 parent = 'ffmpeg'
-args_switches = '-ss 00:01:23.00 -to 00:02:34.00 ' # -ss <Start> | -to <End>
+args_switches = '-ss 00:01:23.00 -to 00:02:34.00 -c copy' # -ss <Start> | -to <End>
 
 [presets.inkscape_pdf]
 program = 'Z:\inkscape-1.1-x64\bin\inkscape.exe'
@@ -66,13 +66,17 @@ output_extension = 'png'
 
 0. Config structure. Change some config fields to no-optional?
 
-1. Help document and Intro.
+1. Better argument generator.
 
-2. Interactive cli.
+2. Native UI with wxWidgets.
 
-3. Profile packs.
+3. Help document and Intro.
 
-4. StdIn.
+4. Interactive cli.
+
+5. Profile packs.
+
+6. StdIn.
 
 ## Note
 

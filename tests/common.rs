@@ -49,22 +49,22 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     args_template = '{args_switches} {repeat_num}'
     args_switches = '--example-switch'
 
-    [order]
+    [current]
     parent = 'test'
     input_dir = './target/_test_temp/input'
     output_dir = './target/_test_temp/output'
     "#
     .to_string();
     let cfg = Config::from_toml(cfg_toml)?;
-    let order = Order::new(&cfg)?;
-    order.start();
+    let action = Action::new(&cfg)?;
+    action.start();
 
     thread::spawn({
-        let order = Arc::clone(&order);
-        move || order.wait().unwrap()
+        let action = Arc::clone(&action);
+        move || action.wait().unwrap()
     });
 
-    order.wait()?;
+    action.wait()?;
 
     let read_log_sum = |name| -> std::io::Result<u8> {
         let content = fs::read(dir.join(name))?;
@@ -108,7 +108,7 @@ args_template = '/c echo [ {input_file} ] [ {output_file} ]'
 input_absolute = true
 output_absolute = true
 
-[order]
+[current]
 parent = 'cwebp'
 input_dir = './target/convevo_test/input_dir'
 output_dir = './target/convevo_test/output_dir'

@@ -20,20 +20,20 @@ fn cli_run() -> Result<(), Error> {
         cfg.input_list = Some(list);
     }
 
-    // `Order` is one-off, change config on UI and then create a new `Order`.
-    let order = Arc::new(Order::new(&cfg)?);
-    order.start();
+    // `Action` is one-off, change config on UI and then create a new `Action`.
+    let action = Arc::new(Action::new(&cfg)?);
+    action.start();
 
     // command operation
     if cfg.cli_operation.unwrap() {
-        let order = Arc::clone(&order);
+        let action = Arc::clone(&action);
         thread::spawn(move || loop {
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).unwrap();
             match input.trim() {
                 "s" => {
-                    log!("operation <s> triggered, order stopped");
-                    order.stop().unwrap();
+                    log!("operation <s> triggered, action stopped");
+                    action.stop().unwrap();
                     break;
                 }
                 op => log!(warn:"unknown operation {op}"),
@@ -43,9 +43,9 @@ fn cli_run() -> Result<(), Error> {
 
     // progress message
     if cfg.cli_log_level.unwrap() >= 2 {
-        let order = Arc::clone(&order);
+        let action = Arc::clone(&action);
         thread::spawn(move || loop {
-            let (finished, total) = order.progress();
+            let (finished, total) = action.progress();
             log!(state:"progress = {finished} / {total}");
             if finished == total {
                 break;
@@ -54,7 +54,7 @@ fn cli_run() -> Result<(), Error> {
         });
     }
 
-    order.wait()?;
+    action.wait()?;
 
     // print a '\n' for progress message
     if cfg.cli_log_level.unwrap() >= 2 {
