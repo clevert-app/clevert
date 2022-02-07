@@ -283,8 +283,8 @@ impl Action {
             pairs.push((input_file, output_file));
         }
 
-        fn split_args(args: &str) -> Result<Vec<&str>, Error> {
-            let splitted = args.split('"');
+        let args_template = {
+            let splitted = cfg.args_template.as_ref().unwrap().split('"');
             if splitted.size_hint().0 % 2 == 1 {
                 return Err(Error {
                     kind: ErrorKind::Config,
@@ -293,39 +293,35 @@ impl Action {
                 });
             }
             let mut parts = Vec::new();
-            for (index, part) in splitted.enumerate() {
-                match index % 2 {
+            for (i, part) in splitted.enumerate() {
+                match i % 2 {
                     1 => parts.push(part),
                     _ => parts.extend(part.split_whitespace()),
                 };
             }
-            Ok(parts)
-        }
-        let args_template = split_args(cfg.args_template.as_ref().unwrap())?;
-        let args_switches = split_args(cfg.args_switches.as_ref().unwrap())?;
-
+            parts
+        };
         let mut commands = Vec::new();
         for (input_file, output_file) in pairs {
             for repeat_num in 1..cfg.repeat_count.unwrap() + 1 {
                 let mut command = Command::new(cfg.program.as_ref().unwrap());
                 for part in &args_template {
                     match *part {
-                        "{args_switches}" => command.args(&args_switches),
                         "{input_file}" => command.arg(&input_file),
-                        "{output_file}" => {
-                            if cfg.output_suffix_serial.unwrap() {
-                                let mut name = format!("_{repeat_num}");
-                                if let Some(stem) = output_file.file_stem() {
-                                    name.insert_str(0, &stem.to_string_lossy());
-                                }
-                                if let Some(ext) = output_file.extension() {
-                                    name.push_str(&ext.to_string_lossy());
-                                }
-                                command.arg(output_file.with_file_name(name))
-                            } else {
-                                command.arg(&output_file)
+                        "{output_file}" if cfg.output_suffix_serial.unwrap() => {
+                            let mut name = String::new();
+                            if let Some(stem) = output_file.file_stem() {
+                                name.push_str(&stem.to_string_lossy());
+                                name.push('_');
                             }
+                            name.push_str(&repeat_num.to_string());
+                            if let Some(ext) = output_file.extension() {
+                                name.push('.');
+                                name.push_str(&ext.to_string_lossy());
+                            }
+                            command.arg(output_file.with_file_name(name))
                         }
+                        "{output_file}" => command.arg(&output_file),
                         "{output_dir}" => command.arg(output_file.parent().unwrap()),
                         "{repeat_num}" => command.arg(repeat_num.to_string()),
                         _ => command.arg(part),

@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use std::thread;
-// use std::time::Duration;
 
 #[test]
 pub fn common() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,8 +45,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     [presets.test]
     parent = 'test_base'
     program = './target/_test_temp/sleeper'
-    args_template = '{args_switches} {repeat_num}'
-    args_switches = '--example-switch'
+    args_template = '--example-switch {repeat_num}'
 
     [current]
     parent = 'test'
@@ -75,45 +73,3 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-/*
-let toml_str = r#"
-[presets.global]
-threads_count = 2
-repeat_count = 1
-ignore_panic = false
-
-[presets.test_common]
-stdout_type = 'file' # normal | ignore | file
-stdout_file = './target/convevo_test/stdout.log.txt'
-stderr_type = 'file'
-stderr_file = './target/convevo_test/stderr.log.txt'
-program = 'test_common_'
-args_template = '{args_switches} {input_file} -o {output_file}'
-args_switches = '-m 6'
-input_recursive = true
-output_recursive = true
-output_overwrite = true
-output_extension = 'webp'
-
-[presets.timeout]
-program = 'timeout'
-args_template = '-t 3'
-
-[presets.echo]
-stdout_type = 'normal'
-stderr_type = 'normal'
-program = 'cmd'
-args_template = '/c echo [ {input_file} ] [ {output_file} ]'
-input_absolute = true
-output_absolute = true
-
-[current]
-parent = 'cwebp'
-input_dir = './target/convevo_test/input_dir'
-output_dir = './target/convevo_test/output_dir'
-output_prefix = 'out_'
-output_suffix = '_out'
-"#
-.to_string();
-*/

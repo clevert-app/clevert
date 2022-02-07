@@ -19,7 +19,6 @@ pub struct Config {
     pub program: Option<String>,
     pub current_dir: Option<String>,
     pub args_template: Option<String>,
-    pub args_switches: Option<String>,
     pub input_list: Option<Vec<String>>,
     pub input_dir: Option<String>,
     pub input_absolute: Option<bool>,
@@ -34,7 +33,6 @@ pub struct Config {
     pub output_suffix_serial: Option<bool>,
     // Command line configs
     pub cli_log_level: Option<i32>,
-    pub cli_interactive: Option<bool>,
     pub cli_operation: Option<bool>,
 }
 
@@ -50,9 +48,8 @@ impl std::default::Default for Config {
             stderr_type: Some("ignore".to_string()),
             stderr_file: None,
             program: None,
-            current_dir: None,
+            current_dir: None, // only apply on commands, has no effect to self
             args_template: Some(String::new()),
-            args_switches: Some(String::new()),
             input_list: None,
             input_dir: None,
             input_absolute: Some(false),
@@ -66,7 +63,6 @@ impl std::default::Default for Config {
             output_suffix: None,
             output_suffix_serial: Some(false),
             cli_log_level: Some(2),
-            cli_interactive: Some(true),
             cli_operation: Some(true),
         }
     }
@@ -87,18 +83,15 @@ impl Profile {
                 ..Default::default()
             });
         }
-        let parent = self.presets.get(preset_name).unwrap();
         // github.com/Z4RX/serde_merge
-        fn fill_vacant(top: &Config, base: &Config) -> Result<Config, serde_json::Error> {
-            let mut ret = serde_json::to_value(top)?.as_object().unwrap().to_owned();
-            for (k, v) in serde_json::to_value(base)?.as_object().unwrap() {
-                if ret[k].is_null() {
-                    ret[k] = v.clone();
-                }
+        let mut current = serde_json::to_value(&self.current).unwrap();
+        let parent = self.presets.get(preset_name).unwrap();
+        for (k, v) in serde_json::to_value(parent).unwrap().as_object().unwrap() {
+            if current[k].is_null() {
+                current[k] = v.clone();
             }
-            serde_json::from_value(ret.into())
         }
-        self.current = fill_vacant(&self.current, parent).unwrap();
+        self.current = serde_json::from_value(current).unwrap();
         Ok(())
     }
 
