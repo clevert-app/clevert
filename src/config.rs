@@ -32,7 +32,7 @@ pub struct Config {
     pub output_suffix_serial: Option<bool>,
 }
 
-impl std::default::Default for Config {
+impl Default for Config {
     fn default() -> Self {
         Self {
             parent: None,
@@ -43,7 +43,7 @@ impl std::default::Default for Config {
                     .matches("\nprocessor")
                     .count() as _;
                 #[cfg(windows)]
-                let count = std::env::var("number_of_processors")
+                let count = env::var("number_of_processors")
                     .unwrap()
                     .parse::<i32>()
                     .unwrap();
@@ -87,33 +87,6 @@ impl Profile {
         self.cli_log_level = self.cli_log_level.or(Some(2));
         self.cli_interactive = self.cli_interactive.or(Some(true));
         self
-    }
-
-    pub fn from_toml(toml_str: &str) -> Result<Self, Error> {
-        Ok(Self::fit(toml::from_str(toml_str).map_err(|e| Error {
-            kind: ErrorKind::Config,
-            inner: Box::new(e),
-            message: "error while config file deserialize".to_string(),
-        })?))
-    }
-
-    pub fn from_default_file() -> Result<Self, Error> {
-        let path = env::current_exe().unwrap();
-        if let Ok(text) = fs::read_to_string(&path.with_extension("toml")) {
-            return Self::from_toml(&text);
-        }
-        // if let Ok(text) = fs::read_to_string(&path.with_extension("json")) {
-        //     return Self::from_json(text);
-        // }
-        Err(Error {
-            kind: ErrorKind::Config,
-            message: "the config file was not found".to_string(),
-            ..Default::default()
-        })
-    }
-
-    pub fn keys(&self) -> Vec<&String> {
-        self.presets.keys().collect()
     }
 
     fn get(&self, name: &str) -> Result<Config, Error> {
@@ -162,18 +135,36 @@ impl Profile {
         Ok(current)
     }
 
-    pub fn set_current(&mut self, name: &str) -> Result<(), Error> {
-        let current = self.get(name)?;
-        self.presets.insert("current".to_string(), current);
-        Ok(())
+    pub fn get_current(&self) -> Result<Config, Error> {
+        self.get(self.current.as_ref().unwrap())
     }
 
-    pub fn set_input_list(&mut self, list: Vec<String>) {
-        let current = self.presets.get_mut("current").unwrap();
-        current.input_list = Some(list);
+    pub fn keys(&self) -> Vec<&String> {
+        let mut keys: Vec<&String> = self.presets.keys().collect();
+        keys.sort();
+        keys
     }
 
-    pub fn get_current(&self) -> &Config {
-        self.presets.get("current").unwrap()
+    pub fn from_toml(toml_str: &str) -> Result<Self, Error> {
+        Ok(Self::fit(toml::from_str(toml_str).map_err(|e| Error {
+            kind: ErrorKind::Config,
+            inner: Box::new(e),
+            message: "error while config file deserialize".to_string(),
+        })?))
+    }
+
+    pub fn from_default_file() -> Result<Self, Error> {
+        let path = env::current_exe().unwrap();
+        if let Ok(text) = fs::read_to_string(&path.with_extension("toml")) {
+            return Self::from_toml(&text);
+        }
+        // if let Ok(text) = fs::read_to_string(&path.with_extension("json")) {
+        //     return Self::from_json(text);
+        // }
+        Err(Error {
+            kind: ErrorKind::Config,
+            message: "the config file was not found".to_string(),
+            ..Default::default()
+        })
     }
 }

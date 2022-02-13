@@ -4,8 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build:
-    timeout-minutes: 5
-    name: ${{ matrix.rust }} on ${{ matrix.os }}
+    name: on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -15,8 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Show toolchain info
-        run: rustup toolchain list && rustup target list --installed
+      # - name: Show toolchain info
+      #   run: rustup toolchain list && rustup target list --installed
 
       - name: Run tests
         run: cargo test

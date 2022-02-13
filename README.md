@@ -22,61 +22,48 @@ But in my opinion, it's not enough and we couldn't stop at this. So _convevo_ wa
 
 ## Examples
 
-- **OUTDATED**
-
 ```toml
-[current]
-parent = 'ffmpeg_mp3'
+current = 'ffmpeg_mp3'
 
 [presets.global]
-input_dir = '.\input'
-output_dir = '.\output'
-threads_count = 0 # set to process count
+input_dir = 'input'
+output_dir = 'output'
 
 [presets.ffmpeg]
-program = 'Z:\ffmpeg-5.0-gpl-shared\bin\ffmpeg.exe'
-args_template = '-y -i {input_file} {args_switches} {output_file}'
+program = 'D:\Libraries\ffmpeg\5.0-gpl-shared\bin\ffmpeg.exe'
 
 [presets.ffmpeg_mp3]
 parent = 'ffmpeg'
-args_switches = '-c:a libmp3lame -b:a 192k -q:a 0'
-# args_switches = '-af volume=-10dB' # Change audio volume
+args_template = '-y -i {input_file} -c:a libmp3lame -b:a 192k -q:a 0 {output_file}'
 output_extension = 'mp3'
-
-[presets.ffmpeg_extract_audio]
-parent = 'ffmpeg'
-args_switches = '-vn -sn -c:a copy -y -map 0:a:0'
-output_extension = 'm4a'
 
 [presets.ffmpeg_slice]
 parent = 'ffmpeg'
-args_switches = '-ss 00:01:23.00 -to 00:02:34.00 -c copy' # -ss <Start> | -to <End>
+args_template = '-y -i {input_file} -ss 00:00:00 -to 00:00:00.01 -c copy {output_file}'
 
-[presets.inkscape_pdf]
-program = 'Z:\inkscape-1.1-x64\bin\inkscape.exe'
-args_template = '--pdf-page {repeat_num} {args_switches} -o {output_file} {input_file}'
-output_suffix_serial = true
-# repeat_count = 50 # page count
-
-[presets.inkscape_pdf2png]
-parent = 'inkscape_pdf'
-args_switches = '--export-type png --export-width 2560  --export-background #ffffff --pdf-poppler'
+[presets.pngquant]
+program = 'D:\Libraries\pngquant\2.17.0\pngquant.exe'
+args_template = '--speed 1 --quality 0-50 --nofs -f -o {output_file} {input_file}'
 output_extension = 'png'
+
+[presets.waifu2x] # github.com/nihui/waifu2x-ncnn-vulkan
+program = 'waifu2x-ncnn-vulkan'
+args_template = '-i {input_file} -o {output_file} -n 0 -s 2'
+output_extension = 'png'
+threads_count = 1 # must be 1
 ```
 
 ## Todo List
 
 1. Interactive cli.
 
-2. Config structure. Change some config fields to no-optional?
+2. Better argument generator.
 
-3. Better argument generator.
+3. Help document and Intro.
 
-4. Help document and Intro.
+4. Profile packs.
 
-5. Profile packs.
-
-6. StdIn.
+5. StdIn.
 
 ## Note
 

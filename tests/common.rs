@@ -1,5 +1,6 @@
 use convevo::*;
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
@@ -15,32 +16,25 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     fs::write(dir.join("sleeper.rs"), SLEEPER_SRC)?;
-    Command::new("rustc")
+    let _ = Command::new("rustc")
         .arg("-o")
         .arg(dir.join("sleeper"))
         .arg(dir.join("sleeper.rs"))
-        .spawn()?
-        .wait_with_output()?;
+        .status();
 
-    let mut profile = Profile::from_toml(CFG_TOML)?;
-    profile.set_current(&profile.current.as_ref().unwrap().clone())?;
-    let action = Action::new(&profile)?;
+    let profile = Profile::from_toml(CFG_TOML)?;
+    let action = Action::new(&profile.get_current()?)?;
     action.start();
-
     thread::spawn({
         let action = Arc::clone(&action);
-        move || action.wait().unwrap()
+        move || action.wait()
     });
-
     action.wait()?;
-
-    let read_log_sum = |name| -> std::io::Result<u8> {
+    let read_log_sum = |name| -> io::Result<u8> {
         let content = fs::read(dir.join(name))?;
         Ok(content.iter().map(|ch| ch - '0' as u8).sum())
     };
-    assert_eq!(read_log_sum("stdout.log")?, 20);
     assert_eq!(read_log_sum("stderr.log")?, 20);
-
     Ok(())
 }
 
@@ -56,8 +50,7 @@ input_dir = './target/_test_temp/input'
 output_dir = './target/_test_temp/output'
 
 [presets.test_base]
-stdout_type = 'file'
-stdout_file = './target/_test_temp/stdout.log'
+stdout_type = 'ignore'
 stderr_type = 'file'
 stderr_file = './target/_test_temp/stderr.log'
 
@@ -71,7 +64,6 @@ const SLEEPER_SRC: &str = r#"
 fn main() {
     let r = std::env::args().last().unwrap().parse::<u64>().unwrap() % 2;
     std::thread::sleep(std::time::Duration::from_millis(r * 25 + 50));
-    print!("{}", r);
     eprint!("{}", r);
 }
 "#;

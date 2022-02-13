@@ -2,6 +2,7 @@ mod config;
 mod log;
 pub use config::{Config, Profile};
 use shared_child::SharedChild;
+use std::env;
 use std::fmt;
 use std::fs;
 use std::io;
@@ -25,7 +26,7 @@ pub struct Error {
     pub message: String,
 }
 
-impl std::default::Default for Error {
+impl Default for Error {
     fn default() -> Self {
         Self {
             kind: ErrorKind::Other,
@@ -171,9 +172,7 @@ impl Action {
         }
     }
 
-    pub fn new(profile: &Profile) -> Result<Arc<Self>, Error> {
-        let cfg = profile.get_current();
-
+    pub fn new(cfg: &Config) -> Result<Arc<Self>, Error> {
         fn visit_dir(dir: PathBuf, recursive: bool) -> io::Result<Vec<PathBuf>> {
             let mut ret = Vec::new();
             for item in fs::read_dir(dir)? {
@@ -211,7 +210,7 @@ impl Action {
         }
 
         // Current dir is different with exe dir
-        let current_dir = std::env::current_dir().unwrap();
+        let current_dir = env::current_dir().unwrap();
         let mut pairs = Vec::new(); // (from, to)
         for mut input_file in input_files {
             // Bare name
@@ -330,18 +329,13 @@ impl Action {
                     };
                 }
                 commands.push(command);
+                // log!("command args = {:?}", command.get_args());
             }
         }
 
         if let Some(dir) = &cfg.current_dir {
             for command in &mut commands {
                 command.current_dir(dir);
-            }
-        }
-
-        if profile.cli_log_level.unwrap() >= 3 {
-            for command in &commands {
-                log!("command args = {:?}", command.get_args());
             }
         }
 
