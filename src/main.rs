@@ -11,38 +11,46 @@ fn cli_run() -> Result<(), Error> {
         log!("env::args = {:?}", &args);
     }
 
-    if profile.current.is_none() && !profile.cli_interactive.unwrap() {
+    if profile.cli_interactive.unwrap() {
+        let mut keys = profile.keys();
+        keys.sort();
+        log!("presets list = {{");
+        for (i, k) in keys.iter().enumerate() {
+            log!(" {:>3} : {k}", i);
+        }
+        log!("}}");
+        log!(state:"input preset index: ");
+        let choice = &mut String::new();
+        std::io::stdin().read_line(choice).unwrap();
+        let choice = choice.trim().parse::<usize>().ok();
+        if let Some(&name) = choice.and_then(|i| keys.get(i)) {
+            let name = name.clone(); // fight with borrow checker...
+            profile.set_current(&name)?;
+        } else {
+            return Err(Error {
+                kind: ErrorKind::Config,
+                message: "input preset index invalid".to_string(),
+                ..Default::default()
+            });
+        }
+    } else if let Some(name) = &profile.current {
+        let name = name.clone();
+        profile.set_current(&name)?;
+    } else {
         return Err(Error {
             kind: ErrorKind::Config,
-            // message: "".to_string(),
+            message: "need nither `cli_interactive` or `current` to generate config".to_string(),
             ..Default::default()
         });
     }
 
-    if profile.cli_interactive.unwrap() {
-        let list = profile.keys();
-        log!("presets list = {:?}", list);
-        let choice = &mut String::new();
-        std::io::stdin().read_line(choice).unwrap();
-        if let Some(&name) = choice.parse::<usize>().ok().and_then(|i| list.get(i)) {
-            profile.current = Some(name.clone());
-        } else {
-            return Err(Error {
-                ..Default::default()
-            });
-        }
-        log!("press <enter> key to start");
+    let is_switch = |i: &&String| i.starts_with('-');
+    // let switches: Vec<&String> = args.iter().take_while(is_switch).collect();
+    let inputs: Vec<&String> = args.iter().skip_while(is_switch).collect();
+    if !inputs.is_empty() {
+        let list = inputs.iter().map(|s| String::from(*s)).collect();
+        profile.set_input_list(list);
     }
-
-    // TODO: Bring back arg input function
-    // let is_switch = |i: &&String| i.starts_with('-');
-    // // let switches: Vec<&String> = args.iter().take_while(is_switch).collect();
-    // let inputs: Vec<&String> = args.iter().skip_while(is_switch).collect();
-
-    // if !inputs.is_empty() {
-    //     let list = inputs.iter().map(|s| String::from(*s)).collect();
-    //     cfg.input_list = Some(list);
-    // }
 
     // the Action is one-off, change Config and then new an Action
     let action = Action::new(&profile)?;
@@ -70,7 +78,7 @@ fn cli_run() -> Result<(), Error> {
         let action = Arc::clone(&action);
         thread::spawn(move || loop {
             let (finished, total) = action.progress();
-            log!(state:"progress = {finished} / {total}");
+            log!(state:"progress = {finished} / {total}\t");
             if finished == total {
                 break;
             }
@@ -78,13 +86,14 @@ fn cli_run() -> Result<(), Error> {
         });
     }
 
-    action.wait()?;
+    let wait_result = action.wait();
 
     // print a '\n' for progress message
     if profile.cli_log_level.unwrap() >= 2 {
         println!();
     }
 
+    wait_result?;
     Ok(())
 }
 
@@ -97,6 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         yansi::Paint::disable()
     }
 
+    // TODO: move into cli_run() ???
     let begin_time = SystemTime::now();
 
     let args: Vec<String> = std::env::args().skip(1).collect();

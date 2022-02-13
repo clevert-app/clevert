@@ -22,7 +22,8 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
         .spawn()?
         .wait_with_output()?;
 
-    let profile = Profile::from_toml(CFG_TOML)?;
+    let mut profile = Profile::from_toml(CFG_TOML)?;
+    profile.set_current(&profile.current.as_ref().unwrap().clone())?;
     let action = Action::new(&profile)?;
     action.start();
 

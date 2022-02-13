@@ -172,7 +172,7 @@ impl Action {
     }
 
     pub fn new(profile: &Profile) -> Result<Arc<Self>, Error> {
-let cfg=profile.get_current()?;
+        let cfg = profile.get_current();
 
         fn visit_dir(dir: PathBuf, recursive: bool) -> io::Result<Vec<PathBuf>> {
             let mut ret = Vec::new();

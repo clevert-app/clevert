@@ -1,22 +1,11 @@
 use crate::Error;
 use crate::ErrorKind;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 
-fn merge<T: Serialize + DeserializeOwned>(current: &mut T, parent: &T) {
-    // github.com/Z4RX/serde_merge
-    let mut map = serde_json::to_value(&current).unwrap();
-    for (k, v) in serde_json::to_value(parent).unwrap().as_object().unwrap() {
-        if map[k].is_null() {
-            map[k] = v.clone();
-        }
-    }
-    *current = serde_json::from_value(map).unwrap();
-}
-
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct Config {
     pub parent: Option<String>,
     pub threads_count: Option<i32>,
@@ -85,7 +74,7 @@ impl std::default::Default for Config {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 pub struct Profile {
     presets: HashMap<String, Config>,
     pub current: Option<String>,
@@ -93,20 +82,10 @@ pub struct Profile {
     pub cli_interactive: Option<bool>,
 }
 
-impl std::default::Default for Profile {
-    fn default() -> Self {
-        Self {
-            presets: HashMap::new(),
-            current: None,
-            cli_log_level: Some(2),
-            cli_interactive: Some(true),
-        }
-    }
-}
-
 impl Profile {
     fn fit(mut self) -> Self {
-        merge(&mut self, &Default::default());
+        self.cli_log_level = self.cli_log_level.or(Some(2));
+        self.cli_interactive = self.cli_interactive.or(Some(true));
         self
     }
 
@@ -137,7 +116,18 @@ impl Profile {
         self.presets.keys().collect()
     }
 
-    pub fn get(&self, name: &str) -> Result<Config, Error> {
+    fn get(&self, name: &str) -> Result<Config, Error> {
+        fn merge(current: &mut Config, parent: &Config) {
+            // github.com/Z4RX/serde_merge
+            let mut map = serde_json::to_value(&current).unwrap();
+            for (k, v) in serde_json::to_value(parent).unwrap().as_object().unwrap() {
+                if map[k].is_null() {
+                    map[k] = v.clone();
+                }
+            }
+            *current = serde_json::from_value(map).unwrap();
+        }
+
         let mut current = self.presets.get(name).unwrap().clone();
 
         // inherit parent's parent
@@ -172,8 +162,18 @@ impl Profile {
         Ok(current)
     }
 
-    pub fn get_current(&self) -> Result<Config, Error> {
-        // TODO: add error handle here
-        self.get(self.current.as_ref().unwrap())
+    pub fn set_current(&mut self, name: &str) -> Result<(), Error> {
+        let current = self.get(name)?;
+        self.presets.insert("current".to_string(), current);
+        Ok(())
+    }
+
+    pub fn set_input_list(&mut self, list: Vec<String>) {
+        let current = self.presets.get_mut("current").unwrap();
+        current.input_list = Some(list);
+    }
+
+    pub fn get_current(&self) -> &Config {
+        self.presets.get("current").unwrap()
     }
 }

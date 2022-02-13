@@ -7,7 +7,7 @@ macro_rules! log {
         println!("{} {}", yansi::Paint::red("[convevo]").bold(), format!($($arg)*));
     };
     (state:$($arg:tt)*) => {
-        print!("\r{} {}\t", yansi::Paint::cyan("[convevo]").bold(), format!($($arg)*));
+        print!("\r{} {}", yansi::Paint::cyan("[convevo]").bold(), format!($($arg)*));
         use std::io::Write;
         std::io::stdout().flush().unwrap();
     };
