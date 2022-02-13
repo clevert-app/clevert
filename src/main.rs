@@ -5,27 +5,51 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 fn cli_run() -> Result<(), Error> {
-    let mut cfg = Config::from_default_file()?;
+    let mut profile = Profile::from_default_file()?;
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if cfg.cli_log_level.unwrap() >= 3 {
+    if profile.cli_log_level.unwrap() >= 3 {
         log!("env::args = {:?}", &args);
     }
 
-    let is_switch = |i: &&String| i.starts_with('-');
-    // let switches: Vec<&String> = args.iter().take_while(is_switch).collect();
-    let inputs: Vec<&String> = args.iter().skip_while(is_switch).collect();
-
-    if !inputs.is_empty() {
-        let list = inputs.iter().map(|s| String::from(*s)).collect();
-        cfg.input_list = Some(list);
+    if profile.current.is_none() && !profile.cli_interactive.unwrap() {
+        return Err(Error {
+            kind: ErrorKind::Config,
+            // message: "".to_string(),
+            ..Default::default()
+        });
     }
 
-    // `Action` is one-off, change config on UI and then create a new `Action`.
-    let action = Arc::new(Action::new(&cfg)?);
+    if profile.cli_interactive.unwrap() {
+        let list = profile.keys();
+        log!("presets list = {:?}", list);
+        let choice = &mut String::new();
+        std::io::stdin().read_line(choice).unwrap();
+        if let Some(&name) = choice.parse::<usize>().ok().and_then(|i| list.get(i)) {
+            profile.current = Some(name.clone());
+        } else {
+            return Err(Error {
+                ..Default::default()
+            });
+        }
+        log!("press <enter> key to start");
+    }
+
+    // TODO: Bring back arg input function
+    // let is_switch = |i: &&String| i.starts_with('-');
+    // // let switches: Vec<&String> = args.iter().take_while(is_switch).collect();
+    // let inputs: Vec<&String> = args.iter().skip_while(is_switch).collect();
+
+    // if !inputs.is_empty() {
+    //     let list = inputs.iter().map(|s| String::from(*s)).collect();
+    //     cfg.input_list = Some(list);
+    // }
+
+    // the Action is one-off, change Config and then new an Action
+    let action = Action::new(&profile)?;
     action.start();
 
-    // command operation
-    if cfg.cli_operation.unwrap() {
+    // command operations
+    if profile.cli_interactive.unwrap() {
         let action = Arc::clone(&action);
         thread::spawn(move || loop {
             let mut input = String::new();
@@ -39,10 +63,10 @@ fn cli_run() -> Result<(), Error> {
                 op => log!(warn:"unknown operation {op}"),
             };
         });
-    };
+    }
 
     // progress message
-    if cfg.cli_log_level.unwrap() >= 2 {
+    if profile.cli_log_level.unwrap() >= 2 {
         let action = Arc::clone(&action);
         thread::spawn(move || loop {
             let (finished, total) = action.progress();
@@ -57,7 +81,7 @@ fn cli_run() -> Result<(), Error> {
     action.wait()?;
 
     // print a '\n' for progress message
-    if cfg.cli_log_level.unwrap() >= 2 {
+    if profile.cli_log_level.unwrap() >= 2 {
         println!();
     }
 

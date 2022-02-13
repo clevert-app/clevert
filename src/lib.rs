@@ -1,6 +1,6 @@
 mod config;
 mod log;
-pub use config::Config;
+pub use config::{Config, Profile};
 use shared_child::SharedChild;
 use std::fmt;
 use std::fs;
@@ -171,7 +171,9 @@ impl Action {
         }
     }
 
-    pub fn new(cfg: &Config) -> Result<Arc<Self>, Error> {
+    pub fn new(profile: &Profile) -> Result<Arc<Self>, Error> {
+let cfg=profile.get_current()?;
+
         fn visit_dir(dir: PathBuf, recursive: bool) -> io::Result<Vec<PathBuf>> {
             let mut ret = Vec::new();
             for item in fs::read_dir(dir)? {
@@ -337,7 +339,7 @@ impl Action {
             }
         }
 
-        if cfg.cli_log_level.unwrap() >= 3 {
+        if profile.cli_log_level.unwrap() >= 3 {
             for command in &commands {
                 log!("command args = {:?}", command.get_args());
             }

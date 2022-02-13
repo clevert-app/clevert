@@ -64,15 +64,13 @@ output_extension = 'png'
 
 ## Todo List
 
-0. Config structure. Change some config fields to no-optional?
+1. Interactive cli.
 
-1. Better argument generator.
+2. Config structure. Change some config fields to no-optional?
 
-2. Native UI with wxWidgets.
+3. Better argument generator.
 
-3. Help document and Intro.
-
-4. Interactive cli.
+4. Help document and Intro.
 
 5. Profile packs.
 

@@ -10,51 +10,20 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     let dir = PathBuf::from("./target/_test_temp");
     let _ = fs::remove_dir_all(&dir); // Ignore error when dir not exists
     fs::create_dir_all(dir.join("input"))?;
-    for i in 0..4 {
+    for i in 0i32..4 {
         fs::write(dir.join("input").join(i.to_string()), "")?;
     }
 
-    let sleeper_src = r#"
-    fn main() {
-        let r = std::env::args().last().unwrap().parse::<u64>().unwrap() % 2;
-        std::thread::sleep(std::time::Duration::from_millis(r * 25 + 50));
-        print!("{}", r);
-        eprint!("{}", r);
-    }
-    "#;
-    fs::write(dir.join("sleeper.rs"), sleeper_src)?;
-    let mut sleeper_build = Command::new("rustc");
-    sleeper_build
+    fs::write(dir.join("sleeper.rs"), SLEEPER_SRC)?;
+    Command::new("rustc")
         .arg("-o")
         .arg(dir.join("sleeper"))
-        .arg(dir.join("sleeper.rs"));
-    sleeper_build.spawn()?.wait_with_output()?;
+        .arg(dir.join("sleeper.rs"))
+        .spawn()?
+        .wait_with_output()?;
 
-    let cfg_toml = r#"
-    [presets.global]
-    threads_count = 4
-    repeat_count = 10
-    ignore_panic = false
-
-    [presets.test_base]
-    stdout_type = 'file'
-    stdout_file = './target/_test_temp/stdout.log'
-    stderr_type = 'file'
-    stderr_file = './target/_test_temp/stderr.log'
-
-    [presets.test]
-    parent = 'test_base'
-    program = './target/_test_temp/sleeper'
-    args_template = '--example-switch {repeat_num}'
-
-    [current]
-    parent = 'test'
-    input_dir = './target/_test_temp/input'
-    output_dir = './target/_test_temp/output'
-    "#
-    .to_string();
-    let cfg = Config::from_toml(cfg_toml)?;
-    let action = Action::new(&cfg)?;
+    let profile = Profile::from_toml(CFG_TOML)?;
+    let action = Action::new(&profile)?;
     action.start();
 
     thread::spawn({
@@ -73,3 +42,35 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+const CFG_TOML: &str = r#"
+current = 'test'
+cli_interactive = false
+
+[presets.global]
+threads_count = 4
+repeat_count = 10
+ignore_panic = false
+input_dir = './target/_test_temp/input'
+output_dir = './target/_test_temp/output'
+
+[presets.test_base]
+stdout_type = 'file'
+stdout_file = './target/_test_temp/stdout.log'
+stderr_type = 'file'
+stderr_file = './target/_test_temp/stderr.log'
+
+[presets.test]
+parent = 'test_base'
+program = './target/_test_temp/sleeper'
+args_template = '--example-switch {repeat_num}'
+"#;
+
+const SLEEPER_SRC: &str = r#"
+fn main() {
+    let r = std::env::args().last().unwrap().parse::<u64>().unwrap() % 2;
+    std::thread::sleep(std::time::Duration::from_millis(r * 25 + 50));
+    print!("{}", r);
+    eprint!("{}", r);
+}
+"#;
