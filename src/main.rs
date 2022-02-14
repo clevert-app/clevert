@@ -16,20 +16,16 @@ fn cli_run() -> Result<(), Error> {
             log!(" {:>3} : {k}", i);
         }
         log!("}}");
-        log!(state:"input preset index: ");
+        log!(stay:"input preset index: ");
         let choice = &mut String::new();
         io::stdin().read_line(choice).unwrap();
-        let choice = choice.trim().parse::<usize>().ok();
-        if let Some(&name) = choice.and_then(|i| keys.get(i)) {
-            let name = name.clone(); // fight with borrow checker...
-            profile.current = Some(name);
-        } else {
-            return Err(Error {
-                kind: ErrorKind::Config,
-                message: "input preset index invalid".to_string(),
-                ..Default::default()
-            });
-        }
+        let choice = choice.trim().parse().ok().and_then(|i: usize| keys.get(i));
+        let choice = choice.ok_or_else(|| Error {
+            kind: ErrorKind::Config,
+            message: "input preset index invalid".to_string(),
+            ..Default::default()
+        })?;
+        profile.current = Some((*choice).to_owned());
     } else if profile.current.is_none() {
         return Err(Error {
             kind: ErrorKind::Config,
@@ -46,8 +42,7 @@ fn cli_run() -> Result<(), Error> {
     // let switches: Vec<&String> = args.iter().take_while(is_switch).collect();
     let inputs: Vec<&String> = args.iter().skip_while(is_switch).collect();
     if !inputs.is_empty() {
-        let list = inputs.iter().map(|s| String::from(*s)).collect();
-        config.input_list = Some(list);
+        config.input_list = Some(inputs.into_iter().map(String::from).collect());
     }
 
     // the Action is one-off, change Config and then new an Action
@@ -76,7 +71,7 @@ fn cli_run() -> Result<(), Error> {
         let action = Arc::clone(&action);
         thread::spawn(move || loop {
             let (finished, total) = action.progress();
-            log!(state:"progress = {finished} / {total}\t");
+            log!(stay:"progress = {finished} / {total}\t");
             if finished == total {
                 break;
             }

@@ -10,15 +10,15 @@ Extensible file converter.
 
 ## Intro
 
-Today's file convertors always focus on a few file types, they build in some library like FFmpeg and provide a GUI for users.
+Today's file convertors always focus on a few formats. They wrap some libraries like FFmpeg into a GUI.
 
-But in my opinion, it's not enough and we couldn't stop at this. So _convevo_ was born:
+It's not enough and we couldn't stop at this. So _convevo_ was born:
 
-- To be a universal solution. You should not care about different software's different behavior.
+- To be a universal solution. You don't have to care about different software's different behavior.
 
-- Parallelized. Let's take advantage of all of your CPU cores.
+- Parallelized. Let's take advantage of all CPU cores.
 
-- Flexible and extensible. Load file type supports from `profile pack`, you could even make your own `profile pack` to support more files.
+- Flexible and extensible. Load file type supports from `profile pack`, even make your own `profile pack` to support more files.
 
 ## Examples
 
@@ -78,3 +78,5 @@ https://github.com/amadvance/advancecomp
 - [Format Factory](https://pcfreetime.com/formatfactory/)
 
 - [XnConvert](https://xnview.com/en/xnconvert/)
+
+<!-- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" style="background:#009688;stroke:#fff;stroke-width:75"><path d="M1100 0 700 200l400 800-400-800-200 100 400 800-400-800-200 100 400 800-400-800L0-200l300 600-400 200Z"/></svg> -->

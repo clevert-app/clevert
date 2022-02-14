@@ -36,19 +36,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             parent: None,
-            threads_count: {
-                #[cfg(unix)]
-                let count = fs::read_to_string("/proc/cpuinfo")
-                    .unwrap()
-                    .matches("\nprocessor")
-                    .count() as _;
-                #[cfg(windows)]
-                let count = env::var("number_of_processors")
-                    .unwrap()
-                    .parse::<i32>()
-                    .unwrap();
-                Some(count)
-            },
+            threads_count: Some(num_cpus::get() as _),
             ignore_panic: Some(false),
             repeat_count: Some(1),
             stdout_type: Some("ignore".to_string()), // normal | ignore | file

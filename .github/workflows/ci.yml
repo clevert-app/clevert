@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build:
-    name: on ${{ matrix.os }}
+    name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -14,13 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      # - name: Show toolchain info
-      #   run: rustup toolchain list && rustup target list --installed
-
-      - name: Run tests
+      - name: Run Tests
         run: cargo test
 
-      # - name: Run build
+      # - name: Show Toolchain Info
+      #   run: rustup toolchain list && rustup target list --installed
+
+      # - name: Run Build
       #   run: cargo build --release && strip ./target/release/convevo
 
       # - name: Upload Artifacts

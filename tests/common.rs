@@ -7,20 +7,19 @@ use std::sync::Arc;
 use std::thread;
 
 #[test]
-pub fn common() -> Result<(), Box<dyn std::error::Error>> {
+fn common() -> Result<(), Box<dyn std::error::Error>> {
     let dir = PathBuf::from("./target/_test_temp");
-    let _ = fs::remove_dir_all(&dir); // Ignore error when dir not exists
+    fs::remove_dir_all(&dir).ok(); // Ignore error when dir not exists
     fs::create_dir_all(dir.join("input"))?;
-    for i in 0i32..4 {
+    for i in 0..4 {
         fs::write(dir.join("input").join(i.to_string()), "")?;
     }
-
     fs::write(dir.join("sleeper.rs"), SLEEPER_SRC)?;
-    let _ = Command::new("rustc")
+    Command::new("rustc")
         .arg("-o")
         .arg(dir.join("sleeper"))
         .arg(dir.join("sleeper.rs"))
-        .status();
+        .status()?;
 
     let profile = Profile::from_toml(CFG_TOML)?;
     let action = Action::new(&profile.get_current()?)?;
