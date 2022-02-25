@@ -50,11 +50,12 @@ output_dir = './target/_test_temp/output'
 
 [presets.test_base]
 stdout_type = 'ignore'
-stderr_type = 'file'
+stderr_type = 'ignore'
 stderr_file = './target/_test_temp/stderr.log'
 
 [presets.test]
 parent = 'test_base'
+stderr_type = 'file'
 program = './target/_test_temp/sleeper'
 args_template = '--example-switch {repeat_num}'
 "#;

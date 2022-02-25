@@ -1,11 +1,10 @@
-use crate::Error;
-use crate::ErrorKind;
-use serde::{Deserialize, Serialize};
+use crate::{Error, ErrorKind};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Clone)]
 pub struct Config {
     pub parent: Option<String>,
     pub threads_count: Option<i32>,
@@ -62,6 +61,45 @@ impl Default for Config {
     }
 }
 
+impl Config {
+    pub fn merge(&mut self, parent: &Self) {
+        macro_rules! m {
+            ( $( $key:ident ),* ) => {
+                $(
+                    if self.$key.is_none() && parent.$key.is_some() {
+                        self.$key = parent.$key.clone();
+                    }
+                )*
+            };
+        }
+        m!(
+            parent,
+            threads_count,
+            ignore_panic,
+            repeat_count,
+            stdout_type,
+            stdout_file,
+            stderr_type,
+            stderr_file,
+            program,
+            current_dir,
+            args_template,
+            input_list,
+            input_dir,
+            input_absolute,
+            input_recursive,
+            output_dir,
+            output_absolute,
+            output_recursive,
+            output_overwrite,
+            output_extension,
+            output_prefix,
+            output_suffix,
+            output_suffix_serial
+        );
+    }
+}
+
 #[derive(Deserialize)]
 pub struct Profile {
     presets: HashMap<String, Config>,
@@ -78,17 +116,6 @@ impl Profile {
     }
 
     fn get(&self, name: &str) -> Result<Config, Error> {
-        fn merge(current: &mut Config, parent: &Config) {
-            // github.com/Z4RX/serde_merge
-            let mut map = serde_json::to_value(&current).unwrap();
-            for (k, v) in serde_json::to_value(parent).unwrap().as_object().unwrap() {
-                if map[k].is_null() {
-                    map[k] = v.clone();
-                }
-            }
-            *current = serde_json::from_value(map).unwrap();
-        }
-
         let mut current = self.presets.get(name).unwrap().clone();
 
         // inherit parent's parent
@@ -103,7 +130,7 @@ impl Profile {
                 });
             }
             if let Some(parent) = self.presets.get(&parent_name) {
-                merge(&mut current, parent);
+                current.merge(parent);
                 current.parent = parent.parent.clone();
             } else {
                 return Err(Error {
@@ -116,9 +143,9 @@ impl Profile {
 
         // inherit `global` and `default`
         if let Some(parent) = self.presets.get("global") {
-            merge(&mut current, parent);
+            current.merge(parent);
         }
-        merge(&mut current, &Default::default());
+        current.merge(&Default::default());
 
         Ok(current)
     }
@@ -146,9 +173,6 @@ impl Profile {
         if let Ok(text) = fs::read_to_string(&path.with_extension("toml")) {
             return Self::from_toml(&text);
         }
-        // if let Ok(text) = fs::read_to_string(&path.with_extension("json")) {
-        //     return Self::from_json(text);
-        // }
         Err(Error {
             kind: ErrorKind::Config,
             message: "the config file was not found".to_string(),
