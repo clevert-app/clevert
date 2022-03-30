@@ -4,32 +4,27 @@ use std::io;
 use std::process::Command;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant};
 
 fn cli_run() -> Result<(), Error> {
-    let mut profile = Profile::from_default_file()?;
-
-    if profile.cli_interactive.unwrap() {
-        let keys = profile.keys();
-        log!("presets = {{");
-        for (i, k) in keys.iter().enumerate() {
-            log!(" {:>3} : {k}", i);
-        }
-        log!("}}");
-        log!(stay:"input preset index: ");
-        let choice = &mut String::new();
-        io::stdin().read_line(choice).unwrap();
-        let choice = choice.trim().parse().ok().and_then(|i: usize| keys.get(i));
-        let choice = choice.ok_or_else(|| Error {
-            kind: ErrorKind::Config,
-            message: "input preset index invalid".to_string(),
-            ..Default::default()
-        })?;
-        profile.current = Some((*choice).to_owned());
-    } else if profile.current.is_none() {
+    let profile = Profile::from_default_file()?;
+    // if profile.interactive.unwrap() {
+    //     let keys = profile.keys();
+    //     log!("presets = {{");
+    //     for (i, k) in keys.iter().enumerate() {
+    //         log!("{:>4} : {k}", i);
+    //     }
+    //     log!("}}");
+    //     log!(stay:"input preset index: ");
+    //     let choice = &mut String::new();
+    //     io::stdin().read_line(choice).unwrap();
+    //     let choice: usize = choice.trim().parse().unwrap();
+    //     profile.current = Some(keys[choice].clone());
+    // } else
+    if profile.current.is_none() {
         return Err(Error {
             kind: ErrorKind::Config,
-            message: "need nither `cli_interactive` or `current` to generate config".to_string(),
+            message: "need `current` to generate config".to_string(),
             ..Default::default()
         });
     }
@@ -50,11 +45,11 @@ fn cli_run() -> Result<(), Error> {
     action.start();
 
     // command operations
-    if profile.cli_interactive.unwrap() {
+    if profile.interactive.unwrap() {
         let action = Arc::clone(&action);
         thread::spawn(move || loop {
-            let mut input = String::new();
-            io::stdin().read_line(&mut input).unwrap();
+            let input = &mut String::new();
+            io::stdin().read_line(input).unwrap();
             match input.trim() {
                 "s" => {
                     log!("operation <s> triggered, action stopped");
@@ -67,7 +62,7 @@ fn cli_run() -> Result<(), Error> {
     }
 
     // progress message
-    if profile.cli_log_level.unwrap() >= 2 {
+    if profile.log_level.unwrap() >= 2 {
         let action = Arc::clone(&action);
         thread::spawn(move || loop {
             let (finished, total) = action.progress();
@@ -79,17 +74,17 @@ fn cli_run() -> Result<(), Error> {
         });
     }
 
-    let begin_time = SystemTime::now();
+    let begin_time = Instant::now();
 
     let wait_result = action.wait();
 
     // print a '\n' for progress message
-    if profile.cli_log_level.unwrap() >= 2 {
+    if profile.log_level.unwrap() >= 2 {
         println!();
     }
 
-    if profile.cli_log_level.unwrap() >= 2 {
-        log!("took {:.2}s", begin_time.elapsed().unwrap().as_secs_f64());
+    if profile.log_level.unwrap() >= 2 {
+        log!("took {:.2}s", begin_time.elapsed().as_secs_f64());
     }
 
     wait_result?;
@@ -116,8 +111,7 @@ fn main() {
         io::stdin().read_line(&mut String::new()).unwrap();
         return;
     }
-    match cli_run() {
-        Ok(()) => log!("completed"),
-        Err(e) => log!(error:"error = {:?}",e),
+    if let Err(e) = cli_run() {
+        log!(error:"error = {:?}",e)
     }
 }

@@ -33,17 +33,18 @@ fn common() -> Result<(), Box<dyn std::error::Error>> {
         let content = fs::read(dir.join(name))?;
         Ok(content.iter().map(|ch| ch - '0' as u8).sum())
     };
-    assert_eq!(read_log_sum("stderr.log")?, 20);
+    assert_eq!(read_log_sum("stderr.log")?, 12);
     Ok(())
 }
 
 const CFG_TOML: &str = r#"
 current = 'test'
-cli_interactive = false
+export = ['test']
+cli_interactive = true
 
 [presets.global]
 threads_count = 4
-repeat_count = 10
+repeat_count = 6
 ignore_panic = false
 input_dir = './target/_test_temp/input'
 output_dir = './target/_test_temp/output'

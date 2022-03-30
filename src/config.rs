@@ -7,9 +7,9 @@ use std::fs;
 #[derive(Deserialize, Clone)]
 pub struct Config {
     pub parent: Option<String>,
-    pub threads_count: Option<i32>,
+    pub threads_count: Option<usize>,
     pub ignore_panic: Option<bool>,
-    pub repeat_count: Option<i32>,
+    pub repeat_count: Option<usize>,
     pub stdout_type: Option<String>,
     pub stdout_file: Option<String>,
     pub stderr_type: Option<String>,
@@ -35,7 +35,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             parent: None,
-            threads_count: Some(num_cpus::get() as _),
+            threads_count: Some(num_cpus::get()),
             ignore_panic: Some(false),
             repeat_count: Some(1),
             stdout_type: Some("ignore".to_string()), // normal | ignore | file
@@ -72,6 +72,7 @@ impl Config {
                 )*
             };
         }
+        // javascript: console.log(`{{ struct fields }}`.replace(/pub\s|:.+?>/g,''))
         m!(
             parent,
             threads_count,
@@ -104,14 +105,16 @@ impl Config {
 pub struct Profile {
     presets: HashMap<String, Config>,
     pub current: Option<String>,
-    pub cli_log_level: Option<i32>,
-    pub cli_interactive: Option<bool>,
+    pub export: Option<Vec<String>>,
+    pub log_level: Option<i32>,
+    pub interactive: Option<bool>,
 }
 
 impl Profile {
     fn fit(mut self) -> Self {
-        self.cli_log_level = self.cli_log_level.or(Some(2));
-        self.cli_interactive = self.cli_interactive.or(Some(true));
+        self.export = self.export.or(Some(Vec::new()));
+        self.log_level = self.log_level.or(Some(2));
+        self.interactive = self.interactive.or(Some(true));
         self
     }
 
@@ -155,9 +158,8 @@ impl Profile {
     }
 
     pub fn keys(&self) -> Vec<&String> {
-        let mut keys: Vec<&String> = self.presets.keys().collect();
-        keys.sort();
-        keys
+        let list = self.export.as_ref().unwrap();
+        self.presets.keys().filter(|k| list.contains(k)).collect()
     }
 
     pub fn from_toml(toml_str: &str) -> Result<Self, Error> {
