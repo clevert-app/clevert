@@ -9,7 +9,7 @@ license = "MIT"
 panic = "abort"
 lto = "fat"
 codegen-units = 1
-# strip = true
+strip = true
 
 [dependencies]
 num_cpus = "1.13.1"
