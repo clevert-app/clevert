@@ -20,11 +20,11 @@ jobs:
       # - name: Show Toolchain Info
       #   run: rustup toolchain list && rustup target list --installed
 
-      # - name: Run Build
-      #   run: cargo build --release
+      - name: Run Build
+        run: cargo build --release
 
-      # - name: Upload Artifacts
-      #   uses: actions/upload-artifact@v2
-      #   with:
-      #     name: build-${{ matrix.os }}
-      #     path: target/release/clevert*
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: build-${{ matrix.os }}
+          path: target/release/clevert*
