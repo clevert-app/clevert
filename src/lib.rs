@@ -44,18 +44,18 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-enum StdioCfg {
-    Normal,
-    Ignore,
+enum Pipe {
+    Null,
+    Inherit,
     File(fs::File),
 }
 
-impl From<&StdioCfg> for Stdio {
-    fn from(s: &StdioCfg) -> Stdio {
+impl From<&Pipe> for Stdio {
+    fn from(s: &Pipe) -> Stdio {
         match s {
-            StdioCfg::Normal => Stdio::inherit(),
-            StdioCfg::Ignore => Stdio::null(),
-            StdioCfg::File(file) => file.try_clone().unwrap().into(),
+            Pipe::Null => Stdio::null(),
+            Pipe::Inherit => Stdio::inherit(),
+            Pipe::File(file) => file.try_clone().unwrap().into(),
         }
     }
 }
@@ -67,8 +67,7 @@ struct Status {
 }
 
 pub struct Action {
-    stdout: StdioCfg,
-    stderr: StdioCfg,
+    pipe: Pipe,
     commands_count: usize,
     ignore_panic: bool,
     wait_cvar: Condvar,
@@ -82,7 +81,7 @@ impl Action {
             Some(v) => v,
             None => return Ok(false),
         };
-        command.stdout(&self.stdout).stderr(&self.stderr);
+        command.stdout(&self.pipe).stderr(&self.pipe);
         let child = Arc::new(SharedChild::spawn(&mut command)?);
         status.childs[index] = Some(Arc::clone(&child));
         drop(status); // hold mutex until spawned, otherwise `stop()` will miss child!
@@ -347,32 +346,21 @@ impl Action {
             });
         }
 
-        let stdio_gen = |kind: &String, path: Option<&String>| match kind.as_str() {
-            "ignore" => Ok(StdioCfg::Ignore),
-            "normal" => Ok(StdioCfg::Normal),
-            "file" => {
-                let mut open_option = fs::OpenOptions::new();
-                open_option.write(true).create(true);
-                let open_result = open_option.open(path.ok_or_else(|| Error {
-                    kind: ErrorKind::Config,
-                    message: "stdio's _type = 'file', but _file = None".to_string(),
-                    ..Default::default()
-                })?);
-                Ok(StdioCfg::File(open_result.map_err(|e| Error {
+        let pipe = match &cfg.pipe {
+            None => Pipe::Null,
+            Some(v) if v == "<inherit>" => Pipe::Inherit,
+            Some(v) => {
+                let file = fs::OpenOptions::new().write(true).create(true).open(v);
+                let file = file.map_err(|e| Error {
                     kind: ErrorKind::Config,
                     inner: Box::new(e),
                     message: "write to stdio's _file failed".to_string(),
-                })?))
+                })?;
+                Pipe::File(file)
             }
-            _ => Err(Error {
-                kind: ErrorKind::Config,
-                message: "stdio's _type invalid".to_string(),
-                ..Default::default()
-            }),
         };
         Ok(Arc::new(Self {
-            stdout: stdio_gen(cfg.stdout_type.as_ref().unwrap(), cfg.stdout_file.as_ref())?,
-            stderr: stdio_gen(cfg.stderr_type.as_ref().unwrap(), cfg.stderr_file.as_ref())?,
+            pipe,
             commands_count: commands.len(),
             ignore_panic: cfg.ignore_panic.unwrap(),
             wait_cvar: Condvar::new(),

@@ -8,19 +8,6 @@ use std::time::{Duration, Instant};
 
 fn cli_run() -> Result<(), Error> {
     let profile = Profile::from_default_file()?;
-    // if profile.interactive.unwrap() {
-    //     let keys = profile.keys();
-    //     log!("presets = {{");
-    //     for (i, k) in keys.iter().enumerate() {
-    //         log!("{:>4} : {k}", i);
-    //     }
-    //     log!("}}");
-    //     log!(stay:"input preset index: ");
-    //     let choice = &mut String::new();
-    //     io::stdin().read_line(choice).unwrap();
-    //     let choice: usize = choice.trim().parse().unwrap();
-    //     profile.current = Some(keys[choice].clone());
-    // } else
     if profile.current.is_none() {
         return Err(Error {
             kind: ErrorKind::Config,
@@ -31,13 +18,9 @@ fn cli_run() -> Result<(), Error> {
 
     let mut config = profile.get_current()?;
 
-    let args: Vec<String> = env::args().skip(1).collect();
-    // log!("env::args = {:?}", &args);
-    let is_switch = |i: &&String| i.starts_with('-');
-    // let switches: Vec<&String> = args.iter().take_while(is_switch).collect();
-    let inputs: Vec<&String> = args.iter().skip_while(is_switch).collect();
-    if !inputs.is_empty() {
-        config.input_list = Some(inputs.into_iter().map(String::from).collect());
+    let args = env::args().skip(1);
+    if args.size_hint().0 != 0 {
+        config.input_list = Some(args.collect());
     }
 
     // the Action is one-off, change Config and then new an Action
@@ -56,7 +39,9 @@ fn cli_run() -> Result<(), Error> {
                     action.stop().unwrap();
                     break;
                 }
-                op => log!(warn:"unknown operation {op}"),
+                op => {
+                    log!(warn:"unknown operation {op}");
+                }
             };
         });
     }
@@ -112,6 +97,6 @@ fn main() {
         return;
     }
     if let Err(e) = cli_run() {
-        log!(error:"error = {:?}",e)
+        log!(error:"error = {:?}",e);
     }
 }

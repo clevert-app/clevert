@@ -8,7 +8,7 @@ use std::thread;
 
 #[test]
 fn common() -> Result<(), Box<dyn std::error::Error>> {
-    let dir = PathBuf::from("./target/_test_temp");
+    let dir = PathBuf::from("./target/_test");
     fs::remove_dir_all(&dir).ok(); // Ignore error when dir not exists
     fs::create_dir_all(dir.join("input"))?;
     for i in 0..4 {
@@ -33,7 +33,7 @@ fn common() -> Result<(), Box<dyn std::error::Error>> {
         let content = fs::read(dir.join(name))?;
         Ok(content.iter().map(|ch| ch - '0' as u8).sum())
     };
-    assert_eq!(read_log_sum("stderr.log")?, 12);
+    assert_eq!(read_log_sum("pipe.txt")?, 24);
     Ok(())
 }
 
@@ -44,27 +44,26 @@ cli_interactive = true
 
 [presets.global]
 threads_count = 4
-repeat_count = 6
 ignore_panic = false
-input_dir = './target/_test_temp/input'
-output_dir = './target/_test_temp/output'
 
 [presets.test_base]
-stdout_type = 'ignore'
-stderr_type = 'ignore'
-stderr_file = './target/_test_temp/stderr.log'
+repeat_count = 6
+input_dir = './target/_test/input'
+output_dir = './target/_test/output'
+pipe = '<inherit>'
 
 [presets.test]
 parent = 'test_base'
-stderr_type = 'file'
-program = './target/_test_temp/sleeper'
+program = './target/_test/sleeper'
 args_template = '--example-switch {repeat_num}'
+pipe = './target/_test/pipe.txt'
 "#;
 
 const SLEEPER_SRC: &str = r#"
 fn main() {
     let r = std::env::args().last().unwrap().parse::<u64>().unwrap() % 2;
     std::thread::sleep(std::time::Duration::from_millis(r * 25 + 50));
+    print!("{}", r);
     eprint!("{}", r);
 }
 "#;
