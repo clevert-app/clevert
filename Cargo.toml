@@ -1,5 +1,5 @@
 [package]
-name = "convevo"
+name = "clevert"
 description = "Extensible file converter."
 version = "0.7.2"
 edition = "2021"

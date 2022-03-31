@@ -1,10 +1,10 @@
 > # **_WARNING: This project is still developing_**
 
-# convevo
+# clevert
 
-[![CI](https://img.shields.io/github/workflow/status/convevo/convevo/CI?color=2a4)](https://github.com/convevo/convevo/actions)
-[![Download](https://img.shields.io/github/downloads/convevo/convevo/total?color=2a4)](https://github.com/convevo/convevo/releases#:~:text=Assets)
-[![License](https://img.shields.io/github/license/convevo/convevo?color=2a4)](LICENSE)
+[![CI](https://img.shields.io/github/workflow/status/clevert/clevert/CI?color=2a4)](https://github.com/clevert/clevert/actions)
+[![Download](https://img.shields.io/github/downloads/clevert/clevert/total?color=2a4)](https://github.com/clevert/clevert/releases#:~:text=Assets)
+[![License](https://img.shields.io/github/license/clevert/clevert?color=2a4)](LICENSE)
 
 Extensible file converter.
 
@@ -12,7 +12,7 @@ Extensible file converter.
 
 Today's file convertors always focus on a few formats. They wrap some libraries like FFmpeg into a GUI.
 
-It's not enough and we couldn't stop at this. So _convevo_ was born:
+It's not enough and we couldn't stop at this. So _clevert_ was born:
 
 - To be a universal solution. You don't have to care about different software's different behavior.
 

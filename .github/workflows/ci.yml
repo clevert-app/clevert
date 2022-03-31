@@ -21,10 +21,10 @@ jobs:
       #   run: rustup toolchain list && rustup target list --installed
 
       # - name: Run Build
-      #   run: cargo build --release && strip ./target/release/convevo
+      #   run: cargo build --release
 
       # - name: Upload Artifacts
       #   uses: actions/upload-artifact@v2
       #   with:
       #     name: build-${{ matrix.os }}
-      #     path: target/release/convevo*
+      #     path: target/release/clevert*

@@ -1,4 +1,4 @@
-use convevo::*;
+use clevert::*;
 use std::env;
 use std::io;
 use std::process::Command;
@@ -76,7 +76,7 @@ fn cli_run() -> Result<(), Error> {
     Ok(())
 }
 
-// const HELP_TEXT: &str = r#"Usage: convevo [switches] [input_items]"#;
+// const HELP_TEXT: &str = r#"Usage: clevert [switches] [input_items]"#;
 
 fn main() {
     // https://github.com/SergioBenitez/yansi/issues/25
