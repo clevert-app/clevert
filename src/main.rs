@@ -6,8 +6,14 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-fn cli_run() -> Result<(), Error> {
+fn run() -> Result<(), Error> {
     let profile = Profile::from_default_file()?;
+
+    if let Some(v) = profile.webui {
+        ui::webui_run(&v);
+        return Ok(());
+    }
+
     if profile.current.is_none() {
         return Err(Error {
             kind: ErrorKind::Config,
@@ -28,11 +34,11 @@ fn cli_run() -> Result<(), Error> {
     action.start();
 
     // command operations
-    if profile.interactive.unwrap() {
+    thread::spawn({
         let action = Arc::clone(&action);
-        thread::spawn(move || loop {
-            let input = &mut String::new();
-            io::stdin().read_line(input).unwrap();
+        let mut input = String::new();
+        move || loop {
+            io::stdin().read_line(&mut input).unwrap();
             match input.trim() {
                 "s" => {
                     log!("operation <s> triggered, action stopped");
@@ -43,8 +49,8 @@ fn cli_run() -> Result<(), Error> {
                     log!(warn:"unknown operation {op}");
                 }
             };
-        });
-    }
+        }
+    });
 
     // progress message
     if profile.log_level.unwrap() >= 2 {
@@ -68,7 +74,7 @@ fn cli_run() -> Result<(), Error> {
         println!();
     }
 
-    if profile.log_level.unwrap() >= 2 {
+    if profile.log_level.unwrap() > 1 {
         log!("took {:.2}s", begin_time.elapsed().as_secs_f64());
     }
 
@@ -76,7 +82,7 @@ fn cli_run() -> Result<(), Error> {
     Ok(())
 }
 
-// const HELP_TEXT: &str = r#"Usage: clevert [switches] [input_items]"#;
+// const HELP_TEXT: &str = r#"Usage: clevert [input_items]"#;
 
 fn main() {
     // https://github.com/SergioBenitez/yansi/issues/25
@@ -96,7 +102,7 @@ fn main() {
         io::stdin().read_line(&mut String::new()).unwrap();
         return;
     }
-    if let Err(e) = cli_run() {
+    if let Err(e) = run() {
         log!(error:"error = {:?}",e);
     }
 }

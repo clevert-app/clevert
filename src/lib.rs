@@ -1,5 +1,6 @@
 mod config;
 mod log;
+pub mod ui;
 pub use config::{Config, Profile};
 use shared_child::SharedChild;
 use std::env;
@@ -257,28 +258,17 @@ impl Action {
             }
 
             // Overwrite
-            match cfg.output_overwrite.as_ref().unwrap().as_str() {
-                "allow" => Ok(()),
-                "forbid" if input_file == output_file => Err(Error {
-                    kind: ErrorKind::Config,
-                    message: "output overwrite forbidden".to_string(),
-                    ..Default::default()
-                }),
-                "forbid" => Ok(()),
-                "force" => match fs::remove_file(&output_file) {
-                    Err(e) if e.kind() != io::ErrorKind::NotFound => Err(Error {
-                        kind: ErrorKind::Config,
-                        inner: Box::new(e),
-                        message: "remove output overwrite file failed".to_string(),
-                    }),
-                    _ => Ok(()),
-                },
-                _ => Err(Error {
-                    kind: ErrorKind::Config,
-                    message: "`output_overwrite` value invalid".to_string(),
-                    ..Default::default()
-                }),
-            }?;
+            if cfg.output_overwrite.unwrap() {
+                if let Err(e) = fs::remove_file(&output_file) {
+                    if e.kind() != io::ErrorKind::NotFound {
+                        return Err(Error {
+                            kind: ErrorKind::Config,
+                            inner: Box::new(e),
+                            message: "remove file for output_overwrite failed".to_string(),
+                        });
+                    }
+                }
+            }
 
             pairs.push((input_file, output_file));
         }
@@ -302,7 +292,7 @@ impl Action {
             parts
         };
         let mut commands = Vec::new();
-        for (input_file, output_file) in pairs {
+        for (input_file, output_file) in pairs.iter() {
             for repeat_num in 1..cfg.repeat_count.unwrap() + 1 {
                 let mut command = Command::new(cfg.program.as_ref().unwrap());
                 for part in &args_template {
@@ -354,7 +344,7 @@ impl Action {
                 let file = file.map_err(|e| Error {
                     kind: ErrorKind::Config,
                     inner: Box::new(e),
-                    message: "write to stdio's _file failed".to_string(),
+                    message: "write to pipe file failed".to_string(),
                 })?;
                 Pipe::File(file)
             }
@@ -366,7 +356,7 @@ impl Action {
             wait_cvar: Condvar::new(),
             status: Mutex::new(Status {
                 commands: commands.into_iter(),
-                childs: vec![None; cfg.threads_count.unwrap() as _],
+                childs: vec![None; cfg.threads_count.unwrap()],
                 result: Ok(()),
             }),
         }))

@@ -21,7 +21,7 @@ pub struct Config {
     pub output_dir: Option<String>,
     pub output_absolute: Option<bool>,
     pub output_recursive: Option<bool>,
-    pub output_overwrite: Option<String>,
+    pub output_overwrite: Option<bool>,
     pub output_extension: Option<String>,
     pub output_prefix: Option<String>,
     pub output_suffix: Option<String>,
@@ -46,7 +46,7 @@ impl Default for Config {
             output_dir: None,
             output_absolute: Some(false),
             output_recursive: Some(false),
-            output_overwrite: Some("allow".to_string()), // allow | forbid | force
+            output_overwrite: Some(false),
             output_extension: None,
             output_prefix: None,
             output_suffix: None,
@@ -98,14 +98,13 @@ pub struct Profile {
     pub current: Option<String>,
     pub export: Option<Vec<String>>,
     pub log_level: Option<i32>,
-    pub interactive: Option<bool>,
+    pub webui: Option<String>,
 }
 
 impl Profile {
     fn fit(mut self) -> Self {
         self.export = self.export.or(Some(Vec::new()));
         self.log_level = self.log_level.or(Some(2));
-        self.interactive = self.interactive.or(Some(true));
         self
     }
 
@@ -168,7 +167,7 @@ impl Profile {
         }
         Err(Error {
             kind: ErrorKind::Config,
-            message: "the config file was not found".to_string(),
+            message: "config file not found".to_string(),
             ..Default::default()
         })
     }

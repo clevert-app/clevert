@@ -40,7 +40,6 @@ fn common() -> Result<(), Box<dyn std::error::Error>> {
 const CFG_TOML: &str = r#"
 current = 'test'
 export = ['test']
-cli_interactive = true
 
 [presets.global]
 threads_count = 4

@@ -17,8 +17,8 @@ jobs:
       - name: Run Tests
         run: cargo test
 
-      # - name: Show Toolchain Info
-      #   run: rustup toolchain list && rustup target list --installed
+      - name: Show Toolchain Info
+        run: rustup toolchain list && rustup target list --installed
 
       - name: Run Build
         run: cargo build --release
