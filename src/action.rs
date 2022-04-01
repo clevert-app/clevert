@@ -1,10 +1,6 @@
-mod config;
-mod log;
-pub mod ui;
-pub use config::{Config, Profile};
+use crate::{Config, Error, ErrorKind};
 use shared_child::SharedChild;
 use std::env;
-use std::fmt;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -12,38 +8,6 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::vec::IntoIter;
-
-#[derive(Debug)]
-pub enum ErrorKind {
-    Config,
-    Other,
-    ExecutePanic,
-}
-
-#[derive(Debug)]
-pub struct Error {
-    pub kind: ErrorKind,
-    pub inner: Box<dyn fmt::Debug + Send + Sync>,
-    pub message: String,
-}
-
-impl Default for Error {
-    fn default() -> Self {
-        Self {
-            kind: ErrorKind::Other,
-            inner: Box::new(Option::<()>::None),
-            message: String::new(),
-        }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&format!("{:?}", self))
-    }
-}
-
-impl std::error::Error for Error {}
 
 enum Pipe {
     Null,

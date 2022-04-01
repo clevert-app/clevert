@@ -1,4 +1,11 @@
-use clevert::*;
+mod action;
+mod config;
+mod gui;
+mod utils;
+pub use action::Action;
+pub use config::{Config, Profile};
+pub use utils::{Error, ErrorKind};
+
 use std::env;
 use std::io;
 use std::process::Command;
@@ -9,8 +16,8 @@ use std::time::{Duration, Instant};
 fn run() -> Result<(), Error> {
     let profile = Profile::from_default_file()?;
 
-    if let Some(v) = profile.webui {
-        ui::webui_run(&v);
+    if let Some(v) = profile.gui {
+        gui::run(&v);
         return Ok(());
     }
 
@@ -106,3 +113,6 @@ fn main() {
         log!(error:"error = {:?}",e);
     }
 }
+
+#[cfg(test)]
+mod tests;

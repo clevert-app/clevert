@@ -1,4 +1,4 @@
-use clevert::*;
+use crate::{Action, Profile};
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::thread;
 
 #[test]
-fn common() -> Result<(), Box<dyn std::error::Error>> {
+pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     let dir = PathBuf::from("./target/_test");
     fs::remove_dir_all(&dir).ok(); // Ignore error when dir not exists
     fs::create_dir_all(dir.join("input"))?;
@@ -20,7 +20,6 @@ fn common() -> Result<(), Box<dyn std::error::Error>> {
         .arg(dir.join("sleeper"))
         .arg(dir.join("sleeper.rs"))
         .status()?;
-
     let profile = Profile::from_toml(CFG_TOML)?;
     let action = Action::new(&profile.get_current()?)?;
     action.start();

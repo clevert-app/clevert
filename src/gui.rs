@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use tiny_http::{Header, Response, Server};
 
-pub fn webui_run(addr: &str) {
+pub fn run(addr: &str) {
     let server = Server::http(addr).unwrap();
 
     for request in server.incoming_requests() {
@@ -11,7 +11,7 @@ pub fn webui_run(addr: &str) {
             request.url()
         );
 
-        let response = Response::from_string(include_str!("ui.html"))
+        let response = Response::from_string(include_str!("gui.html"))
             .with_header(Header::from_str("content-type:text/html;charset=utf-8").unwrap());
         request.respond(response).unwrap();
     }

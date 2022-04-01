@@ -98,7 +98,7 @@ pub struct Profile {
     pub current: Option<String>,
     pub export: Option<Vec<String>>,
     pub log_level: Option<i32>,
-    pub webui: Option<String>,
+    pub gui: Option<String>,
 }
 
 impl Profile {
