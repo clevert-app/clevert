@@ -153,8 +153,8 @@ impl Action {
             let recursive = cfg.input_recursive.unwrap();
             let ret = visit_dir(dir, recursive).map_err(|e| Error {
                 kind: ErrorKind::Config,
-                inner: Box::new(e),
                 message: "read input dir failed".to_string(),
+                inner: Box::new(e),
             })?;
             Ok(ret)
         };
@@ -227,8 +227,8 @@ impl Action {
                     if e.kind() != io::ErrorKind::NotFound {
                         return Err(Error {
                             kind: ErrorKind::Config,
-                            inner: Box::new(e),
                             message: "remove file for output_overwrite failed".to_string(),
+                            inner: Box::new(e),
                         });
                     }
                 }
@@ -307,8 +307,8 @@ impl Action {
                 let file = fs::OpenOptions::new().write(true).create(true).open(v);
                 let file = file.map_err(|e| Error {
                     kind: ErrorKind::Config,
-                    inner: Box::new(e),
                     message: "write to pipe file failed".to_string(),
+                    inner: Box::new(e),
                 })?;
                 Pipe::File(file)
             }

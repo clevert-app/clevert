@@ -155,8 +155,8 @@ impl Profile {
     pub fn from_toml(toml_str: &str) -> Result<Self, Error> {
         Ok(Self::fit(toml::from_str(toml_str).map_err(|e| Error {
             kind: ErrorKind::Config,
-            inner: Box::new(e),
             message: "error while config file deserialize".to_string(),
+            inner: Box::new(e),
         })?))
     }
 

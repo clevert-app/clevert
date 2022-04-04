@@ -10,16 +10,16 @@ pub enum ErrorKind {
 #[derive(Debug)]
 pub struct Error {
     pub kind: ErrorKind,
-    pub inner: Box<dyn fmt::Debug + Send + Sync>,
     pub message: String,
+    pub inner: Box<dyn fmt::Debug + Send + Sync>,
 }
 
 impl Default for Error {
     fn default() -> Self {
         Self {
             kind: ErrorKind::Other,
-            inner: Box::new(Option::<()>::None),
             message: String::new(),
+            inner: Box::new(Option::<()>::None),
         }
     }
 }
