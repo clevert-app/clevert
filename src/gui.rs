@@ -3,7 +3,7 @@ use tiny_http::{Header, Response, Server};
 
 pub fn run(addr: &str) {
     let server = Server::http(addr).unwrap();
-
+    println!("gui::run()");
     for request in server.incoming_requests() {
         println!(
             "received request! method: {:?}, url: {:?}",

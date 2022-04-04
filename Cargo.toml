@@ -17,5 +17,5 @@ serde = { version = "1.0.136", features = ["derive"] }
 shared_child = "1.0.0"
 toml = "0.5.8"
 yansi = "0.5.1"
-tiny_http = "0.11.0"
+# tiny_http = "0.11.0"
 # vc-ltl = "5.0.4"

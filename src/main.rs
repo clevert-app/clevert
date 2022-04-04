@@ -1,6 +1,6 @@
 mod action;
 mod config;
-mod gui;
+// mod gui;
 mod utils;
 pub use action::Action;
 pub use config::{Config, Profile};
@@ -16,10 +16,10 @@ use std::time::{Duration, Instant};
 fn run() -> Result<(), Error> {
     let profile = Profile::from_default_file()?;
 
-    if let Some(v) = profile.gui {
-        gui::run(&v);
-        return Ok(());
-    }
+    // if let Some(v) = profile.gui {
+    //     gui::run(&v);
+    //     return Ok(());
+    // }
 
     if profile.current.is_none() {
         return Err(Error {
@@ -31,9 +31,9 @@ fn run() -> Result<(), Error> {
 
     let mut config = profile.get_current()?;
 
-    let args = env::args().skip(1);
-    if args.size_hint().0 != 0 {
-        config.input_list = Some(args.collect());
+    let input_list = env::args().skip(1);
+    if input_list.size_hint().0 != 0 {
+        config.input_list = Some(input_list.collect());
     }
 
     // the Action is one-off, change Config and then new an Action
@@ -98,13 +98,12 @@ fn main() {
         yansi::Paint::disable()
     }
 
-    let args: Vec<String> = env::args().skip(1).collect();
     #[cfg(windows)] // linux x11?
-    if !args.contains(&"--no-wrap".into()) && env::var("PROMPT").is_err() {
+    if env::var("PROMPT").is_err() {
         // manually panic handling, because the `catch_unwind` is not always
-        // stable and it's inapplicable when `panic='abort'` on `Cargo.toml`
+        // stable and it's inapplicable when panic='abort'
         let mut cmd = Command::new(env::current_exe().unwrap());
-        let _ = cmd.arg("--no-wrap").args(args).status();
+        let _ = cmd.args(env::args().skip(1)).env("PROMPT", "$P$G").status();
         log!("press <enter> key to exit");
         io::stdin().read_line(&mut String::new()).unwrap();
         return;
