@@ -14,17 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Run Tests
-        run: cargo test
-
       - name: Show Toolchain Info
         run: rustup toolchain list && rustup target list --installed
 
-      - name: Run Build
-        run: cargo build --release
+      - name: Test
+        run: cargo test
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: build-${{ matrix.os }}
-          path: target/release/clevert*
+      # - name: Build
+      #   run: cargo build --release
+
+      # - name: Upload Artifacts
+      #   uses: actions/upload-artifact@v2
+      #   with:
+      #     name: build-${{ matrix.os }}
+      #     path: target/release/clevert*

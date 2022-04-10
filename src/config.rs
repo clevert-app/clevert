@@ -12,20 +12,18 @@ pub struct Config {
     pub repeat_count: Option<usize>,
     pub pipe: Option<String>,
     pub program: Option<String>,
-    pub current_dir: Option<String>,
     pub args_template: Option<String>,
+    pub current_dir: Option<String>,
     pub input_list: Option<Vec<String>>,
-    pub input_dir: Option<String>,
     pub input_absolute: Option<bool>,
-    pub input_recursive: Option<bool>,
     pub output_dir: Option<String>,
     pub output_absolute: Option<bool>,
-    pub output_recursive: Option<bool>,
-    pub output_overwrite: Option<bool>,
     pub output_extension: Option<String>,
+    pub output_recursive: Option<bool>,
+    pub output_force: Option<bool>,
     pub output_prefix: Option<String>,
     pub output_suffix: Option<String>,
-    pub output_suffix_serial: Option<bool>,
+    pub output_serial: Option<bool>,
 }
 
 impl Default for Config {
@@ -35,22 +33,20 @@ impl Default for Config {
             threads_count: Some(num_cpus::get()),
             ignore_panic: Some(false),
             repeat_count: Some(1),
-            pipe: None, // None | <inherit> | path,
+            pipe: None, // None | <inherit> | path
             program: None,
-            current_dir: None, // only apply on commands, has no effect to self
             args_template: Some(String::new()),
-            input_list: None,
-            input_dir: None,
+            current_dir: None, // only apply on commands, has no effect to self
+            input_list: Some(Vec::new()),
             input_absolute: Some(false),
-            input_recursive: Some(false),
             output_dir: None,
             output_absolute: Some(false),
-            output_recursive: Some(false),
-            output_overwrite: Some(false),
             output_extension: None,
+            output_recursive: Some(false),
+            output_force: Some(false),
             output_prefix: None,
             output_suffix: None,
-            output_suffix_serial: Some(false),
+            output_serial: Some(false),
         }
     }
 }
@@ -74,20 +70,18 @@ impl Config {
             repeat_count,
             pipe,
             program,
-            current_dir,
             args_template,
+            current_dir,
             input_list,
-            input_dir,
             input_absolute,
-            input_recursive,
             output_dir,
             output_absolute,
-            output_recursive,
-            output_overwrite,
             output_extension,
+            output_recursive,
+            output_force,
             output_prefix,
             output_suffix,
-            output_suffix_serial
+            output_serial
         );
     }
 }
