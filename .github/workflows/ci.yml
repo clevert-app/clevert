@@ -14,13 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Run Tests
-        run: cargo test
-
       - name: Show Toolchain Info
         run: rustup toolchain list && rustup target list --installed
 
-      - name: Run Build
+      - name: Test
+        run: cargo test
+
+      - name: Build
         run: cargo build --release
 
       - name: Upload Artifacts

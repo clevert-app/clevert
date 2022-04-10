@@ -92,22 +92,24 @@ fn run() -> Result<(), Error> {
 // const HELP_TEXT: &str = r#"Usage: clevert [input_items]"#;
 
 fn main() {
-    // https://github.com/SergioBenitez/yansi/issues/25
     #[cfg(windows)]
-    if !yansi::Paint::enable_windows_ascii() {
-        yansi::Paint::disable()
+    {
+        // https://github.com/SergioBenitez/yansi/issues/25
+        if !yansi::Paint::enable_windows_ascii() {
+            yansi::Paint::disable()
+        }
+        // linux x11?
+        if env::var("PROMPT").is_err() {
+            // manually panic handling, because the `catch_unwind` is not always
+            // stable and it's inapplicable when panic='abort'
+            let mut cmd = Command::new(env::current_exe().unwrap());
+            let _ = cmd.args(env::args().skip(1)).env("PROMPT", "$P$G").status();
+            log!("press <enter> key to exit");
+            io::stdin().read_line(&mut String::new()).unwrap();
+            return;
+        }
     }
 
-    #[cfg(windows)] // linux x11?
-    if env::var("PROMPT").is_err() {
-        // manually panic handling, because the `catch_unwind` is not always
-        // stable and it's inapplicable when panic='abort'
-        let mut cmd = Command::new(env::current_exe().unwrap());
-        let _ = cmd.args(env::args().skip(1)).env("PROMPT", "$P$G").status();
-        log!("press <enter> key to exit");
-        io::stdin().read_line(&mut String::new()).unwrap();
-        return;
-    }
     if let Err(e) = run() {
         log!(error:"error = {:?}",e);
     }

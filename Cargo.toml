@@ -1,7 +1,7 @@
 [package]
 name = "clevert"
 description = "Extensible file converter."
-version = "0.8.1"
+version = "0.9.0"
 edition = "2021"
 license = "MIT"
 
@@ -18,4 +18,6 @@ shared_child = "1.0.0"
 toml = "0.5.8"
 yansi = "0.5.1"
 # tiny_http = "0.11.0"
-# vc-ltl = "5.0.4"
+
+[target.x86_64-pc-windows-msvc.dependencies]
+vc-ltl = "5.0.4"

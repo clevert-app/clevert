@@ -74,7 +74,7 @@ impl Action {
 
                 // execute error or no-zero exit
                 Err(e) => {
-                    let _ = self.stop(); // make other threads to stop
+                    self.stop().ok(); // make other threads to stop
                     self.status.lock().unwrap().result = Err(Arc::new(e));
                     break;
                 }
@@ -137,51 +137,41 @@ impl Action {
     }
 
     pub fn new(cfg: &Config) -> Result<Arc<Self>, Error> {
-        fn visit_dir(dir: PathBuf, recursive: bool) -> io::Result<Vec<PathBuf>> {
+        fn visit_dir(dir: PathBuf) -> io::Result<Vec<PathBuf>> {
             let mut ret = Vec::new();
             for item in fs::read_dir(dir)? {
                 let item = item?.path();
                 if item.is_file() {
                     ret.push(item);
-                } else if recursive && item.is_dir() {
-                    ret.append(&mut visit_dir(item, recursive)?);
+                } else if item.is_dir() {
+                    ret.append(&mut visit_dir(item)?);
                 }
             }
             Ok(ret)
         }
-        let read_dir = |dir| {
-            let recursive = cfg.input_recursive.unwrap();
-            let ret = visit_dir(dir, recursive).map_err(|e| Error {
-                kind: ErrorKind::Config,
-                message: "read input dir failed".to_string(),
-                inner: Box::new(e),
-            })?;
-            Ok(ret)
-        };
         let mut input_files = Vec::new();
-        if let Some(input_list) = &cfg.input_list {
-            for item in input_list {
-                let path = PathBuf::from(item);
-                if path.is_file() {
-                    input_files.push(path);
-                } else {
-                    input_files.append(&mut read_dir(path)?);
-                }
+        for item in cfg.input_list.as_ref().unwrap() {
+            let path = PathBuf::from(item);
+            if path.is_dir() {
+                input_files.append(&mut visit_dir(path).map_err(|e| Error {
+                    kind: ErrorKind::Config,
+                    message: "read input items failed".to_string(),
+                    inner: Box::new(e),
+                })?);
+            } else {
+                input_files.push(path);
             }
-        } else if let Some(input_dir) = &cfg.input_dir {
-            let input_dir = PathBuf::from(input_dir);
-            input_files.append(&mut read_dir(input_dir)?);
         }
 
-        // Current dir is different with exe dir
+        // current dir is different with exe dir
         let current_dir = env::current_dir().unwrap();
         let mut pairs = Vec::new(); // (from, to)
         for mut input_file in input_files {
-            // Bare name
-            let file_name = input_file.file_stem().unwrap().to_str().unwrap();
-            let mut file_name = file_name.to_string();
+            // stem name
+            let file_name = input_file.file_stem().unwrap();
+            let mut file_name = file_name.to_str().unwrap().to_string();
 
-            // Set prefix and suffix
+            // prefix and suffix
             if let Some(prefix) = &cfg.output_prefix {
                 file_name.insert_str(0, prefix);
             }
@@ -194,26 +184,33 @@ impl Action {
                 None => input_file.parent().unwrap().into(),
             };
 
-            // Keep output recursive directories structure
-            if cfg.output_recursive.unwrap() && cfg.input_dir.is_some() {
-                let input_dir = cfg.input_dir.as_ref().unwrap();
+            // keep output recursive dirs structure
+            if !cfg.output_recursive.unwrap() {
+                output_file.push(file_name);
+            } else if cfg.input_list.as_ref().unwrap().len() == 1 {
+                let input_dir = cfg.input_list.as_ref().unwrap()[0].clone();
                 let relative_path = input_file.strip_prefix(input_dir).unwrap();
                 output_file.push(relative_path);
                 output_file.set_file_name(file_name);
                 let output_dir = output_file.parent().unwrap();
                 fs::create_dir_all(output_dir).unwrap();
             } else {
-                output_file.push(file_name);
+                return Err(Error {
+                    kind: ErrorKind::Config,
+                    message: "input_list must contain only 1 item when output_recursive"
+                        .to_string(),
+                    ..Default::default()
+                });
             }
 
-            // Set extension name
+            // extension
             if let Some(extension) = &cfg.output_extension {
                 output_file.set_extension(extension);
             } else if let Some(extension) = input_file.extension() {
                 output_file.set_extension(extension);
             }
 
-            // Expand repative path to absolute
+            // expand repative path to absolute
             if cfg.input_absolute.unwrap() && !input_file.is_absolute() {
                 input_file = current_dir.join(&input_file);
             }
@@ -221,13 +218,14 @@ impl Action {
                 output_file = current_dir.join(&output_file);
             }
 
-            // Overwrite
-            if cfg.output_overwrite.unwrap() {
+            // force overwrite
+            if cfg.output_force.unwrap() {
+                // TODO: if-let-chain after rust 1.62
                 if let Err(e) = fs::remove_file(&output_file) {
                     if e.kind() != io::ErrorKind::NotFound {
                         return Err(Error {
                             kind: ErrorKind::Config,
-                            message: "remove file for output_overwrite failed".to_string(),
+                            message: "remove file for output_force failed".to_string(),
                             inner: Box::new(e),
                         });
                     }
@@ -262,17 +260,11 @@ impl Action {
                 for part in &args_template {
                     match *part {
                         "{input_file}" => command.arg(&input_file),
-                        "{output_file}" if cfg.output_suffix_serial.unwrap() => {
-                            let mut name = String::new();
-                            if let Some(stem) = output_file.file_stem() {
-                                name.push_str(&stem.to_string_lossy());
-                                name.push('_');
-                            }
-                            name.push_str(&repeat_num.to_string());
-                            if let Some(ext) = output_file.extension() {
-                                name.push('.');
-                                name.push_str(&ext.to_string_lossy());
-                            }
+                        "{output_file}" if cfg.output_serial.unwrap() => {
+                            let name = output_file.file_name().unwrap();
+                            let mut name = name.to_str().unwrap().to_string();
+                            let idx = output_file.file_stem().unwrap().len();
+                            name.insert_str(idx, &format!("_{repeat_num}"));
                             command.arg(output_file.with_file_name(name))
                         }
                         "{output_file}" => command.arg(&output_file),
