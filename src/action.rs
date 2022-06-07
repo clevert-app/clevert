@@ -197,7 +197,7 @@ impl Action {
             } else {
                 return Err(Error {
                     kind: ErrorKind::Config,
-                    message: "input_list must contain only 1 item when output_recursive"
+                    message: "input_list must contain only 1 item while output_recursive"
                         .to_string(),
                     ..Default::default()
                 });

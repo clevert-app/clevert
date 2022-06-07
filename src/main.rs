@@ -1,7 +1,7 @@
 mod action;
 mod config;
-// mod gui;
 mod utils;
+mod interactive;
 pub use action::Action;
 pub use config::{Config, Profile};
 pub use utils::{Error, ErrorKind};
@@ -21,10 +21,10 @@ fn run() -> Result<(), Error> {
     //     return Ok(());
     // }
 
-    if profile.current.is_none() {
+    if profile.default.is_none() {
         return Err(Error {
             kind: ErrorKind::Config,
-            message: "need `current` to generate config".to_string(),
+            message: "need `default` field to generate config".to_string(),
             ..Default::default()
         });
     }
@@ -43,8 +43,8 @@ fn run() -> Result<(), Error> {
     // command operations
     thread::spawn({
         let action = Arc::clone(&action);
-        let mut input = String::new();
         move || loop {
+            let mut input = String::new();
             io::stdin().read_line(&mut input).unwrap();
             match input.trim() {
                 "s" => {

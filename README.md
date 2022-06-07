@@ -55,7 +55,7 @@ threads_count = 1 # must be 1
 
 ## Todo List
 
-1. Web UI.
+1. Interactive CUI.
 
 2. Better argument generator.
 

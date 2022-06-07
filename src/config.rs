@@ -89,10 +89,10 @@ impl Config {
 #[derive(Deserialize)]
 pub struct Profile {
     presets: HashMap<String, Config>,
-    pub current: Option<String>,
+    pub default: Option<String>,
     pub export: Option<Vec<String>>,
     pub log_level: Option<i32>,
-    pub gui: Option<String>,
+    // pub gui: Option<String>,
 }
 
 impl Profile {
@@ -138,7 +138,7 @@ impl Profile {
     }
 
     pub fn get_current(&self) -> Result<Config, Error> {
-        self.get(self.current.as_ref().unwrap())
+        self.get(self.default.as_ref().unwrap())
     }
 
     pub fn keys(&self) -> Vec<&String> {
