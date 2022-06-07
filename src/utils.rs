@@ -1,37 +1,3 @@
-use std::fmt;
-
-#[derive(Debug)]
-pub enum ErrorKind {
-    Config,
-    Other,
-    ExecutePanic,
-}
-
-#[derive(Debug)]
-pub struct Error {
-    pub kind: ErrorKind,
-    pub message: String,
-    pub inner: Box<dyn fmt::Debug + Send + Sync>,
-}
-
-impl Default for Error {
-    fn default() -> Self {
-        Self {
-            kind: ErrorKind::Other,
-            message: String::new(),
-            inner: Box::new(Option::<()>::None),
-        }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&format!("{:?}", self))
-    }
-}
-
-impl std::error::Error for Error {}
-
 #[macro_export]
 macro_rules! log {
     (warn:$($arg:tt)*) => {

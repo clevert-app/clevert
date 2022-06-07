@@ -57,13 +57,11 @@ threads_count = 1 # must be 1
 
 1. Interactive CUI.
 
-2. Better argument generator.
+2. Help document and Intro.
 
-3. Help document and Intro.
+3. Profile packs.
 
-4. Profile packs.
-
-5. StdIn.
+4. StdIn.
 
 ## Note
 

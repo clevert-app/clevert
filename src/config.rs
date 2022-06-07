@@ -1,4 +1,3 @@
-use crate::{Error, ErrorKind};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
@@ -89,20 +88,21 @@ impl Config {
 #[derive(Deserialize)]
 pub struct Profile {
     presets: HashMap<String, Config>,
-    pub default: Option<String>,
-    pub export: Option<Vec<String>>,
+    pub current: Option<String>,
+    pub exports: Option<Vec<String>>,
     pub log_level: Option<i32>,
-    // pub gui: Option<String>,
+    pub interactive: Option<bool>,
 }
 
 impl Profile {
     fn fit(mut self) -> Self {
-        self.export = self.export.or(Some(Vec::new()));
+        self.exports = self.exports.or(Some(Vec::new()));
         self.log_level = self.log_level.or(Some(2));
+        self.interactive = self.interactive.or(Some(false));
         self
     }
 
-    fn get(&self, name: &str) -> Result<Config, Error> {
+    fn get(&self, name: &str) -> Result<Config, String> {
         let mut current = self.presets.get(name).unwrap().clone();
 
         // inherit parent's parent
@@ -110,21 +110,13 @@ impl Profile {
         while let Some(parent_name) = current.parent.take() {
             depth += 1;
             if depth > 64 {
-                return Err(Error {
-                    kind: ErrorKind::Config,
-                    message: "preset inherit depth > 64".to_string(),
-                    ..Default::default()
-                });
+                return Err("preset inherit depth > 64".to_string());
             }
             if let Some(parent) = self.presets.get(&parent_name) {
                 current.merge(parent);
                 current.parent = parent.parent.clone();
             } else {
-                return Err(Error {
-                    kind: ErrorKind::Config,
-                    message: format!("parent preset `{parent_name}` not found"),
-                    ..Default::default()
-                });
+                return Err(format!("parent preset `{parent_name}` not found"));
             }
         }
 
@@ -137,32 +129,26 @@ impl Profile {
         Ok(current)
     }
 
-    pub fn get_current(&self) -> Result<Config, Error> {
-        self.get(self.default.as_ref().unwrap())
+    pub fn get_current(&self) -> Result<Config, String> {
+        self.get(self.current.as_ref().unwrap())
     }
 
     pub fn keys(&self) -> Vec<&String> {
-        let list = self.export.as_ref().unwrap();
+        let list = self.exports.as_ref().unwrap();
         self.presets.keys().filter(|k| list.contains(k)).collect()
     }
 
-    pub fn from_toml(toml_str: &str) -> Result<Self, Error> {
-        Ok(Self::fit(toml::from_str(toml_str).map_err(|e| Error {
-            kind: ErrorKind::Config,
-            message: "error while config file deserialize".to_string(),
-            inner: Box::new(e),
-        })?))
+    pub fn from_toml(toml_str: &str) -> Result<Self, String> {
+        toml::from_str(toml_str)
+            .map(Self::fit)
+            .map_err(|e| format!("config file deserialize failed: {:?}", e))
     }
 
-    pub fn from_default_file() -> Result<Self, Error> {
+    pub fn from_default_file() -> Result<Self, String> {
         let path = env::current_exe().unwrap();
         if let Ok(text) = fs::read_to_string(&path.with_extension("toml")) {
             return Self::from_toml(&text);
         }
-        Err(Error {
-            kind: ErrorKind::Config,
-            message: "config file not found".to_string(),
-            ..Default::default()
-        })
+        Err("config file not found".to_string())
     }
 }

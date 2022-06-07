@@ -1,13 +1,9 @@
 [package]
 name = "clevert"
 description = "Extensible file converter."
-version = "0.9.1"
+version = "0.9.2"
 edition = "2021"
 license = "MIT"
-
-[profile.dev]
-debug = false
-strip = true
 
 [profile.dev.package."*"]
 debug = false
@@ -20,10 +16,10 @@ lto = "fat"
 panic = "abort"
 
 [dependencies]
-num_cpus = "1"
 serde = { version = "1", features = ["derive"] }
-shared_child = "1"
 toml = "0.5"
+shared_child = "1"
+num_cpus = "1"
 yansi = "0.5"
 terminal_size = "0.1"
 

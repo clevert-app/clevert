@@ -8,7 +8,7 @@ use std::thread;
 #[test]
 pub fn common() -> Result<(), Box<dyn std::error::Error>> {
     let dir = PathBuf::from("./target/_test");
-    let _ = fs::remove_dir_all(&dir); // ignore error when dir not exists
+    fs::remove_dir_all(&dir).ok(); // ignore error when dir not exists
     fs::create_dir_all(dir.join("input"))?;
     for i in 0..4 {
         fs::write(dir.join("input").join(i.to_string()), "")?;
@@ -34,7 +34,7 @@ pub fn common() -> Result<(), Box<dyn std::error::Error>> {
 
 const CFG_TOML: &str = r#"
 current = 'test'
-export = ['test']
+exports = ['test']
 
 [presets.global]
 threads_count = 4

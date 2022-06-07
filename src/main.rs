@@ -1,32 +1,25 @@
 mod action;
 mod config;
-mod utils;
 mod interactive;
+mod utils;
 pub use action::Action;
 pub use config::{Config, Profile};
-pub use utils::{Error, ErrorKind};
 
 use std::env;
 use std::io;
-use std::process::Command;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-fn run() -> Result<(), Error> {
+fn run() -> Result<(), String> {
     let profile = Profile::from_default_file()?;
 
-    // if let Some(v) = profile.gui {
-    //     gui::run(&v);
-    //     return Ok(());
-    // }
+    if profile.interactive.unwrap() {
+        return interactive::run(profile);
+    }
 
-    if profile.default.is_none() {
-        return Err(Error {
-            kind: ErrorKind::Config,
-            message: "need `default` field to generate config".to_string(),
-            ..Default::default()
-        });
+    if profile.current.is_none() {
+        return Err("need `current` field to generate config".to_string());
     }
 
     let mut config = profile.get_current()?;
@@ -85,8 +78,7 @@ fn run() -> Result<(), Error> {
         log!("took {:.2}s", begin_time.elapsed().as_secs_f64());
     }
 
-    wait_result?;
-    Ok(())
+    wait_result
 }
 
 // const HELP_TEXT: &str = r#"Usage: clevert [input_items]"#;
@@ -111,7 +103,7 @@ fn main() {
     }
 
     if let Err(e) = run() {
-        log!(error:"error = {:?}",e);
+        log!(error:"error = {:?}", e);
     }
 }
 
