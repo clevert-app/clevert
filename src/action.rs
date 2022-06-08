@@ -40,47 +40,42 @@ pub struct Action {
 }
 
 impl Action {
-    /// pop a command from list then execute it
-    fn once(&self, index: usize) -> io::Result<bool> {
-        let mut status = self.status.lock().unwrap();
-        let mut command = match status.commands.next() {
-            Some(v) => v,
-            None => return Ok(false),
-        };
-        command.stdout(&self.pipe).stderr(&self.pipe);
-        let child = Arc::new(SharedChild::spawn(&mut command)?);
-        status.childs[index] = Some(Arc::clone(&child));
-        drop(status); // hold mutex until spawned, otherwise `stop()` will miss child!
-        let exit_status = child.wait()?;
-        match exit_status.success() {
-            true => Ok(true),
-            false => Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("process exit with non-zero: {:?}", exit_status),
-            )),
-        }
-    }
-
     fn spawn(self: Arc<Self>, index: usize) {
-        loop {
-            match self.once(index) {
-                // no next command, exit
-                Ok(false) => break,
-
-                // successfully
-                Ok(true) => continue,
-
-                // if `ignore_panic`, ignore execute error and no-zero exit
-                Err(_) if self.ignore_panic => continue,
-
-                // execute error or no-zero exit
-                Err(e) => {
-                    self.stop().ok(); // make other threads to stop
-                    self.status.lock().unwrap().result = Err(format!("{:?}", e));
-                    break;
+        /// store error to `status.result` immediately
+        macro_rules! handle_result {
+            ($result:expr, $status:ident) => {{
+                match $result {
+                    Ok(v) => v,
+                    Err(_) if self.ignore_panic => continue,
+                    Err(e) => {
+                        $status.result = Err(format!("{:?}", e));
+                        drop($status);
+                        self.stop().ok(); // make other threads to stop
+                        break;
+                    }
                 }
-            }
+            }};
         }
+        loop {
+            let mut status = self.status.lock().unwrap();
+            let mut command = match status.commands.next() {
+                Some(v) => v,
+                None => break, // no next command, exit
+            };
+            command.stdout(&self.pipe).stderr(&self.pipe);
+            let child = Arc::new(handle_result!(SharedChild::spawn(&mut command), status));
+            status.childs[index] = Some(Arc::clone(&child));
+            drop(status); // hold mutex until spawned otherwise `stop()` will miss child!
+            let exit_status = child.wait();
+            let mut status = self.status.lock().unwrap();
+            let exit_status = handle_result!(exit_status, status);
+            let exit_result = match exit_status.success() {
+                true => Ok(true),
+                false => Err(format!("process exit with non-zero: {:?}", exit_status)),
+            };
+            handle_result!(exit_result, status);
+        }
+
         self.wait_cvar.notify_all(); // notify for `wait()`
     }
 
@@ -122,14 +117,14 @@ impl Action {
 
     pub fn wait(self: &Arc<Self>) -> Result<(), String> {
         loop {
-            drop(self.wait_cvar.wait(self.status.lock().unwrap()));
             let progress = self.progress();
             if progress.0 == progress.1 {
                 break;
             }
+            drop(self.wait_cvar.wait(self.status.lock().unwrap()));
         }
         match &self.status.lock().unwrap().result {
-            Ok(()) => Ok(()),
+            Ok(_) => Ok(()),
             Err(e) => Err(format!("execute error: {:?}", e)),
         }
     }
