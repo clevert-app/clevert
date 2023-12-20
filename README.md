@@ -1,12 +1,16 @@
 > # **_WARNING: This project is still developing_**
 
+```sh
+node --experimental-detect-module clevert.js
+```
+
 # clevert
 
-[![CI](https://img.shields.io/github/workflow/status/clevert/clevert/CI?color=2a4)](https://github.com/clevert/clevert/actions)
-[![Download](https://img.shields.io/github/downloads/clevert/clevert/total?color=2a4)](https://github.com/clevert/clevert/releases#:~:text=Assets)
-[![License](https://img.shields.io/github/license/clevert/clevert?color=2a4)](LICENSE)
+[![CI](https://img.shields.io/github/workflow/status/kkocdko/clevert/CI?color=2a4)](https://github.com/kkocdko/clevert/actions)
+[![Download](https://img.shields.io/github/downloads/kkocdko/clevert/total?color=2a4)](https://github.com/kkocdko/clevert/releases)
+[![License](https://img.shields.io/github/license/kkocdko/clevert?color=2a4)](LICENSE)
 
-Extensible file converter.
+The CLEver conVERTer.
 
 ## Intro
 
@@ -53,28 +57,56 @@ output_extension = 'png'
 threads_count = 1 # must be 1
 ```
 
-## Todo List
-
-1. Interactive CUI.
-
-2. Help document and Intro.
-
-3. Profile packs.
-
-4. StdIn.
-
 ## Note
 
 ```
 https://wiki.inkscape.org/wiki/Using_the_Command_Line
 https://inkscape.org/doc/inkscape-man.html
 https://github.com/amadvance/advancecomp
+https://getbem.com/naming/
+https://blogs.igalia.com/compilers/2023/06/12/quickjs-an-overview-and-guide-to-adding-a-new-feature/
+https://github.com/quickjs-ng/quickjs
+https://github.com/openwebf/quickjs
+https://github.com/alfg/ffmpeg-commander
+https://github.com/MattMcManis/Axiom
 ```
 
 ## Alternative
 
-- [Format Factory](https://pcfreetime.com/formatfactory/)
+- [Format Factory](http://www.pcfreetime.com/formatfactory/)
 
-- [XnConvert](https://xnview.com/en/xnconvert/)
+- [XnConvert](https://www.xnview.com/en/xnconvert/)
 
-<!-- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" style="background:#009688;stroke:#fff;stroke-width:75"><path d="M1100 0 700 200l400 800-400-800-200 100 400 800-400-800-200 100 400 800-400-800L0-200l300 600-400 200Z"/></svg> -->
+<!-- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" style="background:#009688;stroke:#fff"><path d="M11 1 7 3l4 8-4-8-2 1 4 8-4-8-2 1 4 8-4-8-3-6 3 6"/></svg> -->
+
+## The Future
+
+We're reconsidering the future of this project.
+
+### Extension
+
+- Extension system by QuickJS or JerryScript. The part that interacts with JS needs to be isolated.
+
+- Official extensions includes ImageMagick and FFmpeg.
+
+- Shell script in extension must be tested on busybox ash, then using busybox-w32 on windows.
+
+- Keep the extension simple and editable, for new contributors.
+
+### Interface
+
+Should be two UI implement:
+
+- Web based ui, for all users from beginners to SAAS deploy.
+
+- Electron or [miniblink](https://github.com/weolar/miniblink49/releases) for windows.
+
+- Simple interactive console interface. For lite users.
+
+### Working Mode
+
+There are two mode, static mode and dynamic mode.
+
+- Static mode generate all commands and arguments ahead-of-time, to reach the highest performance.
+
+- Dynamic mode run your custom logic before each command.

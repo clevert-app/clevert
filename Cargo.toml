@@ -22,5 +22,5 @@ shared_child = "1"
 num_cpus = "1"
 yansi = "0.5"
 terminal_size = "0.1"
-
+toml_edit = "0.18.0"
 # vc-ltl = "5.0.5"
