@@ -2,18 +2,20 @@ name: make.jpegxl
 on:
   workflow_dispatch:
 jobs:
-  linux-x64:
+  prepare:
     runs-on: ubuntu-22.04
     steps:
       - name: Build
         shell: sudo bash -e {0}
         run: |
+          mkdir jpegxl
+          cd jpegxl
           git init
           git remote add origin https://github.com/libjxl/libjxl
           git fetch origin --depth=1 b2fb216cd7e3e690544c53d1ae8fba3b9f97eab6
           git reset --hard FETCH_HEAD
           git submodule update --init --recursive --depth 1 --recommend-shallow
-          rm -rf .git
+          rm -rf $(find -name .git)
           cat <<EOF >tools/multicall.cc
           #include <stddef.h>
           #include <string.h>
@@ -74,7 +76,28 @@ jobs:
           sed -i tools/cjpegli.cc -e 's|int main(|int cmd_cjpegli_main(|' -e 's|namespace {|namespace cjpegli{|' -e 's|::CJpegliMain|::cjpegli::CJpegliMain|'
           sed -i tools/djpegli.cc -e 's|int main(|int cmd_djpegli_main(|' -e 's|namespace {|namespace djpegli{|' -e 's|::DJpegliMain|::djpegli::DJpegliMain|'
           sed -i tools/CMakeLists.txt -e 's|# Main compressor.|add_executable\(multicall multicall.cc\)\ntarget_link_libraries\(multicall jxl jxl_extras_codec jxl_extras-internal jxl_threads jxl_tool\)\nendif\(\)\nif\(0\)|'
-          printf 'APT::Install-Recommends "false";\nAPT::Install-Suggests "false";\n' > /etc/apt/apt.conf.d/no-recommends-suggests
+          cd ..
+          tar -cf jpegxl.tar jpegxl
+      - name: Save Cache Tar
+        uses: actions/cache/save@v4
+        with:
+          enableCrossOsArchive: true
+          key: "make.jpegxl_b2fb216_0"
+          path: jpegxl.tar
+  linux-x64:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Restore Cache Tar
+        uses: actions/cache/restore@v4
+        with:
+          enableCrossOsArchive: true
+          key: "make.jpegxl_b2fb216_0"
+          path: jpegxl.tar
+      - name: Build
+        shell: sudo bash -e {0}
+        run: |
+          tar -xf jpegxl.tar --strip-components 1
           apt update
           apt install -y g++ cmake ninja-build pkg-config libbrotli-dev libgif-dev libjpeg-dev libopenexr-dev libpng-dev
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF  -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" -DJPEGXL_STATIC=ON  -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=OFF -DJPEGXL_ENABLE_VIEWERS=OFF -DJPEGXL_ENABLE_PLUGINS=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=ON
@@ -93,3 +116,32 @@ jobs:
           draft: true
           tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
           files: linux-x64.zip
+  win-x64:
+    runs-on: windows-2022
+    steps:
+      - name: Restore Cache Tar
+        uses: actions/cache/restore@v4
+        with:
+          enableCrossOsArchive: true
+          key: "make.jpegxl_b2fb216_0"
+          path: jpegxl.tar
+      - name: Build
+        shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
+        run: |
+          tar -xf jpegxl.tar --strip-components 1
+          pacman -S --noconfirm mingw-w64-x86_64-cmake mingw-w64-x86_64-gcc zip mingw-w64-x86_64-libpng mingw-w64-x86_64-libjpeg mingw-w64-x86_64-openexr mingw-w64-x86_64-giflib
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF  -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" -DJPEGXL_STATIC=ON  -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=OFF -DJPEGXL_ENABLE_VIEWERS=OFF -DJPEGXL_ENABLE_PLUGINS=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=ON
+          cmake --build build
+          mv build/tools/multicall.exe ./jpegxl.exe
+          strip ./jpegxl.exe
+          zip -9 win-x64.zip jpegxl.exe
+      - name: Verify
+        run: |
+          ./jpegxl.exe cjxl -V
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: "_"
+          draft: true
+          tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
+          files: win-x64.zip
