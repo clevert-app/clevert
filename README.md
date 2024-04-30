@@ -1,8 +1,9 @@
 > # **_WARNING: This project is still developing_**
 
 ```sh
-node --experimental-detect-module clevert.js
+node --experimental-detect-module src/main.js bundle
 ```
+
 
 # clevert
 
@@ -79,34 +80,3 @@ https://github.com/MattMcManis/Axiom
 
 <!-- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" style="background:#009688;stroke:#fff"><path d="M11 1 7 3l4 8-4-8-2 1 4 8-4-8-2 1 4 8-4-8-3-6 3 6"/></svg> -->
 
-## The Future
-
-We're reconsidering the future of this project.
-
-### Extension
-
-- Extension system by QuickJS or JerryScript. The part that interacts with JS needs to be isolated.
-
-- Official extensions includes ImageMagick and FFmpeg.
-
-- Shell script in extension must be tested on busybox ash, then using busybox-w32 on windows.
-
-- Keep the extension simple and editable, for new contributors.
-
-### Interface
-
-Should be two UI implement:
-
-- Web based ui, for all users from beginners to SAAS deploy.
-
-- Electron or [miniblink](https://github.com/weolar/miniblink49/releases) for windows.
-
-- Simple interactive console interface. For lite users.
-
-### Working Mode
-
-There are two mode, static mode and dynamic mode.
-
-- Static mode generate all commands and arguments ahead-of-time, to reach the highest performance.
-
-- Dynamic mode run your custom logic before each command.

@@ -1,4 +1,6 @@
-/.vscode
-/target
+/.vscode/
+/target/
 /Cargo.lock
 **/*.rs.bk
+/dist/
+/commercial/
