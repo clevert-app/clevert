@@ -1,16 +1,19 @@
 name: make.jpegxl
 on:
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   prepare:
     runs-on: ubuntu-22.04
     steps:
-      - id: cache
+      - name: Cache
+        id: cache
         uses: actions/cache@v4
         with:
-          key: "make.jpegxl_b2fb216_2"
+          key: "make.jpegxl_b2fb216_3"
           path: jpegxl.tar
-      - id: build
+      - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
         shell: sudo bash -e {0}
         run: |
@@ -83,13 +86,13 @@ jobs:
           sed -i tools/djpegli.cc -e 's|int main(|int cmd_djpegli_main(|' -e 's|namespace {|namespace djpegli{|' -e 's|::DJpegliMain|::djpegli::DJpegliMain|'
           sed -i tools/CMakeLists.txt -e 's|# Main compressor.|add_executable\(multicall multicall.cc\)\ntarget_link_libraries\(multicall jxl jxl_extras_codec jxl_extras-internal jxl_threads jxl_tool\)\nendif\(\)\nif\(0\)|'
           cd ..
-          GZIP=-1 tar -czf jpegxl.tar jpegxl
-      - id: save-cache-tar
+          tar -czf jpegxl.tar --dereference jpegxl
+      - name: Save Cache Tar
         if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           enableCrossOsArchive: true
-          key: "make.jpegxl_b2fb216_2"
+          key: "make.jpegxl_b2fb216_3"
           path: jpegxl.tar
   linux-x64:
     needs: prepare
@@ -99,7 +102,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "make.jpegxl_b2fb216_2"
+          key: "make.jpegxl_b2fb216_3"
           path: jpegxl.tar
       - name: Build
         shell: sudo bash -e {0}
@@ -131,12 +134,12 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "make.jpegxl_b2fb216_2"
+          key: "make.jpegxl_b2fb216_3"
           path: jpegxl.tar
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
         run: |
-          tar -xf jpegxl.tar --strip-components 1 --dereference
+          tar -xf jpegxl.tar --strip-components 1
           pacman -S --noconfirm mingw-w64-x86_64-cmake mingw-w64-x86_64-gcc zip mingw-w64-x86_64-libpng mingw-w64-x86_64-libjpeg mingw-w64-x86_64-openexr mingw-w64-x86_64-giflib
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF  -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" -DJPEGXL_STATIC=ON  -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=OFF -DJPEGXL_ENABLE_VIEWERS=OFF -DJPEGXL_ENABLE_PLUGINS=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=ON
           cmake --build build
