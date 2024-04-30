@@ -1,0 +1,95 @@
+name: make.jpegxl
+on:
+  workflow_dispatch:
+jobs:
+  linux-x64:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Build
+        shell: sudo bash -e {0}
+        run: |
+          git init
+          git remote add origin https://github.com/libjxl/libjxl
+          git fetch origin --depth=1 b2fb216cd7e3e690544c53d1ae8fba3b9f97eab6
+          git reset --hard FETCH_HEAD
+          git submodule update --init --recursive --depth 1 --recommend-shallow
+          rm -rf .git
+          cat <<EOF >tools/multicall.cc
+          #include <stddef.h>
+          #include <string.h>
+          #include "jxlinfo.c"
+          #include "cjxl_main.cc"
+          #include "djxl_main.cc"
+          #include "cjpegli.cc"
+          #include "djpegli.cc"
+          #if defined(WIN32) || defined(_WIN32)
+          #define PATH_SEPARATOR '\\'
+          #else
+          #define PATH_SEPARATOR '/'
+          #endif
+          int main(int argc, const char *argv[]) {
+            if (argc <= 0) {
+              return 1;
+            }
+            const char *argv0 = strrchr(argv[0], PATH_SEPARATOR);
+            if (argv0 == NULL) {
+              argv0 = argv[0];
+            } else {
+              argv0++;
+            }
+          before:
+            if (argc <= 0) {
+              return 1;
+            } else if (strcmp(argv0, "jxlinfo") == 0) {
+              return cmd_jxlinfo_main(argc, argv);
+            } else if (strcmp(argv0, "cjxl") == 0) {
+              return cmd_cjxl_main(argc, argv);
+            } else if (strcmp(argv0, "djxl") == 0) {
+              return cmd_djxl_main(argc, argv);
+            } else if (strcmp(argv0, "cjpegli") == 0) {
+              return cmd_cjpegli_main(argc, argv);
+            } else if (strcmp(argv0, "djpegli") == 0) {
+              return cmd_djpegli_main(argc, argv);
+            } else {
+              argv++;
+              argc--;
+              if (argc <= 0) {
+                return 1;
+              }
+              argv0 = strrchr(argv[0], PATH_SEPARATOR);
+              if (argv0 == NULL) {
+                argv0 = argv[0];
+              } else {
+                argv0++;
+              }
+              goto before;
+            }
+            return 0;
+          }
+          EOF
+          sed -i tools/jxlinfo.c -e 's|name = malloc|name = (char*)malloc|g'
+          sed -i tools/jxlinfo.c -e 's|int main(|int cmd_jxlinfo_main(int argc, const char** argv){//|'
+          sed -i tools/cjxl_main.cc -e 's|int main(|int cmd_cjxl_main(int argc, const char** argv){//|'
+          sed -i tools/djxl_main.cc -e 's|int main(|int cmd_djxl_main(int argc, const char** argv){//|'
+          sed -i tools/cjpegli.cc -e 's|int main(|int cmd_cjpegli_main(|' -e 's|namespace {|namespace cjpegli{|' -e 's|::CJpegliMain|::cjpegli::CJpegliMain|'
+          sed -i tools/djpegli.cc -e 's|int main(|int cmd_djpegli_main(|' -e 's|namespace {|namespace djpegli{|' -e 's|::DJpegliMain|::djpegli::DJpegliMain|'
+          sed -i tools/CMakeLists.txt -e 's|# Main compressor.|add_executable\(multicall multicall.cc\)\ntarget_link_libraries\(multicall jxl jxl_extras_codec jxl_extras-internal jxl_threads jxl_tool\)\nendif\(\)\nif\(0\)|'
+          printf 'APT::Install-Recommends "false";\nAPT::Install-Suggests "false";\n' > /etc/apt/apt.conf.d/no-recommends-suggests
+          apt update
+          apt install -y g++ cmake ninja-build pkg-config libbrotli-dev libgif-dev libjpeg-dev libopenexr-dev libpng-dev
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF  -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" -DJPEGXL_STATIC=ON  -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=OFF -DJPEGXL_ENABLE_VIEWERS=OFF -DJPEGXL_ENABLE_PLUGINS=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=ON
+          cmake --build build
+          mv build/tools/multicall ./jpegxl
+          strip ./jpegxl
+          zip -9 linux-x64.zip jpegxl
+      - name: Verify
+        run: |
+          ldd ./jpegxl || true
+          ./jpegxl cjxl -V
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: "_"
+          draft: true
+          tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
+          files: linux-x64.zip
