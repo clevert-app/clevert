@@ -32,7 +32,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body: "${{ 'github.workflow_sha = ' }}${{ github.workflow_sha }}"
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           draft: true
           tag_name: "${{ 'make.rsync_3.3.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
