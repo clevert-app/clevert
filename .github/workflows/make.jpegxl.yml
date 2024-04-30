@@ -117,6 +117,7 @@ jobs:
           tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
           files: linux-x64.zip
   win-x64:
+    needs: prepare
     runs-on: windows-2022
     steps:
       - name: Restore Cache Tar
