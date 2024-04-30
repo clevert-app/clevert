@@ -11,7 +11,7 @@ jobs:
         id: cache
         uses: actions/cache@v4
         with:
-          key: "make.jpegxl_b2fb216_3"
+          key: "make.jpegxl_b2fb216_4"
           path: jpegxl.tar
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
@@ -86,13 +86,13 @@ jobs:
           sed -i tools/djpegli.cc -e 's|int main(|int cmd_djpegli_main(|' -e 's|namespace {|namespace djpegli{|' -e 's|::DJpegliMain|::djpegli::DJpegliMain|'
           sed -i tools/CMakeLists.txt -e 's|# Main compressor.|add_executable\(multicall multicall.cc\)\ntarget_link_libraries\(multicall jxl jxl_extras_codec jxl_extras-internal jxl_threads jxl_tool\)\nendif\(\)\nif\(0\)|'
           cd ..
-          tar -czf jpegxl.tar --dereference jpegxl
+          tar -cf jpegxl.tar --dereference jpegxl
       - name: Save Cache Tar
         if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           enableCrossOsArchive: true
-          key: "make.jpegxl_b2fb216_3"
+          key: "make.jpegxl_b2fb216_4"
           path: jpegxl.tar
   linux-x64:
     needs: prepare
@@ -102,7 +102,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "make.jpegxl_b2fb216_3"
+          key: "make.jpegxl_b2fb216_4"
           path: jpegxl.tar
       - name: Build
         shell: sudo bash -e {0}
@@ -134,7 +134,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "make.jpegxl_b2fb216_3"
+          key: "make.jpegxl_b2fb216_4"
           path: jpegxl.tar
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
