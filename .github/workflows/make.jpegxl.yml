@@ -7,10 +7,11 @@ jobs:
   prepare:
     runs-on: ubuntu-22.04
     steps:
-      - name: Cache
+      - name: Cache # the post step for this will upload jpegxl.tar if not hit
         id: cache
         uses: actions/cache@v4
         with:
+          enableCrossOsArchive: true
           key: "make.jpegxl_b2fb216_4"
           path: jpegxl.tar
       - name: Build
@@ -87,13 +88,6 @@ jobs:
           sed -i tools/CMakeLists.txt -e 's|# Main compressor.|add_executable\(multicall multicall.cc\)\ntarget_link_libraries\(multicall jxl jxl_extras_codec jxl_extras-internal jxl_threads jxl_tool\)\nendif\(\)\nif\(0\)|'
           cd ..
           tar -cf jpegxl.tar --dereference jpegxl
-      - name: Save Cache Tar
-        if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          enableCrossOsArchive: true
-          key: "make.jpegxl_b2fb216_4"
-          path: jpegxl.tar
   linux-x64:
     needs: prepare
     runs-on: ubuntu-22.04
@@ -123,7 +117,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: "_"
-          prerelease: true
+          draft: true
           tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
           files: linux-x64.zip
   win-x64:
@@ -153,6 +147,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: "_"
-          prerelease: true
+          draft: true
           tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
           files: win-x64.zip
