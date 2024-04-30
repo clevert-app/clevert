@@ -116,7 +116,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body: "_"
+          body: "${{ 'github.workflow_sha = ' }}${{ github.workflow_sha }}"
           draft: true
           tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
           files: linux-x64.zip
@@ -146,7 +146,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body: "_"
+          body: "${{ 'github.workflow_sha = ' }}${{ github.workflow_sha }}"
           draft: true
           tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
           files: win-x64.zip
