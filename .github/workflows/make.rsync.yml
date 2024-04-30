@@ -33,7 +33,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          draft: true
+          prerelease: true
           tag_name: "${{ 'make.rsync_3.3.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
   linux-arm64:
@@ -71,7 +71,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          draft: true
+          prerelease: true
           tag_name: "${{ 'make.rsync_3.3.0_' }}${{ github.run_id }}"
           files: linux-arm64.zip
   win-x64:
@@ -97,6 +97,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          draft: true
+          prerelease: true
           tag_name: "${{ 'make.rsync_3.3.0_' }}${{ github.run_id }}"
           files: win-x64.zip
