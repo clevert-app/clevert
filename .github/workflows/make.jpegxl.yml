@@ -6,6 +6,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - id: cache
+        uses: actions/cache@v4
         with:
           key: "make.jpegxl_b2fb216_2"
           path: jpegxl.tar
