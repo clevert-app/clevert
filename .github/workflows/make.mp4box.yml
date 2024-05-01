@@ -1,0 +1,58 @@
+name: make.mp4box
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  linux-x64:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Build
+        shell: sudo bash -e {0}
+        run: |
+          curl -L https://github.com/gpac/gpac/archive/refs/tags/v2.4.0.tar.gz | tar -zx --strip-components 1
+          ./configure --static-mp4box --disable-qjs --disable-qjs-libc --disable-x11 --use-zlib=no --use-opensvc=no --use-openhevc=no --use-platinum=no --use-freetype=no --use-ssl=no --use-jpeg=no --use-openjpeg=no --use-png=no --use-mad=no --use-a52=no --use-xvid=no --use-faad=no --use-ffmpeg=no --use-freenect=no --use-vorbis=no --use-theora=no --use-nghttp2=no --use-oss=no --use-dvb4linux=no --use-alsa=no --use-pulseaudio=no --use-jack=no --use-directfb=no --use-hid=no --use-lzma=no --use-tinygl=no --use-vtb=no --use-ogg=no --use-sdl=no --use-caption=no --use-mpeghdec=no --use-libcaca=no --disable-network --disable-3d --disable-crypto
+          sed -i config.mak -e 's|LDFLAGS=-static|LDFLAGS=|' -e 's|-msse2|-msse4|'
+          make -j$(nproc)
+          mv bin/gcc/MP4Box mp4box
+          strip mp4box
+          zip -9 linux-x64.zip mp4box
+      - name: Verify
+        run: |
+          ldd --version
+          ldd ./mp4box || true
+          ./mp4box -version
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
+          prerelease: true
+          tag_name: "${{ 'make.mp4box_2.4.0_' }}${{ github.run_id }}"
+          files: linux-x64.zip
+  win-x64:
+    runs-on: windows-2022
+    steps:
+      - name: Build
+        shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
+        run: |
+          pacman -S --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-autotools mingw-w64-x86_64-make zip
+          curl -L https://github.com/gpac/gpac/archive/refs/tags/v2.4.0.tar.gz | tar -zx --strip-components 1
+          ./configure --static-mp4box --disable-qjs --disable-qjs-libc --disable-x11 --use-zlib=no --use-opensvc=no --use-openhevc=no --use-platinum=no --use-freetype=no --use-ssl=no --use-jpeg=no --use-openjpeg=no --use-png=no --use-mad=no --use-a52=no --use-xvid=no --use-faad=no --use-ffmpeg=no --use-freenect=no --use-vorbis=no --use-theora=no --use-nghttp2=no --use-oss=no --use-dvb4linux=no --use-alsa=no --use-pulseaudio=no --use-jack=no --use-directfb=no --use-hid=no --use-lzma=no --use-tinygl=no --use-vtb=no --use-ogg=no --use-sdl=no --use-caption=no --use-mpeghdec=no --use-libcaca=no --disable-network --disable-3d --disable-crypto
+          sed -i config.mak -e 's|-msse2|-msse4|' # intel Pentium even doesn't have avx(128) until 11th(tiger lake)
+          sed -i include/gpac/thread.h -e 's|#ifndef _GF_THREAD_H_|#include <stdint.h>\n#ifndef _GF_THREAD_H_|'
+          sed -i src/utils/os_net.c -e 's|#include <arpa/inet.h>||' # winsocks2 start from win 8.1
+          make -j$(nproc)
+          mv bin/gcc/MP4Box.exe mp4box.exe
+          strip ./mp4box.exe
+          zip -9 win-x64.zip mp4box.exe
+      - name: Verify
+        run: |
+          ./mp4box.exe -version
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
+          prerelease: true
+          tag_name: "${{ 'make.mp4box_2.4.0_' }}${{ github.run_id }}"
+          files: win-x64.zip
+# https://wiki.gpac.io/Build/build/GPAC-Build-Guide-for-Linux/#mp4box-gpac-only-minimal-static-build
