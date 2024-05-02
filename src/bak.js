@@ -1,3 +1,6 @@
+// 只是备份
+// // @ts-check
+
 import fs from "node:fs";
 import path from "node:path";
 import { createServer } from "node:http";
@@ -5,7 +8,12 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
 /** @typedef {{inputs:string[],outputs:string[],options:any}} Order */
-/** @typedef {(options:{[k:string]:any})=>Order[]} Provider */
+/**
+@typedef {{
+  a: string,
+  b: string
+}} Provider
+*/
 
 /** @type {Provider} */
 const dirProvider = (options) => {
