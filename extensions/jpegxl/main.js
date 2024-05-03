@@ -1,8 +1,9 @@
 // @ts-check
-// import { Extension, AssetKind, ActionKind } from "clevert"; // 这些砍 import 的魔法，在加载扩展的时候做
+// import { Extension, AssetKind, ActionKind } from "clevert";
 import { spawn } from "node:child_process";
-// banned: import { spawn } from "node:child_process"; // 可以这种形式在前端禁用
+// banned: import { spawn } from "node:child_process"; // 可以这种形式为前端禁用 // 这些砍 import 的魔法，在加载扩展的时候做
 
+// 设计成导出一整个的形式，单个单个导出没法做 type check
 export default {
   id: "jpegxl",
   name: "jpegxl name",
@@ -13,6 +14,7 @@ export default {
       platform: "linux-x64",
       kind: "zip", // 比如可以做 tar --strip-components 这样的
       path: "./",
+      // url 就直接填 github，然后让核心去做镜像加速和多源下载
       url: "https://github.com/clevert-app/clevert/releases/download/make.jpegxl_b2fb216_8900231253/linux-x64.zip",
     },
   ],
