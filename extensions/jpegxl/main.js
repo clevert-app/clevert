@@ -1,5 +1,7 @@
-import { Extension, AssetKind, ActionKind } from "clevert"; // 这些砍 import 的魔法，在加载扩展的时候做
+// @ts-check
+// import { Extension, AssetKind, ActionKind } from "clevert"; // 这些砍 import 的魔法，在加载扩展的时候做
 import { spawn } from "node:child_process";
+// banned: import { spawn } from "node:child_process"; // 可以这种形式在前端禁用
 
 export default {
   id: "jpegxl",
@@ -20,21 +22,25 @@ export default {
       name: "cjpegli name",
       description: "cjpegli description",
       kind: "converter", // 还可以是 group-converter，manual converter 之类的？
-      ui: (props) => {
-        // 这个函数在前端跑，画界面。selectedInput 以后可以用作预览什么的
-        // return (
-        //   <TextField.Root
-        //     value={props.profile.quality}
-        //     onChange={(event) => {
-        //       setProfile((nextProfile) => {
-        //         return { ...nextProfile, quality: event.target.value };
-        //       });
-        //     }}
-        //     placeholder="Search the docs…"
-        //   ></TextField.Root>
-        // );
+      ui: (profile) => {
+        // 这个函数在前端跑，画界面
+        const root = document.createElement("div");
+        const input = root.appendChild(document.createElement("input"));
+        input.type = "number";
+        input.value = profile.quality;
+        input.placeholder = "quality(0-100)";
+        return {
+          root: root,
+          profile: () => {
+            profile.quality = Number(input.value);
+            return profile;
+          },
+          preview: (input) => {
+            // 这边可以做预览，就是在文件列表里选择的时候会被调用
+          },
+        };
       },
-      execute: ({ onProgress }, profile, input, output) => {
+      execute: (profile, input, output) => {
         // 这个函数在后端跑，要求不 block 主线程，只能 async。如果要 block 请自行开 worker
         const child = spawn("~/misc/apps/jpegxl", [
           "cjpegli",
@@ -43,14 +49,20 @@ export default {
           "-q",
           String(profile.quality),
         ]);
+        let progressValue = 0;
         child.stderr.on("data", (/** @type {Buffer} */ data) => {
           const chunk = data.toString();
-          onProgress(0.5);
+          progressValue = 0.5;
         });
-        return new Promise((resolve, reject) => {
-          child.on("error", (err) => reject(err));
-          child.on("exit", (code) => (code ? reject({ code }) : resolve(0)));
-        });
+        return {
+          progress: () => {
+            return progressValue;
+          },
+          ready: new Promise((resolve, reject) => {
+            child.on("error", (err) => reject(err));
+            child.on("exit", (code) => (code ? reject({ code }) : resolve(0)));
+          }),
+        };
       },
     },
   ],

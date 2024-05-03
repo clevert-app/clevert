@@ -1,19 +1,12 @@
+import { app, protocol, BrowserWindow } from "electron";
+import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
+
 if (globalThis.document) {
   // is in renderer
   console.log(document);
-  const React = await import("react");
-  const { useState } = await import("react");
-  const { createRoot } = await import("react-dom/client");
-  createRoot(document.getElementById("root")).render(
-    <React.StrictMode>
-      <div>hello react</div>
-    </React.StrictMode>
-  );
 } else {
   // is in main
-  const { app, protocol, BrowserWindow } = await import("electron");
-  const { fileURLToPath } = await import("node:url");
-  const { readFile } = await import("node:fs/promises");
 
   const html = ([s]) => s;
   const page = () => html`
@@ -26,7 +19,7 @@ if (globalThis.document) {
     </head>
     <body>
       <div id="root"></div>
-      <script type="module" src="resource:///main.js"></script>
+      <script type="module" src="/main.js"></script>
     </body>
   `;
 
@@ -119,3 +112,5 @@ if (globalThis.document) {
 // https://github.com/radix-ui/themes/blob/main/packages/radix-ui-themes/src/components/button.css
 // https://www.radix-ui.com/themes/docs/overview/getting-started
 // node_modules/.bin/sucrase -d src src --transforms typescript,jsx  --jsx-runtime automatic  --disable-es-transforms
+
+// mkdir -p node_modules/electron ; dl_prefix="https://registry.npmmirror.com/electron/30.0.2/files" ; curl -o node_modules/electron/electron.d.ts -L $dl_prefix/electron.d.ts -o node_modules/electron/package.json -L $dl_prefix/package.json
