@@ -91,26 +91,11 @@ if (globalThis.document) {
 // let c = {};
 // 提供一些 trait
 
-// Daemon
-// Transform
-
 // https://registry.npmmirror.com/binary.html?path=electron/v30.0.1/
 // https://registry.npmmirror.com/-/binary/electron/v30.0.1/electron-v30.0.1-linux-x64.zip
 // /home/kkocdko/misc/res/electron-v30.0.1-linux-x64/electron
-// 基于 zustand 封装一个快速表单，然后出 json，无ui时直接用json
-// webPreferences: {
-//   nodeIntegration: true,
-//   contextIsolation: false,
-//   webSecurity: false,
 
-// core -> extension -> action -> config
-// (以后做)  profile = extension + action + config
-
-// https://github.com/clevert-app/notes/issues/1
-
-// 想要知道css怎么弄进来
-// https://github.com/radix-ui/themes/blob/main/packages/radix-ui-themes/src/components/button.css
-// https://www.radix-ui.com/themes/docs/overview/getting-started
-// node_modules/.bin/sucrase -d src src --transforms typescript,jsx  --jsx-runtime automatic  --disable-es-transforms
+// core -> extension -> action -> profile
+// (以后做)  profile = extension + action + profile
 
 // mkdir -p node_modules/electron ; dl_prefix="https://registry.npmmirror.com/electron/30.0.2/files" ; curl -o node_modules/electron/electron.d.ts -L $dl_prefix/electron.d.ts -o node_modules/electron/package.json -L $dl_prefix/package.json
