@@ -2,15 +2,10 @@
   "name": "clevert",
   "version": "0.1.0",
   "scripts": {
-    "start": "node -r sucrase/register src/main.ts"
+    "start": "/home/kkocdko/misc/res/electron-v30.0.1-linux-x64/electron src/main.js --no-sandbox"
   },
   "type": "module",
-  "dependencies": {
-    "@radix-ui/themes": "3",
-    "react": "18",
-    "react-dom": "18",
-    "sucrase": "3"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "20",
     "electron": "30"
