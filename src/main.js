@@ -1,25 +1,85 @@
 // @ts-check
-// import { app, protocol, BrowserWindow } from "electron";
+import { app, protocol, BrowserWindow } from "electron";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
-import fs from "node:fs";
-import path from "node:path";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 
-// 会排除源码中导入路径满足 regexp 的静态 import 语句，然后返回排除后的源码。被排除的将成为 `// excluded: import xxx form ...`
+/**
+ * Exclude the static `import` declaration matches `regexp`. Will be `// excluded: import xxx form ...`
+ * @param {string} sourceCode
+ * @param {RegExp} regexp
+ * @returns {string}
+ */
 const excludeImport = (sourceCode, regexp) => {
-  // 先跳过所有注释
-  // 然后找 import
-  // 直到找不到？
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import
+  // we dont support the "string name import" in reference just match quotas, and ensure the "import" keyword in line beginning, and ensure imports in the head of file
+  let ret = "";
+  let position = 0;
+  while (true) {
+    if (sourceCode.startsWith("import", position)) {
+      let start = position;
+      let end = start;
+      while (true) {
+        if (sourceCode[start] === "'") {
+          start++;
+          end = sourceCode.indexOf("'", start);
+          break;
+        }
+        if (sourceCode[start] === '"') {
+          start++;
+          end = sourceCode.indexOf('"', start);
+          break;
+        }
+        start++;
+      }
+      const moduleName = sourceCode.slice(start, end);
+      const rangeEnd = end + "'".length;
+      if (regexp.test(moduleName)) {
+        const mark = "// excluded: ";
+        ret +=
+          mark +
+          sourceCode.slice(position, rangeEnd).replace(/\n/g, "\n" + mark);
+        position = rangeEnd;
+      } else {
+        // do nothing
+      }
+    } else if (sourceCode.startsWith("//", position)) {
+      // do nothing
+    } else if (sourceCode.startsWith("/*", position)) {
+      const rangeEnd = sourceCode.indexOf("*/", position) + "*/".length;
+      ret += sourceCode.slice(position, rangeEnd);
+      position = rangeEnd;
+    } else if (
+      sourceCode.startsWith("\n", position) ||
+      sourceCode.startsWith("\t", position) ||
+      sourceCode.startsWith(" ", position)
+    ) {
+      // must not be start with these for useful statements, like "\n  import xxx ..."
+    } else {
+      break;
+    }
+    const nextPosition = sourceCode.indexOf("\n", position) + 1;
+    ret += sourceCode.slice(position, nextPosition);
+    position = nextPosition;
+  }
+  ret += sourceCode.slice(position);
+  return ret;
 };
+
+const inPage = () => {};
+const inServer = () => {};
+const inNode = () => {};
+const inElectron = () => {};
 
 if (globalThis.document) {
   // is in renderer
   console.log(document);
+  // 与后端 ipc 的方式
+  // - electron: window.postMessage
+  // - node: ?
 } else {
   // is in main
-
   const html = (/** @type {any} */ [s]) => s;
   const page = () => html`
     <!DOCTYPE html>
@@ -27,12 +87,17 @@ if (globalThis.document) {
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width" />
       <meta name="color-scheme" content="light dark" />
-      <script type="module" src="/main.js"></script>
       <title>clevert</title>
+      <style>
+        body {
+          /* color: #fff; */
+        }
+      </style>
     </head>
-    <body></body>
+    <body>
+      <script type="module" src="/main.js"></script>
+    </body>
   `;
-
   const server = createServer(async (req, res) => {
     console.log({ url: req.url });
     if (req.url === "/") {
@@ -45,7 +110,13 @@ if (globalThis.document) {
       res.setHeader("Content-Type", "text/javascript; charset=utf-8");
       res.writeHead(200);
       const buffer = await readFile(fileURLToPath(import.meta.url));
-      res.end(buffer.toString());
+      res.end(excludeImport(buffer.toString(), /^node:.+$/));
+      return;
+    }
+    if (req.url === "/favicon.ico") {
+      res.setHeader("Content-Type", "image/png");
+      res.writeHead(200);
+      res.end("");
       return;
     }
     res.writeHead(404).end("not found");
@@ -53,51 +124,51 @@ if (globalThis.document) {
 
   server.listen(9393, "127.0.0.1");
 
-  // const createWindow = () => {
-  //   const win = new BrowserWindow({
-  //     width: 1280,
-  //     height: 720,
-  //     title: "clevert",
-  //     webPreferences: {
-  //       // nodeIntegration: true,
-  //       contextIsolation: false,
-  //       webSecurity: false,
-  //       sandbox: false,
-  //       // preload: fileURLToPath(import.meta.url),
-  //     },
-  //     autoHideMenuBar: true,
-  //   });
-  //   win.loadURL("resource:///main.html");
-  //   win.webContents.openDevTools();
-  // };
+  const createWindow = () => {
+    const win = new BrowserWindow({
+      width: 1280,
+      height: 720,
+      title: "clevert",
+      webPreferences: {
+        // nodeIntegration: true,
+        contextIsolation: false,
+        webSecurity: false,
+        sandbox: false,
+        // preload: fileURLToPath(import.meta.url),
+      },
+      autoHideMenuBar: true,
+    });
+    win.loadURL("resource:///main.html");
+    win.webContents.openDevTools();
+  };
 
-  // app.whenReady().then(() => {
-  //   protocol.handle("resource", async (req) => {
-  //     console.log(req.url)
-  //     if (req.url === "resource:///main.html") {
-  //       const type = "text/html; charset=utf-8";
-  //       return new Response(new Blob([page()], { type }));
-  //     }
-  //     if (req.url === "resource:///main.js") {
-  //       const buffer = await readFile(fileURLToPath(import.meta.url));
-  //       const type = "text/javascript; charset=utf-8";
-  //       return new Response(new Blob([buffer], { type }));
-  //     }
-  //     return new Response(new Blob(["not found"], { type: "text/plain" }));
-  //   });
-  //   createWindow();
-  //   // mac
-  //   app.on("activate", () => {
-  //     if (BrowserWindow.getAllWindows().length === 0) {
-  //       createWindow();
-  //     }
-  //   });
-  // });
-  // app.on("window-all-closed", () => {
-  //   if (process.platform !== "darwin") {
-  //     app.quit();
-  //   }
-  // });
+  app.whenReady().then(() => {
+    protocol.handle("resource", async (req) => {
+      console.log(req.url);
+      if (req.url === "resource:///main.html") {
+        const type = "text/html; charset=utf-8";
+        return new Response(new Blob([page()], { type }));
+      }
+      if (req.url === "resource:///main.js") {
+        const buffer = await readFile(fileURLToPath(import.meta.url));
+        const type = "text/javascript; charset=utf-8";
+        return new Response(new Blob([buffer], { type }));
+      }
+      return new Response(new Blob(["not found"], { type: "text/plain" }));
+    });
+    createWindow();
+    // mac
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  });
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit();
+    }
+  });
 }
 
 // http://127.0.0.1:8080/extensions/jpegxl/main.tsx
