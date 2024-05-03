@@ -1,9 +1,3 @@
-export {}; // let tsserver think this is a es module
-
-type FooBar = {
-  some: string;
-};
-
 if (globalThis.document) {
   // is in renderer
   console.log(document);
@@ -20,15 +14,8 @@ if (globalThis.document) {
   const { app, protocol, BrowserWindow } = await import("electron");
   const { fileURLToPath } = await import("node:url");
   const { readFile } = await import("node:fs/promises");
-  const sucrase = await import("sucrase");
-  sucrase.transform("", {
-    transforms: ["jsx", "typescript"],
-    jsxRuntime: "automatic",
-    disableESTransforms: true,
-    preserveDynamicImport: true,
-  }).code;
 
-  const html = ([s]: any) => s;
+  const html = ([s]) => s;
   const page = () => html`
     <!DOCTYPE html>
     <head>
@@ -131,4 +118,4 @@ if (globalThis.document) {
 // 想要知道css怎么弄进来
 // https://github.com/radix-ui/themes/blob/main/packages/radix-ui-themes/src/components/button.css
 // https://www.radix-ui.com/themes/docs/overview/getting-started
-// node_modules/.bin/sucrase -d src src --transforms typescript,jsx  --jsx-runtime automatic  --disable-es-transforms       
+// node_modules/.bin/sucrase -d src src --transforms typescript,jsx  --jsx-runtime automatic  --disable-es-transforms
