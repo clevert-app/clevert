@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 // 设计成导出一整个的形式，单个单个导出没法做 type check
 export default {
   id: "jpegxl",
+  version: "0.1.0", // semver
   name: "jpegxl name",
   description: "jpegxl description",
   dependencies: [], // 可以填写其他的 extension 的 id
@@ -26,7 +27,7 @@ export default {
       kind: "converter", // 还可以是 group-converter，manual converter 之类的？
       ui: (profile) => {
         // 这个函数在前端跑，画界面
-        const root = document.createElement("div");
+        const root = document.createElement("action_root_");
         const input = root.appendChild(document.createElement("input"));
         input.type = "number";
         input.value = profile.quality;
@@ -59,6 +60,9 @@ export default {
         return {
           progress: () => {
             return progressValue;
+          },
+          stop: () => {
+            child.kill("SIGTERM");
           },
           ready: new Promise((resolve, reject) => {
             child.on("error", (err) => reject(err));

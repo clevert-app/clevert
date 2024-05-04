@@ -1,5 +1,4 @@
 // @ts-check
-import { app, protocol, BrowserWindow } from "electron";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -67,37 +66,51 @@ const excludeImport = (sourceCode, regexp) => {
   return ret;
 };
 
-const inPage = () => {};
-const inServer = () => {};
-const inNode = () => {};
-const inElectron = () => {};
+const html = (/** @type {any} */ [s]) => s;
 
-if (globalThis.document) {
-  // is in renderer
-  console.log(document);
-  // 与后端 ipc 的方式
-  // - electron: window.postMessage
-  // - node: ?
-} else {
+const page = () => html`
+  <!DOCTYPE html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="color-scheme" content="light dark" />
+    <title>clevert</title>
+    <style>
+      body {
+        /* color: #fff; */
+      }
+    </style>
+  </head>
+  <body>
+    <top_bar_></top_bar_>
+    <side_bar_>
+      <extensions_list_></extensions_list_>
+      <actions_list_></actions_list_>
+    </side_bar_>
+    <extensions_market_></extensions_market_>
+    <current_action_ kind_="converter">
+      <input_list_></input_list_>
+      <action_root_>
+        <input type="number" />
+      </action_root_>
+      <action_controls_>
+        <action_progress_>90%</action_progress_>
+        <button>Start</button>
+        <button>Stop</button>
+      </action_controls_>
+    </current_action_>
+    <script type="module" src="/main.js"></script>
+  </body>
+`;
+
+const inPage = () => {
+  const $ = (s) => document.querySelector(s);
+  const /** @type {HTMLElement} */ $topBar = $("top_bar_");
+  const /** @type {HTMLElement} */ $sideBar = $("side_bar_");
+};
+
+const inServer = () => {
   // is in main
-  const html = (/** @type {any} */ [s]) => s;
-  const page = () => html`
-    <!DOCTYPE html>
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width" />
-      <meta name="color-scheme" content="light dark" />
-      <title>clevert</title>
-      <style>
-        body {
-          /* color: #fff; */
-        }
-      </style>
-    </head>
-    <body>
-      <script type="module" src="/main.js"></script>
-    </body>
-  `;
   const server = createServer(async (req, res) => {
     console.log({ url: req.url });
     if (req.url === "/") {
@@ -123,6 +136,10 @@ if (globalThis.document) {
   });
 
   server.listen(9393, "127.0.0.1");
+};
+
+const inElectron = async () => {
+  const { app, protocol, BrowserWindow } = await import("electron");
 
   const createWindow = () => {
     const win = new BrowserWindow({
@@ -169,6 +186,12 @@ if (globalThis.document) {
       app.quit();
     }
   });
+};
+
+if (globalThis.document) {
+  inPage();
+} else {
+  inServer();
 }
 
 // http://127.0.0.1:8080/extensions/jpegxl/main.tsx
