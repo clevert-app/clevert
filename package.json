@@ -2,7 +2,7 @@
   "name": "clevert",
   "version": "0.1.0",
   "scripts": {
-    "start": "node src/main.js ; exit ; /home/kkocdko/misc/res/electron-v30.0.1-linux-x64/electron src/main.js --no-sandbox"
+    "start": "node main.js ; exit ; /home/kkocdko/misc/res/electron-v30.0.1-linux-x64/electron src/main.js --no-sandbox"
   },
   "type": "module"
 }
