@@ -9,7 +9,7 @@ export default {
   version: "0.1.0", // semver
   name: "jpegxl name",
   description: "jpegxl description",
-  dependencies: [], // 可以填写其他的 extension 的 id
+  dependencies: [], // 可以填写其他的 extension 的 id (这个功能需要扩展商店)
   assets: [
     {
       platform: "linux-x64",
@@ -43,7 +43,7 @@ export default {
           },
         };
       },
-      execute: (profile, input, output) => {
+      execute: (profile, { input, output }) => {
         // 这个函数在后端跑，要求不 block 主线程，只能 async。如果要 block 请自行开 worker
         const child = spawn("~/misc/apps/jpegxl", [
           "cjpegli",

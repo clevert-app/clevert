@@ -1,6 +1,7 @@
 // @ts-check
 import { fileURLToPath } from "node:url";
-import { readFile, mkdir, writeFile, readdir, rename } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join as joinPath } from "node:path";
 import { request as requestHttp } from "node:http";
@@ -71,7 +72,7 @@ const excludeImport = (sourceCode, regexp) => {
 };
 
 /**
- * Get next int number.
+ * Get next auto increased int number.
  * @returns {number}
  */
 const nextInt = (() => {
@@ -99,12 +100,26 @@ const nextInt = (() => {
 } ActionKind
 @typedef {
   {
+    root: HTMLElement,
+    profile: () => any,
+    preview: (input: any) => void,
+  }
+} ActionUiController
+@typedef {
+  {
+    progress: () => number,
+    stop: () => void,
+    ready: Promise<any>,
+  }
+} ActionExecuteController
+@typedef {
+  {
     id: string,
     name: string,
     description: string,
     kind: ActionKind,
-    ui: any,
-    execute: any,
+    ui: (profile: any) => ActionUiController,
+    execute: (profile: any, entry: any) => ActionExecuteController,
   }
 } Action
 @typedef {
@@ -119,6 +134,27 @@ const nextInt = (() => {
     profiles: any[],
   }
 } Extension
+@typedef {
+  {
+    input: {
+      main: string[],
+    },
+    output: {
+      main: string[],
+    },
+  }
+} ConverterEntry
+@typedef {
+  {
+    path: string,
+  }
+} ReadDirRequest
+@typedef {
+  {
+    path: string,
+    type: "file" | "dir",
+  }[]
+} ReadDirResponse
 @typedef {
   {
     id: string,
@@ -136,6 +172,14 @@ const nextInt = (() => {
     url: string,
   }
 } InstallExtensionRequest
+@typedef {
+  {
+    extensionId: string,
+    actionId: string,
+    profile: any,
+    entries: any[],
+  }
+} StartActionRequest
 */
 
 const html = (/** @type {any} */ [s]) => s;
@@ -241,6 +285,14 @@ const page = () => html`
         visibility: hidden;
         opacity: 0;
       }
+      input_output_config_,
+      action_root_,
+      action_controls_ {
+        display: block;
+      }
+      input_output_config_ {
+        border: 1px solid var(--border);
+      }
     </style>
   </head>
   <body>
@@ -270,6 +322,7 @@ const inPage = async () => {
       method: "POST",
       body: JSON.stringify(request),
     });
+    await refreshExtensionsList();
   };
 
   // Current Action
@@ -349,7 +402,7 @@ const inPage = async () => {
     /** @type {string} */ actionId
   ) => {
     const extension = /** @type {Extension} */ (
-      await import("/extension/" + extensionId + "/main.js")
+      (await import("/extension/" + extensionId + "/main.js")).default
     );
     const action = extension.actions.find((action) => action.id === actionId);
     if (action === undefined) {
@@ -360,13 +413,58 @@ const inPage = async () => {
     $currentAction.setAttribute("kind_", action.kind);
 
     if (action.kind === "converter") {
-      const $inputList = document.createElement("input_list_");
-      $currentAction.appendChild($inputList);
+      const $inputOutoutConfig = document.createElement("input_output_config_");
+      const $inputDir = document.createElement("input");
+      const $outputDir = document.createElement("input");
+      $inputOutoutConfig.appendChild($inputDir);
+      $inputOutoutConfig.appendChild($outputDir);
+      $currentAction.appendChild($inputOutoutConfig);
 
       const ui = action.ui({}); // todo: profile
       $currentAction.appendChild(ui.root);
 
       const $actionControls = document.createElement("action_controls_");
+      const $startButton = document.createElement("button");
+      $startButton.textContent = "Start";
+      $startButton.onclick = async () => {
+        // read input dir
+        const entries = /** @type {ConverterEntry[]} */ ([]);
+        const readDirRequest = /** @type {ReadDirRequest} */ ({
+          path: $inputDir.value,
+        });
+        const readDirResponse = /** @type {ReadDirResponse} */ (
+          await (
+            await fetch("/read-dir", {
+              method: "POST",
+              body: JSON.stringify(readDirRequest),
+            })
+          ).json()
+        );
+        // strip path prefix by $inputDir.value to produce relative path, then produce output path by relative path
+        for (const entry of readDirResponse) {
+          entries.push({
+            input: {
+              main: [entry.path],
+            },
+            output: {
+              main: [
+                $outputDir.value + entry.path.slice($inputDir.value.length),
+              ],
+            },
+          });
+        }
+        const startActionRequest = /** @type {StartActionRequest} */ ({
+          extensionId: extension.id,
+          actionId: action.id,
+          profile: ui.profile(),
+          entries: entries,
+        });
+        await fetch("/start-action", {
+          method: "POST",
+          body: JSON.stringify(startActionRequest),
+        });
+      };
+      $actionControls.appendChild($startButton);
       $currentAction.appendChild($actionControls);
       return;
     }
@@ -404,6 +502,8 @@ const inServer = async () => {
   );
   await mkdir(PATH_EXTENSIONS, { recursive: true });
   await mkdir(PATH_CACHE, { recursive: true });
+
+  const running = /** @type {Set<ActionExecuteController>} */ (new Set());
 
   const reqToJson = async (req) => {
     return new Promise((resolve) => {
@@ -449,8 +549,33 @@ const inServer = async () => {
       return;
     }
 
+    if (req.url === "/read-dir") {
+      const request = /** @type {ReadDirRequest} */ (await reqToJson(req));
+      const ret = /** @type {ReadDirResponse} */ ([]);
+      for (const v of await readdir(request.path, { withFileTypes: true })) {
+        ret.push({
+          path: joinPath(request.path, v.name),
+          type: v.isDirectory() ? "dir" : "file",
+        });
+      }
+      res.setHeader("Content-Type", "application/json");
+      res.writeHead(200);
+      res.end(JSON.stringify(ret));
+      return;
+    }
+
+    if (req.url === "/start-action") {
+      const request = /** @type {StartActionRequest} */ (await reqToJson(req));
+
+      res.setHeader("Content-Type", "application/json");
+      res.writeHead(200);
+      res.end("");
+      return;
+    }
+
     if (req.url?.startsWith("/extension/")) {
-      const [, extensionId, fileName] = req.url.split("/");
+      console.log(req.url.split("/"));
+      const [, , extensionId, fileName] = req.url.split("/");
       assert(fileName === "main.js");
       const extensionFilePath =
         PATH_EXTENSIONS + "/" + extensionId + "/main.js";
@@ -465,7 +590,7 @@ const inServer = async () => {
       const ret = /** @type {ListExtensionsResponse} */ ([]);
       for (const entry of await readdir(PATH_EXTENSIONS)) {
         const extension = /** @type {Extension} */ (
-          await import(PATH_EXTENSIONS + "/" + entry + "/main.js")
+          (await import(PATH_EXTENSIONS + "/" + entry + "/main.js")).default
         );
         ret.push({
           id: extension.id,
@@ -492,7 +617,7 @@ const inServer = async () => {
         PATH_CACHE + "/downloading-" + nextInt() + ".js";
       await download(request.url, extensionMainJsTemp);
       const extension = /** @type {Extension} */ (
-        await import(extensionMainJsTemp)
+        (await import(extensionMainJsTemp)).default
       );
       const extensionDir = PATH_EXTENSIONS + "/" + extension.id;
       await mkdir(extensionDir);
@@ -517,7 +642,7 @@ const inServer = async () => {
             : assert(false, "unsupported asset kind")
         );
         const assetTemp =
-          PATH_CACHE + "/downloading-" + nextInt() + assetExtName;
+          PATH_CACHE + "/downloading-" + nextInt() + "." + assetExtName;
         await download(asset.url, assetTemp);
         if (asset.kind === "raw") {
           await rename(assetTemp, extensionDir + "/" + asset.path);
@@ -527,6 +652,7 @@ const inServer = async () => {
         } else {
           assert(false, "unsupported yet");
         }
+        await rm(assetTemp, { recursive: true });
       }
       res.setHeader("Content-Type", "application/json");
       res.writeHead(200);
@@ -596,7 +722,68 @@ if (globalThis.document) {
   inServer();
 }
 
-// http://127.0.0.1:8080/extensions/jpegxl/main.tsx
+/*
+const dirProvider = (options) => {
+  const inputs = fs
+    .readdirSync(options.inputDir, { recursive: options.inputRecursive })
+    .map((item) => path.join(options.inputDir, item))
+    .filter((item) => !options.inputOnlyFile || fs.statSync(item).isFile());
+  const outputs = inputs.map((input) => {
+    const relative = path.relative(options.inputDir, input);
+    const parsed = path.parse(path.join(options.outputDir, relative));
+    delete parsed.base;
+    parsed.name = options.outputPrefix + parsed.name + options.outputSuffix;
+    if (options.outputExtName) parsed.ext = "." + options.outputExtName;
+    const item = path.format(parsed);
+    const dir = path.dirname(item);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return item;
+  });
+  return [...Array(inputs.length)].map((_, i) => ({
+    inputs: [inputs[i]],
+    outputs: [outputs[i]],
+    options: options.options(inputs[i], outputs[i]),
+  }));
+};
+
+const action = (await import("./extension-ffmpeg.js")).actions["to-m4a"];
+const orders = dirProvider({
+  inputDir: "./dist/i",
+  inputRecursive: true,
+  inputOnlyFile: true,
+  outputDir: "./dist/o",
+  outputExtName: "m4a",
+  outputPrefix: "",
+  outputSuffix: "_out",
+  outputFlat: false,
+  absolute: false,
+  options: () => ({
+    some: 1,
+  }),
+});
+
+const remaining = orders.map((order) => action.prepare(order));
+const running = new Set();
+
+const executors = [...Array(config.parallel)].map((_, i) =>
+  (async () => {
+    for (let job; (job = remaining.shift()); ) {
+      const promise = job({
+        onWarn() {},
+        onProgress(current, total) {
+          console.log(`${current}/${total}`);
+        },
+      });
+      running.add(promise);
+      await promise;
+      running.delete(promise);
+    }
+  })()
+);
+await Promise.all(executors);
+*/
+
+// http://127.0.0.1:8080/extensions/jpegxl/main.js
 // let c = {};
 // 提供一些 trait
 
