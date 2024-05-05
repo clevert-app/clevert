@@ -291,6 +291,9 @@ const page = () => html`
         display: block;
       }
       input_output_config_ {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 8px;
         border: 1px solid var(--border);
       }
     </style>
@@ -415,9 +418,18 @@ const inPage = async () => {
     if (action.kind === "converter") {
       const $inputOutoutConfig = document.createElement("input_output_config_");
       const $inputDir = document.createElement("input");
+      $inputDir.placeholder = "Input Dir";
+      $inputDir.value = "/home/kkocdko/misc/code/clevert/temp/converter-test/i"; // does not support "~/adbf" ?
       const $outputDir = document.createElement("input");
+      $outputDir.placeholder = "Output Dir";
+      $outputDir.value =
+        "/home/kkocdko/misc/code/clevert/temp/converter-test/o";
+      const $outputExtension = document.createElement("input");
+      $outputExtension.placeholder = "Output Extension";
+      $outputExtension.value = "jpeg";
       $inputOutoutConfig.appendChild($inputDir);
       $inputOutoutConfig.appendChild($outputDir);
+      $inputOutoutConfig.appendChild($outputExtension);
       $currentAction.appendChild($inputOutoutConfig);
 
       const ui = action.ui({}); // todo: profile
@@ -503,6 +515,7 @@ const inServer = async () => {
   await mkdir(PATH_EXTENSIONS, { recursive: true });
   await mkdir(PATH_CACHE, { recursive: true });
 
+  const PARALLEL = 2;
   const running = /** @type {Set<ActionExecuteController>} */ (new Set());
 
   const reqToJson = async (req) => {
@@ -566,7 +579,29 @@ const inServer = async () => {
 
     if (req.url === "/start-action") {
       const request = /** @type {StartActionRequest} */ (await reqToJson(req));
-
+      const extension = /** @type {Extension} */ (
+        (await import(PATH_EXTENSIONS + "/" + request.extensionId + "/main.js"))
+          .default
+      );
+      const action = extension.actions.find(
+        (action) => action.id === request.actionId
+      );
+      if (action === undefined) {
+        assert(false, "action not found");
+        return;
+      }
+      const executors = [...Array(PARALLEL)].map((_, i) =>
+        (async () => {
+          for (let entry; (entry = request.entries.shift()); ) {
+            console.log(entry.input.main);
+            const controller = action.execute(request.profile, entry);
+            running.add(controller);
+            await controller.ready;
+            running.delete(controller);
+          }
+        })()
+      );
+      await Promise.all(executors);
       res.setHeader("Content-Type", "application/json");
       res.writeHead(200);
       res.end("");
@@ -763,25 +798,6 @@ const orders = dirProvider({
   }),
 });
 
-const remaining = orders.map((order) => action.prepare(order));
-const running = new Set();
-
-const executors = [...Array(config.parallel)].map((_, i) =>
-  (async () => {
-    for (let job; (job = remaining.shift()); ) {
-      const promise = job({
-        onWarn() {},
-        onProgress(current, total) {
-          console.log(`${current}/${total}`);
-        },
-      });
-      running.add(promise);
-      await promise;
-      running.delete(promise);
-    }
-  })()
-);
-await Promise.all(executors);
 */
 
 // ./.vscode/extensions.json
@@ -802,11 +818,11 @@ await Promise.all(executors);
 //   }
 // }
 
-
 // http://127.0.0.1:8080/extensions/jpegxl/main.js
 // let c = {};
-// 提供一些 trait
 
+// https://apple.stackexchange.com/q/420494/ # macos arm64 vm
+// https://github.com/orgs/community/discussions/69211#discussioncomment-7941899 # macos arm64 ci free
 // https://registry.npmmirror.com/binary.html?path=electron/v30.0.1/
 // https://registry.npmmirror.com/-/binary/electron/v30.0.1/electron-v30.0.1-linux-x64.zip
 // /home/kkocdko/misc/res/electron-v30.0.1-linux-x64/electron

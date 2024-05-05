@@ -45,7 +45,7 @@ export default {
       },
       execute: (profile, { input, output }) => {
         // 这个函数在后端跑，要求不 block 主线程，只能 async。如果要 block 请自行开 worker
-        const child = spawn("~/misc/apps/jpegxl", [
+        const child = spawn("/home/kkocdko/misc/code/clevert/temp/extensions/jpegxl/jpegxl", [
           "cjpegli",
           input.main[0],
           output.main[0],
