@@ -667,6 +667,7 @@ const inServer = async () => {
 };
 
 const inElectron = async () => {
+  // @ts-ignore
   const { app, protocol, BrowserWindow } = await import("electron");
 
   const createWindow = () => {
@@ -782,6 +783,25 @@ const executors = [...Array(config.parallel)].map((_, i) =>
 );
 await Promise.all(executors);
 */
+
+// ./.vscode/extensions.json
+// {
+//   "recommendations": ["esbenp.prettier-vscode", "runem.lit-plugin"]
+//   // es6-string-html
+// }
+
+// ./.vscode/settings.json
+// {
+//   "editor.tokenColorCustomizations": {
+//     "textMateRules": [
+//       {
+//         "scope": "invalid",
+//         "settings": { "foreground": "#56ddc2" }
+//       }
+//     ]
+//   }
+// }
+
 
 // http://127.0.0.1:8080/extensions/jpegxl/main.js
 // let c = {};
