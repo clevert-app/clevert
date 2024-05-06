@@ -3,7 +3,8 @@ import { fileURLToPath } from "node:url";
 import { readFile, writeFile } from "node:fs/promises";
 import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import { createServer } from "node:http";
-import { join as joinPath } from "node:path";
+import { join as joinPath, isAbsolute } from "node:path";
+import { homedir } from "node:os";
 import { request as requestHttp } from "node:http";
 import { request as requestHttps } from "node:https";
 import { spawn } from "node:child_process";
@@ -72,13 +73,31 @@ const excludeImport = (sourceCode, regexp) => {
 };
 
 /**
- * Get next auto increased int number.
+ * Get next auto increased int number. Used for id generate or others.
  * @returns {number}
  */
 const nextInt = (() => {
   let v = 0;
   return () => ++v;
 })();
+
+/**
+ * Solve path, like path.resolve + support of home dir prefix.
+ * @param {boolean} absolute
+ * @param {...string} parts
+ * @returns {string}
+ */
+const solvePath = (absolute, ...parts) => {
+  if (parts[0].startsWith("~")) {
+    parts[0] = parts[0].slice(1);
+    parts.unshift(homedir());
+  }
+  // we do not use path.resolve directy because we want to control absolute or not
+  if (!isAbsolute(parts[0]) && absolute) {
+    parts.unshift(process.cwd());
+  }
+  return joinPath(...parts); // path.join will convert '\\' to '/' also, like path.resolve
+};
 
 /**
 @typedef {
@@ -147,6 +166,7 @@ const nextInt = (() => {
 @typedef {
   {
     path: string,
+    recursive: boolean,
   }
 } ReadDirRequest
 @typedef {
@@ -443,6 +463,7 @@ const inPage = async () => {
         const entries = /** @type {ConverterEntry[]} */ ([]);
         const readDirRequest = /** @type {ReadDirRequest} */ ({
           path: $inputDir.value,
+          recursive: true,
         });
         const readDirResponse = /** @type {ReadDirResponse} */ (
           await (
@@ -549,9 +570,10 @@ const inServer = async () => {
 
     if (req.url === "/main.js") {
       const buffer = await readFile(fileURLToPath(import.meta.url));
+      const ret = excludeImport(buffer.toString(), /^node:.+$/);
       res.setHeader("Content-Type", "text/javascript; charset=utf-8");
       res.writeHead(200);
-      res.end(excludeImport(buffer.toString(), /^node:.+$/));
+      res.end(ret);
       return;
     }
 
@@ -565,9 +587,12 @@ const inServer = async () => {
     if (req.url === "/read-dir") {
       const request = /** @type {ReadDirRequest} */ (await reqToJson(req));
       const ret = /** @type {ReadDirResponse} */ ([]);
-      for (const v of await readdir(request.path, { withFileTypes: true })) {
+      for (const v of await readdir(request.path, {
+        withFileTypes: true,
+        recursive: request.recursive,
+      })) {
         ret.push({
-          path: joinPath(request.path, v.name),
+          path: v.name,
           type: v.isDirectory() ? "dir" : "file",
         });
       }
@@ -579,9 +604,11 @@ const inServer = async () => {
 
     if (req.url === "/start-action") {
       const request = /** @type {StartActionRequest} */ (await reqToJson(req));
+      const extensionMainJs = /** @type {string} */ (
+        solvePath(true, PATH_EXTENSIONS, request.extensionId, "/main.js")
+      );
       const extension = /** @type {Extension} */ (
-        (await import(PATH_EXTENSIONS + "/" + request.extensionId + "/main.js"))
-          .default
+        (await import(extensionMainJs)).default
       );
       const action = extension.actions.find(
         (action) => action.id === request.actionId
@@ -612,21 +639,27 @@ const inServer = async () => {
       console.log(req.url.split("/"));
       const [, , extensionId, fileName] = req.url.split("/");
       assert(fileName === "main.js");
-      const extensionFilePath =
-        PATH_EXTENSIONS + "/" + extensionId + "/main.js";
-      const buffer = await readFile(extensionFilePath);
+      const extensionMainJs = /** @type {string} */ (
+        solvePath(true, PATH_EXTENSIONS, extensionId, "/main.js")
+      );
+      const buffer = await readFile(extensionMainJs);
+      const ret = excludeImport(buffer.toString(), /^node:.+$/);
       res.setHeader("Content-Type", "text/javascript; charset=utf-8");
       res.writeHead(200);
-      res.end(excludeImport(buffer.toString(), /^node:.+$/));
+      res.end(ret);
       return;
     }
 
     if (req.url === "/list-extensions") {
       const ret = /** @type {ListExtensionsResponse} */ ([]);
       for (const entry of await readdir(PATH_EXTENSIONS)) {
-        const extension = /** @type {Extension} */ (
-          (await import(PATH_EXTENSIONS + "/" + entry + "/main.js")).default
+        const extensionMainJs = /** @type {string} */ (
+          solvePath(true, PATH_EXTENSIONS, entry, "/main.js")
         );
+        const extension = /** @type {Extension} */ (
+          (await import(extensionMainJs)).default
+        );
+        assert(extension.id === entry);
         ret.push({
           id: extension.id,
           name: extension.name,
@@ -648,15 +681,18 @@ const inServer = async () => {
       const request = /** @type {InstallExtensionRequest} */ (
         await reqToJson(req)
       );
-      const extensionMainJsTemp =
-        PATH_CACHE + "/downloading-" + nextInt() + ".js";
-      await download(request.url, extensionMainJsTemp);
-      const extension = /** @type {Extension} */ (
-        (await import(extensionMainJsTemp)).default
+      const extensionTempMainJs = /** @type {string} */ (
+        solvePath(true, PATH_CACHE, "downloading-" + nextInt() + ".js")
       );
-      const extensionDir = PATH_EXTENSIONS + "/" + extension.id;
+      await download(request.url, extensionTempMainJs);
+      const extension = /** @type {Extension} */ (
+        (await import(extensionTempMainJs)).default
+      );
+      const extensionDir = /** @type {string} */ (
+        solvePath(true, PATH_EXTENSIONS, extension.id)
+      );
       await mkdir(extensionDir);
-      await rename(extensionMainJsTemp, extensionDir + "/main.js");
+      await rename(extensionTempMainJs, extensionDir + "/main.js");
       for (const asset of extension.assets) {
         if (asset.platform !== CURRENT_PLATFORM) {
           continue;
