@@ -3,12 +3,23 @@ import { fileURLToPath } from "node:url";
 import { readFile, writeFile } from "node:fs/promises";
 import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import { createServer } from "node:http";
-import { join as joinPath, isAbsolute } from "node:path";
-import { homedir } from "node:os";
 import { request as requestHttp } from "node:http";
 import { request as requestHttps } from "node:https";
+import { join as joinPath, isAbsolute } from "node:path";
+import { homedir } from "node:os";
 import { spawn } from "node:child_process";
-import assert from "node:assert";
+
+/**
+ * Assert the value is true, or throw an error.
+ * @param {boolean} value
+ * @param {string | Error | any} [message]
+ */
+const assert = (value, message) => {
+  // like "node:assert", but cross platform
+  if (!value) {
+    throw new Error(message ?? "assertion failed");
+  }
+};
 
 /**
  * Exclude the static `import` declaration matches `regexp`. Will be `// excluded: import xxx form ...`.
@@ -133,6 +144,20 @@ const solvePath = (absolute, ...parts) => {
 } ActionExecuteController
 @typedef {
   {
+    finished: number,
+    running: number,
+    amount: number,
+  }
+} RunnerProgress The `running` property may be float.
+@typedef {
+  {
+    progress: () => RunnerProgress,
+    stop: () => void,
+    wait: Promise<any>,
+  }
+} Runner
+@typedef {
+  {
     id: string,
     name: string,
     description: string,
@@ -200,6 +225,19 @@ const solvePath = (absolute, ...parts) => {
     entries: any[],
   }
 } StartActionRequest
+@typedef {
+  {
+    runnerId: number,
+  }
+} StartActionResponse
+@typedef {
+  {
+    runnerId: number,
+  }
+} GetRunnerProgressRequest
+@typedef {
+  RunnerProgress
+} GetRunnerProgressResponse
 */
 
 const html = (/** @type {any} */ [s]) => s;
@@ -537,7 +575,7 @@ const inServer = async () => {
   await mkdir(PATH_CACHE, { recursive: true });
 
   const PARALLEL = 2;
-  const running = /** @type {Set<ActionExecuteController>} */ (new Set());
+  const runners = /** @type {Map<number, Runner>} */ (new Map());
 
   const reqToJson = async (req) => {
     return new Promise((resolve) => {
@@ -617,21 +655,68 @@ const inServer = async () => {
         assert(false, "action not found");
         return;
       }
-      const executors = [...Array(PARALLEL)].map((_, i) =>
+      const runnerId = nextInt();
+      const amount = request.entries.length;
+      let finished = 0;
+      const runningControllers = /** @type {Set<ActionExecuteController>} */ (
+        new Set()
+      );
+      const promises = [...Array(PARALLEL)].map((_, i) =>
         (async () => {
           for (let entry; (entry = request.entries.shift()); ) {
-            console.log(entry.input.main);
             const controller = action.execute(request.profile, entry);
-            running.add(controller);
+            runningControllers.add(controller);
             await controller.wait;
-            running.delete(controller);
+            runningControllers.delete(controller);
+            finished += 1;
           }
         })()
       );
-      await Promise.all(executors);
+      runners.set(runnerId, {
+        progress: () => {
+          let running = 0;
+          for (const controller of runningControllers) {
+            running += controller.progress();
+          }
+          return { finished, running, amount };
+        },
+        stop: () => {
+          for (const controller of runningControllers) {
+            controller.stop();
+            runningControllers.delete(controller);
+          }
+        },
+        wait: Promise.all(promises),
+      });
+      const ret = /** @type {StartActionResponse} */ ({ runnerId });
       res.setHeader("Content-Type", "application/json");
       res.writeHead(200);
-      res.end("");
+      res.end(JSON.stringify(ret));
+      return;
+    }
+
+    if (req.url === "/stop-runner") {
+      assert(false, "todo");
+      res.setHeader("Content-Type", "application/json");
+      res.writeHead(200);
+      res.end(JSON.stringify({}));
+      return;
+    }
+
+    if (req.url === "/get-runner-progress") {
+      const request = /** @type {GetRunnerProgressRequest} */ (
+        await reqToJson(req)
+      );
+      const runner = runners.get(request.runnerId);
+      if (runner === undefined) {
+        res.writeHead(404);
+        res.end(JSON.stringify({}));
+        return;
+      }
+      const ret = /** @type {GetRunnerProgressResponse} */ (runner.progress());
+      res.setHeader("Content-Type", "application/json");
+      res.writeHead(200);
+      res.end(JSON.stringify(ret));
       return;
     }
 
