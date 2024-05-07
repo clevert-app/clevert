@@ -64,7 +64,7 @@ export default {
           stop: () => {
             child.kill("SIGTERM");
           },
-          ready: new Promise((resolve, reject) => {
+          wait: new Promise((resolve, reject) => {
             child.on("error", (err) => reject(err));
             child.on("exit", (code) => (code ? reject({ code }) : resolve(0)));
           }),

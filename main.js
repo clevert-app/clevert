@@ -128,7 +128,7 @@ const solvePath = (absolute, ...parts) => {
   {
     progress: () => number,
     stop: () => void,
-    ready: Promise<any>,
+    wait: Promise<any>,
   }
 } ActionExecuteController
 @typedef {
@@ -623,7 +623,7 @@ const inServer = async () => {
             console.log(entry.input.main);
             const controller = action.execute(request.profile, entry);
             running.add(controller);
-            await controller.ready;
+            await controller.wait;
             running.delete(controller);
           }
         })()
