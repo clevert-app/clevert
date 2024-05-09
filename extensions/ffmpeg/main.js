@@ -74,3 +74,4 @@ actions["to-m4a"] = {
 // ffmpeg -hide_banner -vaapi_device /dev/dri/renderD128 -i i.mp4 -vf 'format=nv12,hwupload' -c:v h264_vaapi -profile:v high -qp 24 -compression_level 32 -c:a copy o.h264_vaapi.mp4
 // export const profiles = {};
 // export const profiles = [];
+// https://github.com/BtbN/FFmpeg-Builds/releases
