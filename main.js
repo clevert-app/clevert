@@ -5,8 +5,9 @@ import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { request as requestHttp } from "node:http";
 import { request as requestHttps } from "node:https";
-import { join as joinPath, isAbsolute } from "node:path";
+import { join, isAbsolute } from "node:path";
 import { homedir } from "node:os";
+import { register } from "node:module";
 import { spawn } from "node:child_process";
 
 /**
@@ -107,7 +108,7 @@ const solvePath = (absolute, ...parts) => {
   if (!isAbsolute(parts[0]) && absolute) {
     parts.unshift(process.cwd());
   }
-  return joinPath(...parts); // path.join will convert '\\' to '/' also, like path.resolve
+  return join(...parts); // path.join will convert '\\' to '/' also, like path.resolve
 };
 
 /**
@@ -115,19 +116,13 @@ const solvePath = (absolute, ...parts) => {
   "win-x64" | "linux-x64" | "mac-x64" | "mac-arm64"
 } Platform
 @typedef {
-  "raw" | "zip" | "gzip" | "tar" | "tar-gzip"
-} AssetKind
-@typedef {
   {
     platform: Platform,
-    kind: AssetKind,
-    path: string,
+    kind: "raw" | "zip" | "gzip" | "tar" | "tar-gzip",
     url: string,
+    path: string,
   }
 } Asset
-@typedef {
-  "converter" | "daemon"
-} ActionKind
 @typedef {
   {
     root: HTMLElement,
@@ -161,7 +156,7 @@ const solvePath = (absolute, ...parts) => {
     id: string,
     name: string,
     description: string,
-    kind: ActionKind,
+    kind: "converter" | "daemon",
     ui: (profile: any) => ActionUiController,
     execute: (profile: any, entry: any) => ActionExecuteController,
   }
@@ -219,10 +214,25 @@ const solvePath = (absolute, ...parts) => {
 } InstallExtensionRequest
 @typedef {
   {
+    kind: "num-repeat",
+    begin: number,
+    end: number,
+  }
+} EntriesGenNumRepeat
+@typedef {
+  {
+    kind: "common-dir",
+    inputDir: string,
+    outputDir: string,
+    outputExtension: string,
+  }
+} EntriesGenCommonDir 以后取个好名字
+@typedef {
+  {
     extensionId: string,
     actionId: string,
     profile: any,
-    entries: any[],
+    entriesGen: EntriesGenCommonDir, // todo: rename
   }
 } StartActionRequest
 @typedef {
@@ -497,38 +507,16 @@ const inPage = async () => {
       const $startButton = document.createElement("button");
       $startButton.textContent = "Start";
       $startButton.onclick = async () => {
-        // read input dir
-        const entries = /** @type {ConverterEntry[]} */ ([]);
-        const readDirRequest = /** @type {ReadDirRequest} */ ({
-          path: $inputDir.value,
-          recursive: true,
-        });
-        const readDirResponse = /** @type {ReadDirResponse} */ (
-          await (
-            await fetch("/read-dir", {
-              method: "POST",
-              body: JSON.stringify(readDirRequest),
-            })
-          ).json()
-        );
-        // strip path prefix by $inputDir.value to produce relative path, then produce output path by relative path
-        for (const entry of readDirResponse) {
-          entries.push({
-            input: {
-              main: [entry.path],
-            },
-            output: {
-              main: [
-                $outputDir.value + entry.path.slice($inputDir.value.length),
-              ],
-            },
-          });
-        }
         const startActionRequest = /** @type {StartActionRequest} */ ({
           extensionId: extension.id,
           actionId: action.id,
           profile: ui.profile(),
-          entries: entries,
+          entriesGen: {
+            kind: "common-dir",
+            inputDir: $inputDir.value,
+            outputDir: $outputDir.value,
+            outputExtension: $outputExtension.value,
+          },
         });
         await fetch("/start-action", {
           method: "POST",
@@ -596,6 +584,28 @@ const inServer = async () => {
     await writeFile(path, Buffer.from(ab));
   };
 
+  const genEntries = async (/** @type {EntriesGenCommonDir} */ gen) => {
+    const entries = [];
+    const inputDir = solvePath(false, gen.inputDir);
+    for (const v of await readdir(inputDir, {
+      withFileTypes: true,
+      recursive: true,
+    })) {
+      const a = /** @type {any} */ (v);
+      const parentPath = /** @type {string} */ (a.parentPath ?? a.path); // https://nodejs.org/api/fs.html#class-fsdirent
+      const input = solvePath(false, parentPath, v.name);
+      const relative = input
+        .slice(inputDir.length)
+        .replace(/(?<=\.)[^\\/\.]+$/, gen.outputExtension);
+      const output = solvePath(false, gen.outputDir, relative);
+      entries.push({
+        input: { main: [input] },
+        output: { main: [output] },
+      });
+    }
+    return entries;
+  };
+
   const server = createServer(async (req, res) => {
     // console.log({ url: req.url });
 
@@ -655,15 +665,16 @@ const inServer = async () => {
         assert(false, "action not found");
         return;
       }
+      const entries = await genEntries(request.entriesGen);
       const runnerId = nextInt();
-      const amount = request.entries.length;
+      const amount = entries.length;
       let finished = 0;
       const runningControllers = /** @type {Set<ActionExecuteController>} */ (
         new Set()
       );
       const promises = [...Array(PARALLEL)].map((_, i) =>
         (async () => {
-          for (let entry; (entry = request.entries.shift()); ) {
+          for (let entry; (entry = entries.shift()); ) {
             const controller = action.execute(request.profile, entry);
             runningControllers.add(controller);
             await controller.wait;
