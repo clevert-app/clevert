@@ -10,12 +10,11 @@ const exe = /** @type { { (): string, _v?: string } } */ () => {
   if (!exe._v) exe._v = join(dirname(fileURLToPath(import.meta.url)), "jpegxl");
   return exe._v;
 };
+
 // https://github.com/microsoft/TypeScript/issues/41825
 // https://nodejs.org/api/module.html#customization-hooks
-// import.meta
-// const a = await import("node:path", {});
-// let a: Extension;
-const e = /** @type {import("../../main").Extension} */ ({});
+/** @import { Extension } from "../../main.js" */
+const e = /** @type {Extension} */ ({});
 
 // 设计成导出一整个的形式，单个单个导出没法做 type check
 export default {
