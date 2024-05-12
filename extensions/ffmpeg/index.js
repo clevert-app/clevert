@@ -3,7 +3,7 @@
 //  只是个备份，
 
 import { spawn } from "node:child_process";
-import { Order } from "./main";
+import { Order } from ".";
 import assert from "node:assert";
 
 export const dependencies = [];

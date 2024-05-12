@@ -367,7 +367,7 @@ const page = () => html`
     </style>
   </head>
   <body>
-    <script type="module" src="/main.js"></script>
+    <script type="module" src="/index.js"></script>
   </body>
 `;
 
@@ -473,7 +473,7 @@ const inPage = async () => {
     /** @type {string} */ actionId
   ) => {
     const extension = /** @type {Extension} */ (
-      (await import("/extension/" + extensionId + "/main.js")).default
+      (await import("/extension/" + extensionId + "/index.js")).default
     );
     const action = extension.actions.find((action) => action.id === actionId);
     if (action === undefined) {
@@ -616,7 +616,7 @@ const inServer = async () => {
       return;
     }
 
-    if (req.url === "/main.js") {
+    if (req.url === "/index.js") {
       const buffer = await readFile(fileURLToPath(import.meta.url));
       const ret = excludeImport(buffer.toString(), /^node:.+$/);
       res.setHeader("Content-Type", "text/javascript; charset=utf-8");
@@ -653,7 +653,7 @@ const inServer = async () => {
     if (req.url === "/start-action") {
       const request = /** @type {StartActionRequest} */ (await reqToJson(req));
       const extensionMainJs = /** @type {string} */ (
-        solvePath(true, PATH_EXTENSIONS, request.extensionId, "/main.js")
+        solvePath(true, PATH_EXTENSIONS, request.extensionId, "/index.js")
       );
       const extension = /** @type {Extension} */ (
         (await import(extensionMainJs)).default
@@ -734,9 +734,9 @@ const inServer = async () => {
     if (req.url?.startsWith("/extension/")) {
       console.log(req.url.split("/"));
       const [, , extensionId, fileName] = req.url.split("/");
-      assert(fileName === "main.js");
+      assert(fileName === "index.js");
       const extensionMainJs = /** @type {string} */ (
-        solvePath(true, PATH_EXTENSIONS, extensionId, "/main.js")
+        solvePath(true, PATH_EXTENSIONS, extensionId, "/index.js")
       );
       const buffer = await readFile(extensionMainJs);
       const ret = excludeImport(buffer.toString(), /^node:.+$/);
@@ -750,7 +750,7 @@ const inServer = async () => {
       const ret = /** @type {ListExtensionsResponse} */ ([]);
       for (const entry of await readdir(PATH_EXTENSIONS)) {
         const extensionMainJs = /** @type {string} */ (
-          solvePath(true, PATH_EXTENSIONS, entry, "/main.js")
+          solvePath(true, PATH_EXTENSIONS, entry, "/index.js")
         );
         const extension = /** @type {Extension} */ (
           (await import(extensionMainJs)).default
@@ -788,7 +788,7 @@ const inServer = async () => {
         solvePath(true, PATH_EXTENSIONS, extension.id)
       );
       await mkdir(extensionDir);
-      await rename(extensionTempMainJs, extensionDir + "/main.js");
+      await rename(extensionTempMainJs, extensionDir + "/index.js");
       for (const asset of extension.assets) {
         if (asset.platform !== CURRENT_PLATFORM) {
           continue;
@@ -862,7 +862,7 @@ const inElectron = async () => {
         const type = "text/html; charset=utf-8";
         return new Response(new Blob([page()], { type }));
       }
-      if (req.url === "resource:///main.js") {
+      if (req.url === "resource:///index.js") {
         const buffer = await readFile(fileURLToPath(import.meta.url));
         const type = "text/javascript; charset=utf-8";
         return new Response(new Blob([buffer], { type }));
@@ -950,7 +950,7 @@ const orders = dirProvider({
 //   }
 // }
 
-// http://127.0.0.1:8080/extensions/jpegxl/main.js
+// http://127.0.0.1:8080/extensions/jpegxl/index.js
 // let c = {};
 
 // https://apple.stackexchange.com/q/420494/ # macos arm64 vm

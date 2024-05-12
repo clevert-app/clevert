@@ -1,6 +1,5 @@
 // @ts-check
-/// <reference path="../../main.js" />
-// import type { Extension, AssetKind, ActionKind } from "../../main.js";
+/** @import { Extension } from "../../index.js" */
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -11,13 +10,12 @@ const exe = /** @type { { (): string, _v?: string } } */ () => {
   return exe._v;
 };
 
+// https://effectivetypescript.com/2023/09/27/closure-compiler/
 // https://github.com/microsoft/TypeScript/issues/41825
 // https://nodejs.org/api/module.html#customization-hooks
-/** @import { Extension } from "../../main.js" */
-const e = /** @type {Extension} */ ({});
 
 // 设计成导出一整个的形式，单个单个导出没法做 type check
-export default {
+export default /** @type {Extension} */ ({
   id: "jpegxl", // 保证唯一，让商店去保证
   version: "0.1.0", // 必须遵循 https://semver.org
   name: "jpegxl name", // 以后可以做 i18n
@@ -98,4 +96,4 @@ export default {
       quality: 75,
     },
   ],
-};
+});
