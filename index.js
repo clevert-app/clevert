@@ -232,7 +232,7 @@ const solvePath = (absolute, ...parts) => {
     extensionId: string,
     actionId: string,
     profile: any,
-    entriesGen: EntriesGenCommonDir, // todo: rename
+    entriesGen: EntriesGenNumRepeat | EntriesGenCommonDir,
   }
 } StartActionRequest
 @typedef {
@@ -584,26 +584,30 @@ const inServer = async () => {
     await writeFile(path, Buffer.from(ab));
   };
 
-  const genEntries = async (/** @type {EntriesGenCommonDir} */ gen) => {
-    const entries = [];
-    const inputDir = solvePath(false, gen.inputDir);
-    for (const v of await readdir(inputDir, {
-      withFileTypes: true,
-      recursive: true,
-    })) {
-      const a = /** @type {any} */ (v);
-      const parentPath = /** @type {string} */ (a.parentPath ?? a.path); // https://nodejs.org/api/fs.html#class-fsdirent
-      const input = solvePath(false, parentPath, v.name);
-      const relative = input
-        .slice(inputDir.length)
-        .replace(/(?<=\.)[^\\/\.]+$/, gen.outputExtension);
-      const output = solvePath(false, gen.outputDir, relative);
-      entries.push({
-        input: { main: [input] },
-        output: { main: [output] },
-      });
+  const genEntries = async (gen) => {
+    if (gen.kind === "common-dir") {
+      const opts = /** @type {EntriesGenCommonDir} */ (gen);
+      const entries = [];
+      const inputDir = solvePath(false, opts.inputDir);
+      for (const v of await readdir(inputDir, {
+        withFileTypes: true,
+        recursive: true,
+      })) {
+        const a = /** @type {any} */ (v);
+        const parentPath = /** @type {string} */ (a.parentPath ?? a.path); // https://nodejs.org/api/fs.html#class-fsdirent
+        const input = solvePath(false, parentPath, v.name);
+        const relative = input
+          .slice(inputDir.length)
+          .replace(/(?<=\.)[^\\/\.]+$/, opts.outputExtension);
+        const output = solvePath(false, opts.outputDir, relative);
+        entries.push({
+          input: { main: [input] },
+          output: { main: [output] },
+        });
+      }
+      return /** @type {any} */ (entries);
     }
-    return entries;
+    assert(false, "todo");
   };
 
   const server = createServer(async (req, res) => {
