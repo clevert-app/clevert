@@ -129,7 +129,7 @@ const solvePath = (absolute, ...parts) => {
     profile: () => any,
     preview: (input: any) => void,
   }
-} ActionUiController
+} ActionUiController 之所以叫 controller 是因为类似 https://developer.mozilla.org/en-US/docs/Web/API/AbortController
 @typedef {
   {
     progress: () => number,
@@ -186,12 +186,6 @@ const solvePath = (absolute, ...parts) => {
 @typedef {
   {
     path: string,
-    recursive: boolean,
-  }
-} ReadDirRequest
-@typedef {
-  {
-    path: string,
     type: "file" | "dir",
   }[]
 } ReadDirResponse
@@ -214,25 +208,35 @@ const solvePath = (absolute, ...parts) => {
 } InstallExtensionRequest
 @typedef {
   {
-    kind: "num-repeat",
+    kind: "number-sequence",
     begin: number,
     end: number,
   }
-} EntriesGenNumRepeat
+} EntriesNumberSequence 以后可能有用
 @typedef {
   {
-    kind: "common-dir",
+    kind: "common-files",
+    entries?: {
+      inputFile: string,
+      outputFile: string,
+    }[],
     inputDir: string,
     outputDir: string,
     outputExtension: string,
   }
-} EntriesGenCommonDir 以后取个好名字
+} EntriesCommonFiles 最常用的，包含扫描文件夹等功能
+@typedef {
+  {
+    kind: "plain",
+    entries: any[],
+  }
+} EntriesPlain 直接就是 entries 本身，也许可以适配 yt-dlp 这种凭空出个文件的场景
 @typedef {
   {
     extensionId: string,
     actionId: string,
     profile: any,
-    entriesGen: EntriesGenNumRepeat | EntriesGenCommonDir,
+    entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence,
   }
 } StartActionRequest
 @typedef {
@@ -308,7 +312,7 @@ const page = () => html`
         background: var(--bg);
         overflow: hidden;
       }
-      extensions_list_,
+      main_list_,
       actions_list_ {
         display: block;
         width: 100%;
@@ -321,7 +325,7 @@ const page = () => html`
         top: -100%;
         left: 100%;
       }
-      extensions_list_[second_],
+      main_list_[second_],
       actions_list_[second_] {
         transform: translateX(-100%);
       }
@@ -358,11 +362,11 @@ const page = () => html`
       action_controls_ {
         display: block;
       }
-      input_output_config_ {
+      entries_common_files_,
+      entries_common_files_ > div {
         display: grid;
         gap: 8px;
-        margin-bottom: 8px;
-        border: 1px solid var(--border);
+        /* border: 1px solid var(--border); */
       }
     </style>
   </head>
@@ -372,18 +376,15 @@ const page = () => html`
 `;
 
 const inPage = async () => {
+  /** @type { { <K extends keyof HTMLElementTagNameMap>(parent: HTMLElement, tagName: K): HTMLElementTagNameMap[K]; (parent: HTMLElement, tagName: string): HTMLElement; } } */
+  const appendNew = (parent, tagName) =>
+    parent.appendChild(document.createElement(tagName));
+
   // Extension Market
-  const $extensionsMarket = /** @type {HTMLElement} */ (
-    document.body.appendChild(document.createElement("extensions_market_"))
-  );
-  $extensionsMarket.appendChild(document.createElement("label")).textContent =
-    "Install URL: ";
-  const $extensionInstallUrl = /** @type {HTMLInputElement} */ (
-    $extensionsMarket.appendChild(document.createElement("input"))
-  );
-  const $extensionInstallButton = /** @type {HTMLElement} */ (
-    $extensionsMarket.appendChild(document.createElement("button"))
-  );
+  const $extensionsMarket = appendNew(document.body, "extensions_market_");
+  appendNew($extensionsMarket, "label").textContent = "Install URL: ";
+  const $extensionInstallUrl = appendNew($extensionsMarket, "input");
+  const $extensionInstallButton = appendNew($extensionsMarket, "button");
   $extensionInstallButton.textContent = "Install";
   $extensionInstallButton.onclick = async () => {
     const request = /** @type {InstallExtensionRequest} */ ({
@@ -393,7 +394,7 @@ const inPage = async () => {
       method: "POST",
       body: JSON.stringify(request),
     });
-    await refreshExtensionsList();
+    await refreshMainList();
   };
 
   // Current Action
@@ -417,40 +418,52 @@ const inPage = async () => {
   const $sideBar = /** @type {HTMLElement} */ (
     document.body.appendChild(document.createElement("side_bar_"))
   );
-  const $extensionsList = /** @type {HTMLElement} */ (
-    $sideBar.appendChild(document.createElement("extensions_list_"))
+  const $mainList = /** @type {HTMLElement} */ (
+    $sideBar.appendChild(document.createElement("main_list_"))
   );
   const $foldSideBarButton = /** @type {HTMLElement} */ (
-    $extensionsList.appendChild(document.createElement("side_bar_item_"))
+    $mainList.appendChild(document.createElement("side_bar_item_"))
   );
   $foldSideBarButton.textContent = "Fold";
   $foldSideBarButton.onclick = async () => {
     $sideBar.setAttribute("fold_", "");
   };
+  const $toExtensionMarketButton = /** @type {HTMLElement} */ (
+    $mainList.appendChild(document.createElement("side_bar_item_"))
+  );
+  $toExtensionMarketButton.textContent = "Extension Market";
+  $toExtensionMarketButton.onclick = async () => {
+    $extensionsMarket.removeAttribute("page_off_");
+    $currentAction.setAttribute("page_off_", "");
+  };
   const $actionsList = /** @type {HTMLElement} */ (
     $sideBar.appendChild(document.createElement("actions_list_"))
   );
-  const $backToExtensionsListButton = /** @type {HTMLElement} */ (
+  const $backToMainListButton = /** @type {HTMLElement} */ (
     $actionsList.appendChild(document.createElement("side_bar_item_"))
   );
-  $backToExtensionsListButton.textContent = "Back";
-  $backToExtensionsListButton.onclick = async () => {
-    $extensionsList.removeAttribute("second_");
+  $backToMainListButton.textContent = "Back";
+  $backToMainListButton.onclick = async () => {
+    $mainList.removeAttribute("second_");
     $actionsList.removeAttribute("second_");
   };
 
-  const refreshExtensionsList = async () => {
-    const extensionsList = /** @type {ListExtensionsResponse} */ (
+  const refreshMainList = async () => {
+    const extensions = /** @type {ListExtensionsResponse} */ (
       await (await fetch("/list-extensions")).json()
     );
-    $extensionsList.innerHTML = "";
-    $extensionsList.appendChild($foldSideBarButton);
-    for (const extension of extensionsList) {
+    $mainList.innerHTML = "";
+    $mainList.appendChild($foldSideBarButton);
+    $mainList.appendChild(document.createElement("hr"));
+    $mainList.appendChild($toExtensionMarketButton);
+    $mainList.appendChild(document.createElement("hr"));
+    for (const extension of extensions) {
       const $extension = document.createElement("side_bar_item_");
       $extension.textContent = extension.id;
       $extension.onclick = async () => {
         $actionsList.innerHTML = "";
-        $actionsList.appendChild($backToExtensionsListButton);
+        $actionsList.appendChild($backToMainListButton);
+        $actionsList.appendChild(document.createElement("hr"));
         for (const action of extension.actions) {
           const $action = document.createElement("side_bar_item_");
           $action.textContent = action.id;
@@ -461,10 +474,10 @@ const inPage = async () => {
           };
           $actionsList.appendChild($action);
         }
-        $extensionsList.setAttribute("second_", "");
+        $mainList.setAttribute("second_", "");
         $actionsList.setAttribute("second_", "");
       };
-      $extensionsList.appendChild($extension);
+      $mainList.appendChild($extension);
     }
   };
 
@@ -484,35 +497,68 @@ const inPage = async () => {
     $currentAction.setAttribute("kind_", action.kind);
 
     if (action.kind === "converter") {
-      const $inputOutoutConfig = document.createElement("input_output_config_");
-      const $inputDir = document.createElement("input");
+      // 允许使用 dir, 单个文件列表等。这里提供一个切换？
+      // 适配一种场景，就是 yt-dlp 这样凭空出个文件
+      const $entriesCommonFiles = $currentAction.appendChild(
+        document.createElement("entries_common_files_")
+      );
+      const $select = $entriesCommonFiles.appendChild(
+        document.createElement("select")
+      );
+      const $optDir = $select.appendChild(document.createElement("option"));
+      $optDir.textContent = "Dir mode";
+      $optDir.value = "dir";
+      const $optFiles = $select.appendChild(document.createElement("option"));
+      $optFiles.textContent = "Files mode";
+      $optFiles.value = "files";
+      // ---
+      const $optDirPanel = $entriesCommonFiles.appendChild(
+        document.createElement("div")
+      );
+      const $inputDir = $optDirPanel.appendChild(
+        document.createElement("input")
+      );
       $inputDir.placeholder = "Input Dir";
       $inputDir.value = "/home/kkocdko/misc/code/clevert/temp/converter-test/i"; // does not support "~/adbf" ?
-      const $outputDir = document.createElement("input");
+      const $outputDir = $optDirPanel.appendChild(
+        document.createElement("input")
+      );
       $outputDir.placeholder = "Output Dir";
       $outputDir.value =
         "/home/kkocdko/misc/code/clevert/temp/converter-test/o";
-      const $outputExtension = document.createElement("input");
+      const $outputExtension = $optDirPanel.appendChild(
+        document.createElement("input")
+      );
       $outputExtension.placeholder = "Output Extension";
       $outputExtension.value = "jpeg";
-      $inputOutoutConfig.appendChild($inputDir);
-      $inputOutoutConfig.appendChild($outputDir);
-      $inputOutoutConfig.appendChild($outputExtension);
-      $currentAction.appendChild($inputOutoutConfig);
+      // ---
+      const $optFilesPanel = $entriesCommonFiles.appendChild(
+        document.createElement("div")
+      );
+      $select.onchange = () => {
+        if ($select.value === "dir") {
+        } else if ($select.value === "files") {
+        } else {
+        }
+      };
 
       const ui = action.ui({}); // todo: profile
       $currentAction.appendChild(ui.root);
 
-      const $actionControls = document.createElement("action_controls_");
-      const $startButton = document.createElement("button");
+      const $actionControls = $currentAction.appendChild(
+        document.createElement("action_controls_")
+      );
+      const $startButton = $actionControls.appendChild(
+        document.createElement("button")
+      );
       $startButton.textContent = "Start";
       $startButton.onclick = async () => {
         const startActionRequest = /** @type {StartActionRequest} */ ({
           extensionId: extension.id,
           actionId: action.id,
           profile: ui.profile(),
-          entriesGen: {
-            kind: "common-dir",
+          entries: {
+            kind: "common-files",
             inputDir: $inputDir.value,
             outputDir: $outputDir.value,
             outputExtension: $outputExtension.value,
@@ -523,8 +569,6 @@ const inPage = async () => {
           body: JSON.stringify(startActionRequest),
         });
       };
-      $actionControls.appendChild($startButton);
-      $currentAction.appendChild($actionControls);
       return;
     }
 
@@ -536,7 +580,7 @@ const inPage = async () => {
 
   {
     // main
-    await refreshExtensionsList();
+    await refreshMainList();
     $extensionsMarket.removeAttribute("page_off_");
     $currentAction.setAttribute("page_off_", "");
   }
@@ -584,9 +628,13 @@ const inServer = async () => {
     await writeFile(path, Buffer.from(ab));
   };
 
-  const genEntries = async (gen) => {
-    if (gen.kind === "common-dir") {
-      const opts = /** @type {EntriesGenCommonDir} */ (gen);
+  const genEntries = async (
+    /** @type {StartActionRequest["entries"]} */ opts
+  ) => {
+    if (opts.kind === "common-files") {
+      if (opts.entries) {
+        assert(false, "todo");
+      }
       const entries = [];
       const inputDir = solvePath(false, opts.inputDir);
       for (const v of await readdir(inputDir, {
@@ -636,24 +684,6 @@ const inServer = async () => {
       return;
     }
 
-    if (req.url === "/read-dir") {
-      const request = /** @type {ReadDirRequest} */ (await reqToJson(req));
-      const ret = /** @type {ReadDirResponse} */ ([]);
-      for (const v of await readdir(request.path, {
-        withFileTypes: true,
-        recursive: request.recursive,
-      })) {
-        ret.push({
-          path: v.name,
-          type: v.isDirectory() ? "dir" : "file",
-        });
-      }
-      res.setHeader("Content-Type", "application/json");
-      res.writeHead(200);
-      res.end(JSON.stringify(ret));
-      return;
-    }
-
     if (req.url === "/start-action") {
       const request = /** @type {StartActionRequest} */ (await reqToJson(req));
       const extensionMainJs = /** @type {string} */ (
@@ -669,7 +699,7 @@ const inServer = async () => {
         assert(false, "action not found");
         return;
       }
-      const entries = await genEntries(request.entriesGen);
+      const entries = await genEntries(request.entries);
       const runnerId = nextInt();
       const amount = entries.length;
       let finished = 0;
@@ -957,6 +987,7 @@ const orders = dirProvider({
 // http://127.0.0.1:8080/extensions/jpegxl/index.js
 // let c = {};
 
+// https://www.typescriptlang.org/docs/handbook/jsdoc-supported-types.html
 // https://apple.stackexchange.com/q/420494/ # macos arm64 vm
 // https://github.com/orgs/community/discussions/69211#discussioncomment-7941899 # macos arm64 ci free
 // https://registry.npmmirror.com/binary.html?path=electron/v30.0.1/

@@ -88,12 +88,16 @@ export default /** @type {Extension} */ ({
     },
   ],
   profiles: [
-    // 一些预设的 profile
+    // 一些预设的 profile，弱类型
     {
       name: "cjpegli default profile name",
       description: "cjpegli default profile description",
       action: "cjpegli",
       quality: 75,
+      // 对 entriesOpts 给出建议
+      entriesOpts: {
+        outputExtension: "jpeg",
+      },
     },
   ],
 });
