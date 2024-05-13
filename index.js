@@ -376,15 +376,18 @@ const page = () => html`
 `;
 
 const inPage = async () => {
-  /** @type { { <K extends keyof HTMLElementTagNameMap>(parent: HTMLElement, tagName: K): HTMLElementTagNameMap[K]; (parent: HTMLElement, tagName: string): HTMLElement; } } */
-  const appendNew = (parent, tagName) =>
-    parent.appendChild(document.createElement(tagName));
-
   // Extension Market
-  const $extensionsMarket = appendNew(document.body, "extensions_market_");
-  appendNew($extensionsMarket, "label").textContent = "Install URL: ";
-  const $extensionInstallUrl = appendNew($extensionsMarket, "input");
-  const $extensionInstallButton = appendNew($extensionsMarket, "button");
+  const $extensionsMarket = document.body.appendChild(
+    document.createElement("extensions_market_")
+  );
+  $extensionsMarket.appendChild(document.createElement("label")).textContent =
+    "Install URL: ";
+  const $extensionInstallUrl = $extensionsMarket.appendChild(
+    document.createElement("input")
+  );
+  const $extensionInstallButton = $extensionsMarket.appendChild(
+    document.createElement("button")
+  );
   $extensionInstallButton.textContent = "Install";
   $extensionInstallButton.onclick = async () => {
     const request = /** @type {InstallExtensionRequest} */ ({
@@ -398,16 +401,14 @@ const inPage = async () => {
   };
 
   // Current Action
-  const $currentAction = /** @type {HTMLElement} */ (
-    document.body.appendChild(document.createElement("current_action_"))
+  const $currentAction = document.body.appendChild(
+    document.createElement("current_action_")
   );
 
   // Top Bar
-  const $topBar = /** @type {HTMLElement} */ (
-    document.body.appendChild(document.createElement("top_bar_"))
-  );
-  const $unfoldSideBarButton = /** @type {HTMLElement} */ (
-    $topBar.appendChild(document.createElement("button"))
+  const $topBar = document.body.appendChild(document.createElement("top_bar_"));
+  const $unfoldSideBarButton = $topBar.appendChild(
+    document.createElement("button")
   );
   $unfoldSideBarButton.textContent = "Unfold";
   $unfoldSideBarButton.onclick = async () => {
@@ -415,32 +416,30 @@ const inPage = async () => {
   };
 
   // Side Bar
-  const $sideBar = /** @type {HTMLElement} */ (
-    document.body.appendChild(document.createElement("side_bar_"))
+  const $sideBar = document.body.appendChild(
+    document.createElement("side_bar_")
   );
-  const $mainList = /** @type {HTMLElement} */ (
-    $sideBar.appendChild(document.createElement("main_list_"))
-  );
-  const $foldSideBarButton = /** @type {HTMLElement} */ (
-    $mainList.appendChild(document.createElement("side_bar_item_"))
+  const $mainList = $sideBar.appendChild(document.createElement("main_list_"));
+  const $foldSideBarButton = $mainList.appendChild(
+    document.createElement("side_bar_item_")
   );
   $foldSideBarButton.textContent = "Fold";
   $foldSideBarButton.onclick = async () => {
     $sideBar.setAttribute("fold_", "");
   };
-  const $toExtensionMarketButton = /** @type {HTMLElement} */ (
-    $mainList.appendChild(document.createElement("side_bar_item_"))
+  const $toExtensionMarketButton = $mainList.appendChild(
+    document.createElement("side_bar_item_")
   );
   $toExtensionMarketButton.textContent = "Extension Market";
   $toExtensionMarketButton.onclick = async () => {
     $extensionsMarket.removeAttribute("page_off_");
     $currentAction.setAttribute("page_off_", "");
   };
-  const $actionsList = /** @type {HTMLElement} */ (
-    $sideBar.appendChild(document.createElement("actions_list_"))
+  const $actionsList = $sideBar.appendChild(
+    document.createElement("actions_list_")
   );
-  const $backToMainListButton = /** @type {HTMLElement} */ (
-    $actionsList.appendChild(document.createElement("side_bar_item_"))
+  const $backToMainListButton = $actionsList.appendChild(
+    document.createElement("side_bar_item_")
   );
   $backToMainListButton.textContent = "Back";
   $backToMainListButton.onclick = async () => {
@@ -481,10 +480,11 @@ const inPage = async () => {
     }
   };
 
-  const refreshCurrentAction = async (
-    /** @type {string} */ extensionId,
-    /** @type {string} */ actionId
-  ) => {
+  /**
+   * @param {string} extensionId
+   * @param {string} actionId
+   */
+  const refreshCurrentAction = async (extensionId, actionId) => {
     const extension = /** @type {Extension} */ (
       (await import("/extension/" + extensionId + "/index.js")).default
     );
