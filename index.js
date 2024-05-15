@@ -114,7 +114,7 @@ const solvePath = (absolute, ...parts) => {
 /**
 @typedef {
   "win-x64" | "linux-x64" | "mac-x64" | "mac-arm64"
-} Platform
+} Platform "win-arm64" "linux-arm64"
 @typedef {
   {
     platform: Platform,
@@ -156,7 +156,7 @@ const solvePath = (absolute, ...parts) => {
     id: string,
     name: string,
     description: string,
-    kind: "converter" | "daemon",
+    kind: StartActionRequest["entries"]["kind"],
     ui: (profile: any) => ActionUiController,
     execute: (profile: any, entry: any) => ActionExecuteController,
   }
@@ -263,6 +263,7 @@ const page = () => html`
     <meta name="viewport" content="width=device-width" />
     <meta name="color-scheme" content="light dark" />
     <title>clevert</title>
+    <!-- 虽然缩进比较多，但是 css 没啥问题 -->
     <style>
       * {
         box-sizing: border-box;
@@ -368,6 +369,9 @@ const page = () => html`
         gap: 8px;
         /* border: 1px solid var(--border); */
       }
+      entries_common_files_ {
+        margin-bottom: 8px;
+      }
     </style>
   </head>
   <body>
@@ -457,26 +461,28 @@ const inPage = async () => {
     $mainList.appendChild($toExtensionMarketButton);
     $mainList.appendChild(document.createElement("hr"));
     for (const extension of extensions) {
-      const $extension = document.createElement("side_bar_item_");
+      const $extension = $mainList.appendChild(
+        document.createElement("side_bar_item_")
+      );
       $extension.textContent = extension.id;
       $extension.onclick = async () => {
         $actionsList.innerHTML = "";
         $actionsList.appendChild($backToMainListButton);
         $actionsList.appendChild(document.createElement("hr"));
         for (const action of extension.actions) {
-          const $action = document.createElement("side_bar_item_");
+          const $action = $actionsList.appendChild(
+            document.createElement("side_bar_item_")
+          );
           $action.textContent = action.id;
           $action.onclick = async () => {
             await refreshCurrentAction(extension.id, action.id);
             $extensionsMarket.setAttribute("page_off_", "");
             $currentAction.removeAttribute("page_off_");
           };
-          $actionsList.appendChild($action);
         }
         $mainList.setAttribute("second_", "");
         $actionsList.setAttribute("second_", "");
       };
-      $mainList.appendChild($extension);
     }
   };
 
@@ -496,7 +502,7 @@ const inPage = async () => {
     $currentAction.innerHTML = "";
     $currentAction.setAttribute("kind_", action.kind);
 
-    if (action.kind === "converter") {
+    if (action.kind === "common-files") {
       // 允许使用 dir, 单个文件列表等。这里提供一个切换？
       // 适配一种场景，就是 yt-dlp 这样凭空出个文件
       const $entriesCommonFiles = $currentAction.appendChild(
@@ -530,17 +536,17 @@ const inPage = async () => {
         document.createElement("input")
       );
       $outputExtension.placeholder = "Output Extension";
-      $outputExtension.value = "jpeg";
+      // $outputExtension.value = "jpeg";
       // ---
-      const $optFilesPanel = $entriesCommonFiles.appendChild(
-        document.createElement("div")
-      );
-      $select.onchange = () => {
-        if ($select.value === "dir") {
-        } else if ($select.value === "files") {
-        } else {
-        }
-      };
+      // const $optFilesPanel = $entriesCommonFiles.appendChild(
+      //   document.createElement("div")
+      // );
+      // $select.onchange = () => {
+      //   if ($select.value === "dir") {
+      //   } else if ($select.value === "files") {
+      //   } else {
+      //   }
+      // };
 
       const ui = action.ui({}); // todo: profile
       $currentAction.appendChild(ui.root);
@@ -548,6 +554,21 @@ const inPage = async () => {
       const $actionControls = $currentAction.appendChild(
         document.createElement("action_controls_")
       );
+      const $runnerProgress = $actionControls.appendChild(
+        document.createElement("pre")
+      );
+      const refreshRunnerProgress = async (/** @type {number} */ runnerId) => {
+        const request = /** @type {GetRunnerProgressRequest} */ ({ runnerId });
+        const response = /** @type {GetRunnerProgressResponse} */ (
+          await (
+            await fetch("/get-runner-progress", {
+              method: "POST",
+              body: JSON.stringify(request),
+            })
+          ).json()
+        );
+        $runnerProgress.textContent = JSON.stringify(response);
+      };
       const $startButton = $actionControls.appendChild(
         document.createElement("button")
       );
@@ -564,10 +585,17 @@ const inPage = async () => {
             outputExtension: $outputExtension.value,
           },
         });
-        await fetch("/start-action", {
-          method: "POST",
-          body: JSON.stringify(startActionRequest),
-        });
+        const startActionResponse = /** @type {StartActionResponse} */ (
+          await (
+            await fetch("/start-action", {
+              method: "POST",
+              body: JSON.stringify(startActionRequest),
+            })
+          ).json()
+        );
+        setInterval(async () => {
+          refreshRunnerProgress(startActionResponse.runnerId);
+        }, 1000);
       };
       return;
     }
