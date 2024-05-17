@@ -7,7 +7,7 @@ import { request as requestHttp } from "node:http";
 import { request as requestHttps } from "node:https";
 import { join, isAbsolute } from "node:path";
 import { homedir } from "node:os";
-import { register } from "node:module";
+import module from "node:module";
 import { spawn } from "node:child_process";
 
 /**
@@ -23,7 +23,9 @@ const assert = (value, message) => {
 };
 
 /**
- * Exclude the static `import` declaration matches `regexp`. Will be `// excluded: import xxx form ...`.
+ * Exclude the static `import` declaration matches `regexp`.
+ *
+ * Will be `// excluded: import xxx form ...`.
  * @param {string} sourceCode
  * @param {RegExp} regexp
  * @returns {string}
@@ -125,7 +127,9 @@ const solvePath = (absolute, ...parts) => {
 } Asset
 @typedef {
   {
-    root: HTMLElement,
+    entriesRoot?: HTMLElement,
+    entries?: () => any,
+    profileRoot: HTMLElement,
     profile: () => any,
     preview: (input: any) => void,
   }
@@ -198,7 +202,14 @@ const solvePath = (absolute, ...parts) => {
       id: string,
       name: string,
       description: string,
-    }[]
+    }[],
+    profiles: {
+      id: string,
+      name: string,
+      description: string,
+      actionId: string,
+      extensionId: string,
+    }[],
   }[]
 } ListExtensionsResponse
 @typedef {
@@ -234,6 +245,7 @@ const solvePath = (absolute, ...parts) => {
 @typedef {
   {
     extensionId: string,
+    extensionVersion: string,
     actionId: string,
     profile: any,
     entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence,
@@ -499,6 +511,13 @@ const inPage = async () => {
       alert("action === undefined");
       return;
     }
+    const profile = extension.profiles.find(
+      (profile) => profile.actionId === action.id
+    );
+    if (profile === undefined) {
+      alert("profile === undefined");
+      return;
+    }
     $currentAction.innerHTML = "";
     $currentAction.setAttribute("kind_", action.kind);
 
@@ -532,11 +551,37 @@ const inPage = async () => {
       $outputDir.placeholder = "Output Dir";
       $outputDir.value =
         "/home/kkocdko/misc/code/clevert/temp/converter-test/o";
-      const $outputExtension = $optDirPanel.appendChild(
-        document.createElement("input")
-      );
-      $outputExtension.placeholder = "Output Extension";
-      // $outputExtension.value = "jpeg";
+      let $outputExtension;
+      if (profile?.entries?.outputExtensionOptions) {
+        const options = profile.entries.outputExtensionOptions;
+        $outputExtension = $optDirPanel.appendChild(
+          document.createElement("select")
+        );
+        for (const option of options) {
+          const $option = $outputExtension.appendChild(
+            document.createElement("option")
+          );
+          $option.textContent = option;
+          if (profile?.entries?.outputExtension) {
+            if (profile?.entries?.outputExtension === option) {
+              $option.selected = true;
+            }
+          } else {
+            if (options[0] === option) {
+              $option.selected = true;
+            }
+          }
+        }
+      } else {
+        $outputExtension = $optDirPanel.appendChild(
+          document.createElement("input")
+        );
+        $outputExtension.placeholder = "Output Extension";
+        if (profile?.entries?.outputExtension) {
+          $outputExtension.value = profile?.entries?.outputExtension;
+        }
+      }
+
       // ---
       // const $optFilesPanel = $entriesCommonFiles.appendChild(
       //   document.createElement("div")
@@ -548,8 +593,11 @@ const inPage = async () => {
       //   }
       // };
 
-      const ui = action.ui({}); // todo: profile
-      $currentAction.appendChild(ui.root);
+      const ui = action.ui(profile);
+      if (ui.entriesRoot) {
+        $currentAction.appendChild(ui.entriesRoot);
+      }
+      $currentAction.appendChild(ui.profileRoot);
 
       const $actionControls = $currentAction.appendChild(
         document.createElement("action_controls_")
@@ -708,17 +756,17 @@ const inServer = async () => {
     if (req.url === "/favicon.ico") {
       res.setHeader("Content-Type", "image/png");
       res.writeHead(200);
-      res.end("");
+      res.end();
       return;
     }
 
     if (req.url === "/start-action") {
       const request = /** @type {StartActionRequest} */ (await reqToJson(req));
-      const extensionMainJs = /** @type {string} */ (
+      const extensionIndexJs = /** @type {string} */ (
         solvePath(true, PATH_EXTENSIONS, request.extensionId, "/index.js")
       );
       const extension = /** @type {Extension} */ (
-        (await import(extensionMainJs)).default
+        (await import(extensionIndexJs)).default
       );
       const action = extension.actions.find(
         (action) => action.id === request.actionId
@@ -811,11 +859,11 @@ const inServer = async () => {
     if (req.url === "/list-extensions") {
       const ret = /** @type {ListExtensionsResponse} */ ([]);
       for (const entry of await readdir(PATH_EXTENSIONS)) {
-        const extensionMainJs = /** @type {string} */ (
+        const extensionIndexJs = /** @type {string} */ (
           solvePath(true, PATH_EXTENSIONS, entry, "/index.js")
         );
         const extension = /** @type {Extension} */ (
-          (await import(extensionMainJs)).default
+          (await import(extensionIndexJs)).default
         );
         assert(extension.id === entry);
         ret.push({
@@ -827,6 +875,7 @@ const inServer = async () => {
             name: action.name,
             description: action.description,
           })),
+          profiles: extension.profiles,
         });
       }
       res.setHeader("Content-Type", "application/json");
@@ -839,18 +888,18 @@ const inServer = async () => {
       const request = /** @type {InstallExtensionRequest} */ (
         await reqToJson(req)
       );
-      const extensionTempMainJs = /** @type {string} */ (
+      const extensionTempIndexJs = /** @type {string} */ (
         solvePath(true, PATH_CACHE, "downloading-" + nextInt() + ".js")
       );
-      await download(request.url, extensionTempMainJs);
+      await download(request.url, extensionTempIndexJs);
       const extension = /** @type {Extension} */ (
-        (await import(extensionTempMainJs)).default
+        (await import(extensionTempIndexJs)).default
       );
       const extensionDir = /** @type {string} */ (
         solvePath(true, PATH_EXTENSIONS, extension.id)
       );
       await mkdir(extensionDir);
-      await rename(extensionTempMainJs, extensionDir + "/index.js");
+      await rename(extensionTempIndexJs, extensionDir + "/index.js");
       for (const asset of extension.assets) {
         if (asset.platform !== CURRENT_PLATFORM) {
           continue;

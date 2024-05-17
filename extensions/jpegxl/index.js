@@ -22,11 +22,11 @@ export default /** @type {Extension} */ ({
   dependencies: [], // 可以填写其他的 extension 的 id (这个功能需要扩展商店)（注意考虑 semver？）
   assets: [
     {
-      // 以后可能这里手动维护文档，因为 jsdoc typescript 要做这个得类型体操。我们以后用 kind 区分，然后其他属性直接 any，在 loadAsset 函数中去 match 不同得 AssetKind 然后做不同操作。
       platform: "linux-x64",
+      // 如果是zip，那就直接用我们的unzip，如果不是，那就麻烦了，就要搞一个 archives 扩展，集成7zip， https://github.com/libarchive/libarchive 等等，用来解压
       kind: "zip", // 比如可以做 tar --strip-components 这样的
-      path: "./",
-      // url 就直接填 github，然后让核心去做镜像加速和多源下载
+      path: "./", // 从扩展文件夹路径开始算
+      // url 就直接填 github，然后让核心去做镜像加速
       url: "https://github.com/clevert-app/clevert/releases/download/make.jpegxl_b2fb216_8900231253/linux-x64.zip",
     },
   ],
@@ -39,7 +39,10 @@ export default /** @type {Extension} */ ({
       name: "cjpegli name",
       description: "cjpegli description",
       kind: "common-files", // 这里允许使用 daemon，number sequence，plain 等不同种类。
+      // 涉及到一个矛盾，就是如果把文件相关功能收归核心，那就减少了灵活性。如果用核心 export 给扩展 import，那扩展就可能对核心做 hack 才能实现功能，不可避免会 breaking
+      // 倾向于收归核心。有个问题是 "扩展建议 out extension" 的设计
       // 比如 out-dir 可以给 yt-dlp, out-dir 的时候，要求返回的 ui controller 里有 entries 函数
+      // 还有一个设想，比如 a.pdf b.pdf 提取图片到 out/a/XXX.png out/b/XXX.png 这要怎么处理？
       ui: (profile) => {
         // 这个函数在前端跑，画界面
         // 不能用 select  multiple， 在移动端显示效果不一样
@@ -48,30 +51,23 @@ export default /** @type {Extension} */ ({
         // <option value="cat">Cat</option>
         // <option value="parrot">Parrot</option>
         // </select>
-        const $root = document.createElement("action_root_");
         const css = (/** @type {any} */ [s]) => s;
-        $root.appendChild(document.createElement("style")).textContent = css`
-          action_root_ {
+        const $profile = document.createElement("action_profile_");
+        $profile.appendChild(document.createElement("style")).textContent = css`
+          action_profile_ {
             visibility: visible;
           }
         `;
-        const $qualityLabel = $root.appendChild(
+        const $qualityLabel = $profile.appendChild(
           document.createElement("label")
         );
         $qualityLabel.textContent = "quality(0-100):";
-        const $quality = $root.appendChild(document.createElement("input"));
+        const $quality = $profile.appendChild(document.createElement("input"));
         $quality.type = "number";
         $quality.value = profile.quality;
         return {
-          root: $root,
-          profile: () => {
-            profile.quality = Number($quality.value);
-            return profile;
-          },
-          preview: (input) => {
-            // 这边可以做预览，就是在文件列表里选择的时候会被调用
-          },
           // 给 yt-dlp 用
+          // entriesRoot,
           // entries: () => {
           //   return [
           //     {
@@ -84,6 +80,15 @@ export default /** @type {Extension} */ ({
           //     },
           //   ];
           // },
+          profileRoot: $profile,
+          profile: () => {
+            // 可能不能这样写，可能会带上 entries？
+            profile.quality = Number($quality.value);
+            return profile;
+          },
+          preview: (input) => {
+            // 这边可以做预览，就是在文件列表里选择的时候会被调用
+          },
         };
       },
       execute: (profile, { input, output }) => {
@@ -99,7 +104,7 @@ export default /** @type {Extension} */ ({
         let progressValue = 0;
         child.stderr.on("data", (/** @type {Buffer} */ data) => {
           const chunk = data.toString();
-          progressValue = 0.5;
+          progressValue = 0.01; // 比较明显能看出来，不要是整数
         });
         return {
           progress: () => {
@@ -121,20 +126,23 @@ export default /** @type {Extension} */ ({
       },
     },
   ],
-  // 设计上，profile 应该是非开发者也能保存的一个纯 JS。action 是扩展开发者编写的
+  // 设计上，profile 应该是非开发者也能保存的一个纯 JSON。action 是扩展开发者编写的
   profiles: [
     // 一些预设的 profile，弱类型
     // 约定：对于相同的 action, 这个profile列表中最考前的，就是 default的。
     {
-      name: "cjpegli default profile name",
+      name: "cjpegli default",
       description: "cjpegli default profile description",
       id: "cjpegli-default",
       actionId: "cjpegli",
       extensionId: "jpegxl",
       quality: 75,
-      // 对 entries 的选项 给出建议
+      // 用户：我上次output dir 到这，这次还想要到这，存profile 里，所以 entries 选项放在profile 里而不是固定在 action里
+      // 对 entries 的选项 给出建议?
+      // 用户要求能筛选输入文件扩展名，原生文件选择器 inputExtensionFilter: []
       entries: {
-        outputExtension: "jpeg",
+        // outputExtension: "jpeg",
+        outputExtensionOptions: ["jpeg", "jxl"],
       },
     },
   ],
