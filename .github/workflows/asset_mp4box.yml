@@ -1,4 +1,4 @@
-name: make.mp4box
+name: asset_mp4box
 on:
   workflow_dispatch:
 permissions:
@@ -27,7 +27,7 @@ jobs:
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
-          tag_name: "${{ 'make.mp4box_2.4.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_mp4box_2.4.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
   win-x64:
     runs-on: windows-2022
@@ -53,6 +53,6 @@ jobs:
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
-          tag_name: "${{ 'make.mp4box_2.4.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_mp4box_2.4.0_' }}${{ github.run_id }}"
           files: win-x64.zip
 # https://wiki.gpac.io/Build/build/GPAC-Build-Guide-for-Linux/#mp4box-gpac-only-minimal-static-build

@@ -1,4 +1,4 @@
-name: make.webp
+name: asset_webp
 on:
   workflow_dispatch:
 permissions:
@@ -82,7 +82,7 @@ jobs:
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
-          tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_jpegxl_b2fb216_' }}${{ github.run_id }}"
           files: linux-x64.zip
 # https://github.com/webmproject/libwebp/blob/v1.4.0/doc/building.md
 # https://github.com/webmproject/libwebp/blob/v1.4.0/CMakeLists.txt

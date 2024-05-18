@@ -1,4 +1,4 @@
-name: make.jpegxl
+name: asset_jpegxl
 on:
   workflow_dispatch:
 permissions:
@@ -12,7 +12,7 @@ jobs:
         uses: actions/cache@v4
         with:
           enableCrossOsArchive: true
-          key: "make.jpegxl_b2fb216_4"
+          key: "asset_jpegxl_b2fb216_4"
           path: jpegxl.tar
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
@@ -96,7 +96,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "make.jpegxl_b2fb216_4"
+          key: "asset_jpegxl_b2fb216_4"
           path: jpegxl.tar
       - name: Build
         shell: sudo bash -e {0}
@@ -118,7 +118,7 @@ jobs:
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
-          tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_jpegxl_b2fb216_' }}${{ github.run_id }}"
           files: linux-x64.zip
   win-x64:
     needs: prepare
@@ -128,7 +128,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "make.jpegxl_b2fb216_4"
+          key: "asset_jpegxl_b2fb216_4"
           path: jpegxl.tar
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
@@ -148,5 +148,5 @@ jobs:
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
-          tag_name: "${{ 'make.jpegxl_b2fb216_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_jpegxl_b2fb216_' }}${{ github.run_id }}"
           files: win-x64.zip
