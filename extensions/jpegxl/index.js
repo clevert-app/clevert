@@ -27,7 +27,7 @@ export default /** @type {Extension} */ ({
       kind: "zip", // 比如可以做 tar --strip-components 这样的
       path: "./", // 从扩展文件夹路径开始算
       // url 就直接填 github，然后让核心去做镜像加速
-      url: "https://github.com/clevert-app/clevert/releases/download/make.jpegxl_b2fb216_8900231253/linux-x64.zip",
+      url: "https://github.com/clevert-app/clevert/releases/download/asset_jpegxl_b2fb216_8900231253/linux-x64.zip",
     },
   ],
   actions: [

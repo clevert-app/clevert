@@ -10,17 +10,10 @@ jobs:
       - name: Build
         shell: sudo bash -e {0}
         run: |
-          apt update
-          apt install -y build-essential
           curl -L https://github.com/gpac/gpac/archive/refs/tags/v2.4.0.tar.gz | tar -zx --strip-components 1
-          curl -L https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz | tar -Jx
-          mv zig-* _zig
-          export CC="$(realpath _zig/zig) cc -s -target x86_64-linux-gnu.2.31" # debian oldstable
-          export CXX="$(realpath _zig/zig) c++ -s -target x86_64-linux-gnu.2.31"
-          ./configure CC="$CC" CXX="$CXX" --static-mp4box --disable-qjs --disable-qjs-libc --disable-x11 --use-zlib=no --use-opensvc=no --use-openhevc=no --use-platinum=no --use-freetype=no --use-ssl=no --use-jpeg=no --use-openjpeg=no --use-png=no --use-mad=no --use-a52=no --use-xvid=no --use-faad=no --use-ffmpeg=no --use-freenect=no --use-vorbis=no --use-theora=no --use-nghttp2=no --use-oss=no --use-dvb4linux=no --use-alsa=no --use-pulseaudio=no --use-jack=no --use-directfb=no --use-hid=no --use-lzma=no --use-tinygl=no --use-vtb=no --use-ogg=no --use-sdl=no --use-caption=no --use-mpeghdec=no --use-libcaca=no --disable-network --disable-3d --disable-crypto
-          sed -i config.mak -e 's|LDFLAGS=-static|LDFLAGS=|' -e 's|-Wl,--warn-common||' -e 's|-msse2|-msse4|'
-          sed -i applications/mp4box/Makefile -e 's|-Wl,-rpath-link,|-L |'
-          make CC="$CC" CXX="$CXX" -j$(nproc)
+          ./configure --static-mp4box --disable-qjs --disable-qjs-libc --disable-x11 --use-zlib=no --use-opensvc=no --use-openhevc=no --use-platinum=no --use-freetype=no --use-ssl=no --use-jpeg=no --use-openjpeg=no --use-png=no --use-mad=no --use-a52=no --use-xvid=no --use-faad=no --use-ffmpeg=no --use-freenect=no --use-vorbis=no --use-theora=no --use-nghttp2=no --use-oss=no --use-dvb4linux=no --use-alsa=no --use-pulseaudio=no --use-jack=no --use-directfb=no --use-hid=no --use-lzma=no --use-tinygl=no --use-vtb=no --use-ogg=no --use-sdl=no --use-caption=no --use-mpeghdec=no --use-libcaca=no --disable-network --disable-3d --disable-crypto # https://wiki.gpac.io/Build/build/GPAC-Build-Guide-for-Linux/#mp4box-gpac-only-minimal-static-build
+          sed -i config.mak -e 's|LDFLAGS=-static|LDFLAGS=|' -e 's|-msse2|-msse4|'
+          make -j$(nproc)
           mv bin/gcc/MP4Box mp4box
           strip mp4box
           zip -9 linux-x64.zip mp4box
@@ -36,42 +29,6 @@ jobs:
           prerelease: true
           tag_name: "${{ 'asset_mp4box_2.4.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
-  linux-arm64:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Build
-        shell: sudo bash -e {0}
-        run: |
-          apt update
-          apt install -y build-essential
-          curl -L https://github.com/gpac/gpac/archive/refs/tags/v2.4.0.tar.gz | tar -zx --strip-components 1
-          curl -L https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz | tar -Jx
-          mv zig-* _zig
-          export CC="$(realpath _zig/zig) cc -s -target aarch64-linux-gnu.2.31" # debian oldstable
-          export CXX="$(realpath _zig/zig) c++ -s -target aarch64-linux-gnu.2.31"
-          ./configure CC="$CC" CXX="$CXX" --static-mp4box --disable-qjs --disable-qjs-libc --disable-x11 --use-zlib=no --use-opensvc=no --use-openhevc=no --use-platinum=no --use-freetype=no --use-ssl=no --use-jpeg=no --use-openjpeg=no --use-png=no --use-mad=no --use-a52=no --use-xvid=no --use-faad=no --use-ffmpeg=no --use-freenect=no --use-vorbis=no --use-theora=no --use-nghttp2=no --use-oss=no --use-dvb4linux=no --use-alsa=no --use-pulseaudio=no --use-jack=no --use-directfb=no --use-hid=no --use-lzma=no --use-tinygl=no --use-vtb=no --use-ogg=no --use-sdl=no --use-caption=no --use-mpeghdec=no --use-libcaca=no --disable-network --disable-3d --disable-crypto
-          sed -i config.mak -e 's|LDFLAGS=-static|LDFLAGS=|' -e 's|-Wl,--warn-common||' -e 's|-msse2|-msse4|'
-          sed -i applications/mp4box/Makefile -e 's|-Wl,-rpath-link,|-L |'
-          make CC="$CC" CXX="$CXX" -j$(nproc)
-          mv bin/gcc/MP4Box mp4box
-          zip -9 linux-arm64.zip mp4box
-      - name: Verify
-        uses: uraimo/run-on-arch-action@v2
-        with:
-          arch: aarch64
-          distro: bookworm
-          dockerRunArgs: --volume "${PWD}:/workdir"
-          run: |
-            ldd --version
-            ldd /workdir/mp4box || true
-            /workdir/mp4box -version
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          prerelease: true
-          tag_name: "${{ 'asset_mp4box_2.4.0_' }}${{ github.run_id }}"
-          files: linux-arm64.zip
   win-x64:
     runs-on: windows-2022
     steps:
@@ -98,4 +55,3 @@ jobs:
           prerelease: true
           tag_name: "${{ 'asset_mp4box_2.4.0_' }}${{ github.run_id }}"
           files: win-x64.zip
-# https://wiki.gpac.io/Build/build/GPAC-Build-Guide-for-Linux/#mp4box-gpac-only-minimal-static-build
