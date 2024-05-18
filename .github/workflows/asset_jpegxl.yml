@@ -12,20 +12,17 @@ jobs:
         uses: actions/cache@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_b2fb216_4"
+          key: "asset_jpegxl_8835f5d"
           path: jpegxl.tar
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
         shell: sudo bash -e {0}
         run: |
-          mkdir jpegxl
+          curl -L https://github.com/libjxl/libjxl/archive/8835f5dfc4857f46277f6c703e47ac7817bd7aed.tar.gz | tar -zx
+          mv libjxl-* jpegxl
           cd jpegxl
-          git init
-          git remote add origin https://github.com/libjxl/libjxl
-          git fetch origin --depth=1 b2fb216cd7e3e690544c53d1ae8fba3b9f97eab6
-          git reset --hard FETCH_HEAD
-          git submodule update --init --recursive --depth 1 --recommend-shallow
-          rm -rf $(find -name .git)
+          sed -i  deps.sh -e 's|download_github testdata|#|'
+          ./deps.sh
           cat <<EOF >tools/multicall.cc
           #include <stddef.h>
           #include <string.h>
@@ -96,15 +93,34 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_b2fb216_4"
+          key: "asset_jpegxl_8835f5d"
           path: jpegxl.tar
       - name: Build
         shell: sudo bash -e {0}
         run: |
           tar -xf jpegxl.tar --strip-components 1
           apt update
-          apt install -y g++ cmake ninja-build pkg-config libbrotli-dev libgif-dev libjpeg-dev libopenexr-dev libpng-dev
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF  -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" -DJPEGXL_STATIC=ON  -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=OFF -DJPEGXL_ENABLE_VIEWERS=OFF -DJPEGXL_ENABLE_PLUGINS=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=ON
+          apt install -y build-essential
+          apt install -y pkg-config cmake ninja-build libpng-dev libgif-dev libjpeg-dev
+          curl -L https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz | tar -Jx
+          mv zig-* _zig
+          echo "$(realpath _zig/zig)"' cc -s -target x86_64-linux-gnu.2.31 $*' > _zig/_cc # debian oldstable
+          echo "$(realpath _zig/zig)"' c++ -s -target x86_64-linux-gnu.2.31 $*' > _zig/_cxx
+          chmod +x _zig/*
+          export CC="$(realpath _zig/_cc)"
+          export CXX="$(realpath _zig/_cxx)"
+
+          
+          echo "$(realpath _zig/zig)"' cc -s -target x86_64-linux-gnu.2.31 $*' > _zig/_cc # debian oldstable
+          echo "$(realpath _zig/zig)"' c++ -s -target x86_64-linux-gnu.2.31 $*' > _zig/_cxx
+          chmod +x _zig/*
+          sed -i '1i\#define __builtin_cpu_supports(args...) 1 ' ./lib/jxl/enc_fast_lossless.cc # https://github.com/ziglang/zig/issues/18074
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=OFF -DJPEGXL_ENABLE_AVX512=OFF \
+            -DPNG_LIBRARY=/usr/lib/x86_64-linux-gnu/libpng.a -DZLIB_LIBRARY=/usr/lib/x86_64-linux-gnu/libz.a -DGIF_LIBRARY=/usr/lib/x86_64-linux-gnu/libgif.a
+          cp -R _zig/lib/libcxx/include/* build/lib/include/ 
+
+          sed -i build/CMakeFiles/rules.ninja -e 's|/usr/bin/c++|'"$(realpath _zig/_cxx)"'|' -e 's|/usr/bin/c++|'"$(realpath _zig/_cc)"'|' # what the fuck is this?
+          cp -n /usr/include/libpng/*  /usr/include/*  /usr/include/x86_64-linux-gnu/* ./build/lib/include/
           cmake --build build
           mv build/tools/multicall ./jpegxl
           strip ./jpegxl
@@ -118,7 +134,7 @@ jobs:
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
-          tag_name: "${{ 'asset_jpegxl_b2fb216_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_jpegxl_8835f5d_' }}${{ github.run_id }}"
           files: linux-x64.zip
   win-x64:
     needs: prepare
@@ -128,7 +144,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_b2fb216_4"
+          key: "asset_jpegxl_8835f5d"
           path: jpegxl.tar
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
@@ -148,5 +164,5 @@ jobs:
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
-          tag_name: "${{ 'asset_jpegxl_b2fb216_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_jpegxl_8835f5d_' }}${{ github.run_id }}"
           files: win-x64.zip
