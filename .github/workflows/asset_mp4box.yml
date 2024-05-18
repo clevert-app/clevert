@@ -40,7 +40,7 @@ jobs:
           ./configure --static-mp4box --disable-qjs --disable-qjs-libc --disable-x11 --use-zlib=no --use-opensvc=no --use-openhevc=no --use-platinum=no --use-freetype=no --use-ssl=no --use-jpeg=no --use-openjpeg=no --use-png=no --use-mad=no --use-a52=no --use-xvid=no --use-faad=no --use-ffmpeg=no --use-freenect=no --use-vorbis=no --use-theora=no --use-nghttp2=no --use-oss=no --use-dvb4linux=no --use-alsa=no --use-pulseaudio=no --use-jack=no --use-directfb=no --use-hid=no --use-lzma=no --use-tinygl=no --use-vtb=no --use-ogg=no --use-sdl=no --use-caption=no --use-mpeghdec=no --use-libcaca=no --disable-network --disable-3d --disable-crypto
           sed -i config.mak -e 's|-msse2|-msse4|' # intel Pentium even doesn't have avx(128) until 11th(tiger lake)
           sed -i include/gpac/thread.h -e 's|#ifndef _GF_THREAD_H_|#include <stdint.h>\n#ifndef _GF_THREAD_H_|'
-          sed -i src/utils/os_net.c -e 's|#include <arpa/inet.h>||' # winsocks2 start from win 8.1
+          sed -i src/utils/os_net.c -e 's|#include <arpa/inet.h>|#include <winsock2.h>|' # winsock2 start from win 8.1
           make -j$(nproc)
           mv bin/gcc/MP4Box.exe mp4box.exe
           strip ./mp4box.exe
