@@ -100,27 +100,35 @@ jobs:
         run: |
           tar -xf jpegxl.tar --strip-components 1
           apt update
-          apt install -y build-essential
-          apt install -y pkg-config cmake ninja-build libpng-dev libgif-dev libjpeg-dev
+          apt install -y pkg-config cmake ninja-build
+          apt remove -y libc6-dev # fix error: The header search paths should contain the C++ Standard Library headers before any C Standard Library
+          apt download -y zlib1g-dev
+          dpkg --force-depends -i *.deb
           curl -L https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz | tar -Jx
           mv zig-* _zig
-          echo "$(realpath _zig/zig)"' cc -s -target x86_64-linux-gnu.2.31 $*' > _zig/_cc # debian oldstable
-          echo "$(realpath _zig/zig)"' c++ -s -target x86_64-linux-gnu.2.31 $*' > _zig/_cxx
-          chmod +x _zig/*
-          export CC="$(realpath _zig/_cc)"
-          export CXX="$(realpath _zig/_cxx)"
-
-          
-          echo "$(realpath _zig/zig)"' cc -s -target x86_64-linux-gnu.2.31 $*' > _zig/_cc # debian oldstable
-          echo "$(realpath _zig/zig)"' c++ -s -target x86_64-linux-gnu.2.31 $*' > _zig/_cxx
-          chmod +x _zig/*
+          echo "$(pwd)/_zig/zig ar "'$*' > /usr/bin/ar ; chmod +x  /usr/bin/ar
+          echo "$(pwd)/_zig/zig cc -s -target x86_64-linux-gnu.2.31 "'$*' > _zig/_cc ; chmod +x _zig/_cc # debian oldstable
+          echo "$(pwd)/_zig/zig c++ -s -target x86_64-linux-gnu.2.31 "'$*' > _zig/_cxx ; chmod +x _zig/_cxx
+          export CC="$(pwd)/_zig/_cc"
+          export CXX="$(pwd)/_zig/_cxx"
+cd third_party/libjpeg-turbo
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+cd ../..
+cd third_party/zlib
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+cd ../..
+cd third_party/libpng
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+cd ../..
           sed -i '1i\#define __builtin_cpu_supports(args...) 1 ' ./lib/jxl/enc_fast_lossless.cc # https://github.com/ziglang/zig/issues/18074
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=OFF -DJPEGXL_ENABLE_AVX512=OFF \
-            -DPNG_LIBRARY=/usr/lib/x86_64-linux-gnu/libpng.a -DZLIB_LIBRARY=/usr/lib/x86_64-linux-gnu/libz.a -DGIF_LIBRARY=/usr/lib/x86_64-linux-gnu/libgif.a
-          cp -R _zig/lib/libcxx/include/* build/lib/include/ 
-
-          sed -i build/CMakeFiles/rules.ninja -e 's|/usr/bin/c++|'"$(realpath _zig/_cxx)"'|' -e 's|/usr/bin/c++|'"$(realpath _zig/_cc)"'|' # what the fuck is this?
-          cp -n /usr/include/libpng/*  /usr/include/*  /usr/include/x86_64-linux-gnu/* ./build/lib/include/
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=OFF -DJPEGXL_ENABLE_AVX512=OFF \
+            -DZLIB_INCLUDE_DIR=/usr/include -DZLIB_LIBRARY=/usr/lib/x86_64-linux-gnu/libz.a DPNG_PNG_INCLUDE_DIR=/usr/include/png -DPNG_LIBRARY=/usr/lib/x86_64-linux-gnu/libpng.a -DGIF_INCLUDE_DIR=/usr/include -DGIF_LIBRARY=/usr/lib/x86_64-linux-gnu/libgif.a
+            #  -DPNG_PNG_INCLUDE_DIR=/usr/include/png -DPNG_LIBRARY=/usr/lib/x86_64-linux-gnu/libpng.a -DJPEG_INCLUDE_DIR=/usr/include/x86_64-linux-gnu -DJPEG_LIBRARY=/usr/lib/x86_64-linux-gnu/libjpeg.a -DGIF_INCLUDE_DIR=/usr/include -DGIF_LIBRARY=/usr/lib/x86_64-linux-gnu/libgif.a
+          # sed -i build/CMakeFiles/rules.ninja -e "s|/usr/bin/ar|$(pwd)/_zig/zig ar|"
+          # for v in $(ls _zig/lib/libcxx/include/); do rm -rf /usr/include/$v ; done # WHAT THE FUCK IS THIS?
           cmake --build build
           mv build/tools/multicall ./jpegxl
           strip ./jpegxl
