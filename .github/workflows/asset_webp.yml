@@ -71,13 +71,14 @@ jobs:
           apt install -y build-essential pkg-config cmake ninja-build libgif-dev libjpeg-dev libpng-dev
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWEBP_USE_THREAD=OFF
           cmake --build build
-          objcopy --redefine-sym main=cmd_cwebp_main ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o
-          objcopy --redefine-sym main=cmd_dwebp_main ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o
-          objcopy --redefine-sym main=cmd_gif2webp_main ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o
-          objcopy --redefine-sym main=cmd_img2webp_main ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o
-          objcopy --redefine-sym main=cmd_webpinfo_main ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o
-          objcopy --redefine-sym main=cmd_webpmux_main ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o
-          gcc -o webp -s -O3 multicall.c  ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o ./build/CMakeFiles/gif2webp.dir/examples/gifdec.c.o ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o -L build -l exampleutil -l imageenc -l imagedec -l imageioutil -l webp -l webpmux -l webpdemux -l webpdecoder -l extras -l sharpyuv -l:libpng.a -l:libjpeg.a -l:libgif.a -lm -lz -lpthread
+          objcopy --redefine-sym _main=_cmd_cwebp_main ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o
+          objcopy --redefine-sym _main=_cmd_dwebp_main ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o
+          objcopy --redefine-sym _main=_cmd_gif2webp_main ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o
+          objcopy --redefine-sym _main=_cmd_img2webp_main ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o
+          objcopy --redefine-sym _main=_cmd_webpinfo_main ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o
+          objcopy --redefine-sym _main=_cmd_webpmux_main ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o
+          gcc -o webp -s -O3 multicall.c  ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o ./build/CMakeFiles/gif2webp.dir/examples/gifdec.c.o ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o -L build -l exampleutil -l imageenc -l imagedec -l imageioutil -l webp -l webpmux -l webpdemux -l webpdecoder -l extras -l sharpyuv -lm -lz /opt/homebrew/lib/libpng.a /opt/homebrew/lib/libjpeg.a /opt/homebrew/lib/libgif.a -lpthread
+
           zip -9 linux-x64.zip webp
       - name: Verify
         run: |
@@ -91,6 +92,93 @@ jobs:
           prerelease: true
           tag_name: "${{ 'asset_webp_1.4.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
+  macos-arm64:
+    runs-on: macos-14
+    steps:
+      - name: Build
+        run: |
+          curl -L https://github.com/webmproject/libwebp/archive/refs/tags/v1.4.0.tar.gz | tar -zx --strip-components 1
+          cat <<EOF >multicall.c
+          #include <stddef.h>
+          #include <string.h>
+          int cmd_cwebp_main(int argc, const char* argv[]);
+          int cmd_dwebp_main(int argc, const char* argv[]);
+          int cmd_gif2webp_main(int argc, const char* argv[]);
+          int cmd_img2webp_main(int argc, const char* argv[]);
+          int cmd_webpinfo_main(int argc, const char* argv[]);
+          int cmd_webpmux_main(int argc, const char* argv[]);
+          #if defined(WIN32) || defined(_WIN32)
+          #define PATH_SEPARATOR '\\\\'
+          #else
+          #define PATH_SEPARATOR '/'
+          #endif
+          int main(int argc, const char *argv[]) {
+            if (argc <= 0) {
+              return 1;
+            }
+            const char *argv0 = strrchr(argv[0], PATH_SEPARATOR);
+            if (argv0 == NULL) {
+              argv0 = argv[0];
+            } else {
+              argv0++;
+            }
+          before:
+            if (argc <= 0) {
+              return 1;
+            } else if (strcmp(argv0, "cwebp") == 0) {
+              return cmd_cwebp_main(argc, argv);
+            } else if (strcmp(argv0, "dwebp") == 0) {
+              return cmd_dwebp_main(argc, argv);
+            } else if (strcmp(argv0, "gif2webp") == 0) {
+              return cmd_gif2webp_main(argc, argv);
+            } else if (strcmp(argv0, "img2webp") == 0) {
+              return cmd_img2webp_main(argc, argv);
+            } else if (strcmp(argv0, "webpinfo") == 0) {
+              return cmd_webpinfo_main(argc, argv);
+            } else if (strcmp(argv0, "webpmux") == 0) {
+              return cmd_webpmux_main(argc, argv);
+            } else {
+              argv++;
+              argc--;
+              if (argc <= 0) {
+                return 1;
+              }
+              argv0 = strrchr(argv[0], PATH_SEPARATOR);
+              if (argv0 == NULL) {
+                argv0 = argv[0];
+              } else {
+                argv0++;
+              }
+              goto before;
+            }
+            return 0;
+          }
+          EOF
+          brew install llvm ninja giflib jpeg-turbo libpng
+          sudo cp /opt/homebrew/include/gif_lib.h /Library/Frameworks/Mono.framework/Versions/6.12.0/include/gif_lib.h
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWEBP_USE_THREAD=OFF
+          cmake --build build
+          objcopy="$(brew --prefix llvm)/bin/llvm-objcopy"
+          $objcopy --redefine-sym _main=_cmd_cwebp_main ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o
+          $objcopy --redefine-sym _main=_cmd_dwebp_main ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o
+          $objcopy --redefine-sym _main=_cmd_gif2webp_main ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o
+          $objcopy --redefine-sym _main=_cmd_img2webp_main ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o
+          $objcopy --redefine-sym _main=_cmd_webpinfo_main ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o
+          $objcopy --redefine-sym _main=_cmd_webpmux_main ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o
+          gcc -o webp -s -O3 multicall.c  ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o ./build/CMakeFiles/gif2webp.dir/examples/gifdec.c.o ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o -L build -l exampleutil -l imageenc -l imagedec -l imageioutil -l webp -l webpmux -l webpdemux -l webpdecoder -l extras -l sharpyuv -lm -lz /opt/homebrew/lib/libpng.a /opt/homebrew/lib/libjpeg.a /opt/homebrew/lib/libgif.a -lpthread
+          zip -9 macos-arm64.zip webp
+      - name: Verify
+        run: |
+          otool -L ./webp || true
+          ./webp cwebp -version
+          ./webp gif2webp -version
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
+          prerelease: true
+          tag_name: "${{ 'asset_webp_1.4.0_' }}${{ github.run_id }}"
+          files: macos-arm64.zip
   win-x64:
     runs-on: windows-2022
     steps:
