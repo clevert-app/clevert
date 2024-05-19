@@ -91,7 +91,7 @@ jobs:
           prerelease: true
           tag_name: "${{ 'asset_webp_1.4.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
-  macos-arm64:
+  mac-arm64:
     runs-on: macos-14
     steps:
       - name: Build
@@ -165,7 +165,7 @@ jobs:
           $objcopy --redefine-sym _main=_cmd_webpinfo_main ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o
           $objcopy --redefine-sym _main=_cmd_webpmux_main ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o
           gcc -o webp -s -O3 multicall.c  ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o ./build/CMakeFiles/gif2webp.dir/examples/gifdec.c.o ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o -L build -l exampleutil -l imageenc -l imagedec -l imageioutil -l webp -l webpmux -l webpdemux -l webpdecoder -l extras -l sharpyuv -lm -lz /opt/homebrew/lib/libpng.a /opt/homebrew/lib/libjpeg.a /opt/homebrew/lib/libgif.a -lpthread
-          zip -9 macos-arm64.zip webp
+          zip -9 mac-arm64.zip webp
       - name: Verify
         run: |
           otool -L ./webp || true
@@ -177,7 +177,7 @@ jobs:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
           tag_name: "${{ 'asset_webp_1.4.0_' }}${{ github.run_id }}"
-          files: macos-arm64.zip
+          files: mac-arm64.zip
   win-x64:
     runs-on: windows-2022
     steps:
