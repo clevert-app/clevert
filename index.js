@@ -115,8 +115,8 @@ const solvePath = (absolute, ...parts) => {
 
 /**
 @typedef {
-  "win-x64" | "linux-x64" | "mac-x64" | "mac-arm64"
-} Platform "win-arm64" "linux-arm64"
+  "linux-x64" | "mac-arm64" | "win-x64"
+} Platform 短期内不谋求增加新平台. 长远来看，应该是 ` "linux-x64" | "linux-arm64" | "mac-x64" | "mac-arm64" | "win-x64" | "win-arm64" `
 @typedef {
   {
     platform: Platform,
@@ -1061,6 +1061,44 @@ const orders = dirProvider({
 //   }
 // }
 
+/*
+//> a.mjs
+import { register } from "node:module";
+import { pathToFileURL } from "node:url";
+
+const resolverCode = `
+  console.log(1);
+  export async function initialize(...args) {
+    console.log({ args });
+    // Receives data from "register".
+  }
+
+  export async function load(url, context, nextLoad) {
+    if (url.startsWith("a:")) {
+      return ({
+        format: "module",
+        shortCircuit: true,
+        source: 'export const hello="world";',
+      })
+    }
+    // Let Node.js handle all other URLs.
+    return nextLoad(url);
+  }
+`;
+// const blob = new Blob([resolverCode], { type: "text/javascript" });
+// const url = URL.createObjectURL(blob);
+// register(url);
+// register(pathToFileURL("./b.mjs"));
+// const aa = await import("a:main");
+register("data:text/javascript," + encodeURIComponent(resolverCode));
+await import("./c.mjs");
+// https://nodejs.org/api/module.html#customization-hooks
+
+//> c.mjs
+import { hello } from "a:main";
+console.log({ hello });
+console.log(import.meta.url);
+*/
 // http://127.0.0.1:8080/extensions/jpegxl/index.js
 // let c = {};
 
