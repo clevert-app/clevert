@@ -1,13 +1,15 @@
 // @ts-check
 /** @import { Extension } from "../../index.js" */
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 // excluded: import { spawn } from "node:child_process"; // 可以这种形式为前端禁用 // 这些砍 import 的魔法，在加载扩展的时候做
+// 统一用 import { a } from "b"; 而不是  import b from "b" 然后 b.a， 因为我们自己写的时候导出一般不会再故意弄一个 default export
 
-const exe = globalThis?.process?.versions?.node
-  ? join(dirname(fileURLToPath(import.meta.url)), "jpegxl")
-  : "<invalid>";
+const C = /** @type {"_"} */ (globalThis.process?.versions?.node) && {
+  exe: join(import.meta.dirname, "jpegxl"), // 这个不太好用依赖注入搞?因为 import.meta.url 只在当前文件中才能拿到正确的
+};
+
+// 暂时还没有需要 hook 或者依赖注入的地方
 
 // https://effectivetypescript.com/2023/09/27/closure-compiler/
 // https://github.com/microsoft/TypeScript/issues/41825
@@ -81,6 +83,7 @@ export default /** @type {Extension} */ ({
           //   ];
           // },
           profileRoot: $profile,
+          // 用函数取出，少用什么 getter setter
           profile: () => {
             // 可能不能这样写，可能会带上 entries？
             profile.quality = Number($quality.value);
@@ -94,7 +97,7 @@ export default /** @type {Extension} */ ({
       execute: (profile, { input, output }) => {
         // 这个函数在后端跑，要求不 block 主线程，只能 async。如果要 block 请自行开 worker
         // 后续提供调用其他 action 的功能？
-        const child = spawn(exe, [
+        const child = spawn(C.exe, [
           "cjpegli",
           input.main[0],
           output.main[0],
