@@ -12,9 +12,9 @@
 - [x] 探索单 js 文件 集成的可实现性
 - [x] converter 扩展 api
 - [x] action 执行和调度器 初步
+- [x] webp multi-call binary 提供
 - [ ] 官方扩展 jpegxl
 - [ ] 扩展商店初步
-- [ ] webp multi-call binary 提供
 
 ## 仓库结构
 
