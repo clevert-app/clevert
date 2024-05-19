@@ -71,14 +71,13 @@ jobs:
           apt install -y build-essential pkg-config cmake ninja-build libgif-dev libjpeg-dev libpng-dev
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWEBP_USE_THREAD=OFF
           cmake --build build
-          objcopy --redefine-sym _main=_cmd_cwebp_main ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o
-          objcopy --redefine-sym _main=_cmd_dwebp_main ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o
-          objcopy --redefine-sym _main=_cmd_gif2webp_main ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o
-          objcopy --redefine-sym _main=_cmd_img2webp_main ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o
-          objcopy --redefine-sym _main=_cmd_webpinfo_main ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o
-          objcopy --redefine-sym _main=_cmd_webpmux_main ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o
-          gcc -o webp -s -O3 multicall.c  ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o ./build/CMakeFiles/gif2webp.dir/examples/gifdec.c.o ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o -L build -l exampleutil -l imageenc -l imagedec -l imageioutil -l webp -l webpmux -l webpdemux -l webpdecoder -l extras -l sharpyuv -lm -lz /opt/homebrew/lib/libpng.a /opt/homebrew/lib/libjpeg.a /opt/homebrew/lib/libgif.a -lpthread
-
+          objcopy --redefine-sym main=cmd_cwebp_main ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o
+          objcopy --redefine-sym main=cmd_dwebp_main ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o
+          objcopy --redefine-sym main=cmd_gif2webp_main ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o
+          objcopy --redefine-sym main=cmd_img2webp_main ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o
+          objcopy --redefine-sym main=cmd_webpinfo_main ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o
+          objcopy --redefine-sym main=cmd_webpmux_main ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o
+          gcc -o webp -s -O3 multicall.c  ./build/CMakeFiles/cwebp.dir/examples/cwebp.c.o ./build/CMakeFiles/dwebp.dir/examples/dwebp.c.o ./build/CMakeFiles/gif2webp.dir/examples/gifdec.c.o ./build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o ./build/CMakeFiles/img2webp.dir/examples/img2webp.c.o ./build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o ./build/CMakeFiles/webpmux.dir/examples/webpmux.c.o -L build -l exampleutil -l imageenc -l imagedec -l imageioutil -l webp -l webpmux -l webpdemux -l webpdecoder -l extras -l sharpyuv -l:libpng.a -l:libjpeg.a -l:libgif.a -lm -lz -lpthread
           zip -9 linux-x64.zip webp
       - name: Verify
         run: |
