@@ -12,7 +12,29 @@
 - [x] 探索单 js 文件 集成的可实现性
 - [x] converter 扩展 api
 - [x] action 执行和调度器 初步
+- [x] jpegxl multi-call binary 提供
 - [x] webp multi-call binary 提供
+- [x] webp 三端
+- [ ] jpegxl 三端
+- [ ] mp4box 三端
+- [ ] rsync 三端
+- [ ] 加入 uname -a
+- [ ] 完善扩展安装逻辑
+- [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
+- [ ] 实现一个代码量最少的，用于 bootstrap 的 node unzip
+- [ ] 关于扩展建议 out extension 的设计
+- [ ] 用户保存的 profile，最近使用的 profile，extension-profile 三种进入入口
+- [ ] 用户保存 profile 的设计，或者是 json with comments 保存到总 config 中？
+- [ ] config 最好是保存到本地，而不是浏览器。让浏览器成为一个无状态的东西会比较好。
+- [ ] 前端的状态改善
+- [ ] UI 美化完善
+- [ ] 扩展商店改进
+- [ ] 下载包再解压的模式，不做流式解压了
+- [ ] 支持 7z，zstd，xz 等，用扩展形式
+- [ ] bsdtar https://stackoverflow.com/a/23108309/11338291 https://www.libarchive.org/
+- [ ] 一个扩展的多个版本共存
+- [ ] 更多扩展
+- [ ] 约定扩展目录是 id_1.2.3
 - [ ] 官方扩展 jpegxl
 - [ ] 扩展商店初步
 
@@ -35,7 +57,9 @@
 
 对于扩展中二进制的编译：
 
-- linux 要求环境必须为主流的环境，保证 glibc，libgcc，libstdc++，libz 可用。其他依赖应当静态链接。
+我们自己编译的，统一用 zip -9
+
+- linux 要求环境必须为主流的环境，保证 glibc，libgcc，libstdc++，libz 可用。其他依赖应当静态链接。标准是 debian oldstable。
 - win 大多数时候使用 msys2 mingw，某些时候可能会需要 msys2 cygwin 比如 rsync，也尽量不要依赖 vc runtime。
 - mac 还没想好。
 
