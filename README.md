@@ -17,8 +17,8 @@
 - [x] webp 三端
 - [x] jpegxl 三端
 - [x] mp4box 三端
-- [x] rsync 三端
 - [x] 加入 uname -a
+- [ ] rsync 三端
 - [ ] 完善扩展安装逻辑
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 实现一个代码量最少的，用于 bootstrap 的 node unzip

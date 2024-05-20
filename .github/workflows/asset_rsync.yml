@@ -10,9 +10,8 @@ jobs:
       - name: Build
         shell: sudo bash -e {0}
         run: |
-          printf 'APT::Install-Recommends "false";\nAPT::Install-Suggests "false";\n' > /etc/apt/apt.conf.d/no-recommends-suggests
           apt update
-          apt install -y musl-tools make gawk autoconf automake acl attr zlib1g-dev libattr1-dev libzstd-dev
+          apt install -y make gawk autoconf automake acl attr zlib1g-dev libattr1-dev libzstd-dev
           curl -L https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.2.tar.gz | tar -zx
           make -C xxHash-0.8.2 CC="musl-gcc -O3 -static" -j$(nproc)
           curl -L https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.4.tar.gz | tar -zx
@@ -51,7 +50,7 @@ jobs:
           ./configure --disable-lz4 --disable-openssl --disable-md2man --disable-debug
           make CC="gcc -static -O2" -j$(nproc) || true # no -flto
           strip rsync.exe
-          mv /usr/bin/msys-2.0.dll ./
+          cp /usr/bin/msys-2.0.dll ./
           zip -9 win-x64.zip rsync.exe msys-2.0.dll
       - name: Verify
         run: |
