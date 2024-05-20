@@ -96,7 +96,7 @@ jobs:
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
-          tag_name: "${{ 'asset_webp_1.4.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_rsync_3.3.0_' }}${{ github.run_id }}"
           files: mac-arm64.zip
   win-x64:
     runs-on: windows-2022
