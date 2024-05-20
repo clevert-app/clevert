@@ -34,7 +34,7 @@ jobs:
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
-          tag_name: "${{ 'make.rsync_3.3.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_rsync_3.3.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
   linux-arm64:
     runs-on: ubuntu-22.04
@@ -72,7 +72,7 @@ jobs:
         with:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
-          tag_name: "${{ 'make.rsync_3.3.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_rsync_3.3.0_' }}${{ github.run_id }}"
           files: linux-arm64.zip
   mac-arm64:
     runs-on: macos-14
