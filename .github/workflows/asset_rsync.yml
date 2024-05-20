@@ -27,6 +27,7 @@ jobs:
           zip -9 linux-x64.zip rsync
       - name: Verify
         run: |
+          uname -a
           ldd ./rsync || true
           ./rsync -V
       - name: Release
@@ -54,6 +55,8 @@ jobs:
           zip -9 win-x64.zip rsync.exe msys-2.0.dll
       - name: Verify
         run: |
+          uname -a
+          ldd ./rsync.exe || true
           ./rsync.exe -V
       - name: Release
         uses: softprops/action-gh-release@v2

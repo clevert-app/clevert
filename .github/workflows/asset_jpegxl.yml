@@ -109,6 +109,7 @@ jobs:
           zip -9 linux-x64.zip jpegxl
       - name: Verify
         run: |
+          uname -a
           ldd --version
           ldd ./jpegxl || true
           ./jpegxl cjxl -V
@@ -145,6 +146,7 @@ jobs:
           zip -9 mac-arm64.zip jpegxl
       - name: Verify
         run: |
+          uname -a
           otool -L ./jpegxl || true
           ./jpegxl cjxl -V
       - name: Release
@@ -176,6 +178,8 @@ jobs:
           zip -9 win-x64.zip jpegxl.exe
       - name: Verify
         run: |
+          uname -a
+          ldd ./jpegxl.exe || true
           ./jpegxl.exe cjxl -V
       - name: Release
         uses: softprops/action-gh-release@v2

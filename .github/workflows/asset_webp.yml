@@ -81,6 +81,7 @@ jobs:
           zip -9 linux-x64.zip webp
       - name: Verify
         run: |
+          uname -a
           ldd ./webp || true
           ./webp cwebp -version
           ./webp gif2webp -version
@@ -168,6 +169,7 @@ jobs:
           zip -9 mac-arm64.zip webp
       - name: Verify
         run: |
+          uname -a
           otool -L ./webp || true
           ./webp cwebp -version
           ./webp gif2webp -version
@@ -255,6 +257,7 @@ jobs:
       - name: Verify
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
         run: |
+          uname -a
           ldd ./webp.exe || true
           ./webp.exe cwebp -version
           ./webp.exe gif2webp -version

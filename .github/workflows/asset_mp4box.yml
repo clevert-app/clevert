@@ -19,6 +19,7 @@ jobs:
           zip -9 linux-x64.zip mp4box
       - name: Verify
         run: |
+          uname -a
           ldd --version
           ldd ./mp4box || true
           ./mp4box -version
@@ -43,6 +44,7 @@ jobs:
           zip -9 mac-arm64.zip mp4box
       - name: Verify
         run: |
+          uname -a
           otool -L ./mp4box || true
           ./mp4box -version
       - name: Release
@@ -70,6 +72,8 @@ jobs:
           zip -9 win-x64.zip mp4box.exe
       - name: Verify
         run: |
+          uname -a
+          ldd ./mp4box.exe || true
           ./mp4box.exe -version
       - name: Release
         uses: softprops/action-gh-release@v2
