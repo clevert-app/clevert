@@ -19,6 +19,7 @@
 - [x] mp4box 三端
 - [x] 加入 uname -a
 - [x] rsync 四端
+- [x] jpegxl macos 有问题，没静态链接。
 - [ ] 完善扩展安装逻辑
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 实现一个代码量最少的，用于 bootstrap 的 node unzip

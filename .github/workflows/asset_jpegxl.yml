@@ -133,13 +133,13 @@ jobs:
       - name: Build
         run: |
           tar -xf jpegxl.tar --strip-components 1
-          ( unset CI ; brew install llvm ninja giflib jpeg-turbo libpng )
+          ( unset CI ; brew install ninja giflib jpeg-turbo libpng )
           to_bak(){ sudo mv $1 $1.bak ;}
           to_bak /Library/Frameworks/Mono.framework/Versions/6.12.0/include/gif_lib.h # WHAT THE FUCK
           to_bak /opt/homebrew/lib/libpng.dylib # static lib instead of dylib
           to_bak /opt/homebrew/lib/libjpeg.dylib
           to_bak /opt/homebrew/lib/libgif.dylib
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=OFF # FUCK the -DJPEGXL_STATIC=ON
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_FIND_LIBRARY_SUFFIXES='.a' -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=OFF # FUCK the -DJPEGXL_STATIC=ON
           cmake --build build
           mv build/tools/multicall ./jpegxl
           strip ./jpegxl
