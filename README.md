@@ -18,9 +18,9 @@
 - [x] jpegxl 三端
 - [x] mp4box 三端
 - [x] 加入 uname -a
-- [ ] rsync 三端
+- [x] rsync 四端
 - [ ] 完善扩展安装逻辑
-- [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
+- [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 实现一个代码量最少的，用于 bootstrap 的 node unzip
 - [ ] 关于扩展建议 out extension 的设计
 - [ ] 用户保存的 profile，最近使用的 profile，extension-profile 三种进入入口
@@ -36,6 +36,7 @@
 - [ ] 更多扩展
 - [ ] 约定扩展目录是 id_1.2.3
 - [ ] 官方扩展 jpegxl
+- [ ] https://github.com/rsyncOSX/RsyncOSX
 - [ ] 扩展商店初步
 
 ## 仓库结构
