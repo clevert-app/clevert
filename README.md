@@ -15,9 +15,9 @@
 - [x] jpegxl multi-call binary 提供
 - [x] webp multi-call binary 提供
 - [x] webp 三端
-- [ ] jpegxl 三端
-- [ ] mp4box 三端
-- [ ] rsync 三端
+- [x] jpegxl 三端
+- [x] mp4box 三端
+- [x] rsync 三端
 - [ ] 加入 uname -a
 - [ ] 完善扩展安装逻辑
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x

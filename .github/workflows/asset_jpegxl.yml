@@ -21,7 +21,7 @@ jobs:
           curl -L https://github.com/libjxl/libjxl/archive/8835f5dfc4857f46277f6c703e47ac7817bd7aed.tar.gz | tar -zx
           mv libjxl-* jpegxl
           cd jpegxl
-          sed -i  deps.sh -e 's|download_github testdata|#|'
+          sed -i.bak -e 's|download_github testdata|#|' deps.sh
           ./deps.sh
           cat <<EOF >tools/multicall.cc
           #include <stddef.h>
@@ -76,13 +76,13 @@ jobs:
             return 0;
           }
           EOF
-          sed -i tools/jxlinfo.c -e 's|name = malloc|name = (char*)malloc|g'
-          sed -i tools/jxlinfo.c -e 's|int main(|int cmd_jxlinfo_main(int argc, const char** argv){//|'
-          sed -i tools/cjxl_main.cc -e 's|int main(|int cmd_cjxl_main(int argc, const char** argv){//|'
-          sed -i tools/djxl_main.cc -e 's|int main(|int cmd_djxl_main(int argc, const char** argv){//|'
-          sed -i tools/cjpegli.cc -e 's|int main(|int cmd_cjpegli_main(|' -e 's|namespace {|namespace cjpegli{|' -e 's|::CJpegliMain|::cjpegli::CJpegliMain|'
-          sed -i tools/djpegli.cc -e 's|int main(|int cmd_djpegli_main(|' -e 's|namespace {|namespace djpegli{|' -e 's|::DJpegliMain|::djpegli::DJpegliMain|'
-          sed -i tools/CMakeLists.txt -e 's|# Main compressor.|add_executable\(multicall multicall.cc\)\ntarget_link_libraries\(multicall jxl jxl_extras_codec jxl_extras-internal jxl_threads jxl_tool\)\nendif\(\)\nif\(0\)|'
+          sed -i.bak -e 's|name = malloc|name = (char*)malloc|g' tools/jxlinfo.c
+          sed -i.bak -e 's|int main(|int cmd_jxlinfo_main(int argc, const char** argv){//|' tools/jxlinfo.c
+          sed -i.bak -e 's|int main(|int cmd_cjxl_main(int argc, const char** argv){//|' tools/cjxl_main.cc
+          sed -i.bak -e 's|int main(|int cmd_djxl_main(int argc, const char** argv){//|' tools/djxl_main.cc
+          sed -i.bak -e 's|int main(|int cmd_cjpegli_main(|' -e 's|namespace {|namespace cjpegli{|' -e 's|::CJpegliMain|::cjpegli::CJpegliMain|' tools/cjpegli.cc
+          sed -i.bak -e 's|int main(|int cmd_djpegli_main(|' -e 's|namespace {|namespace djpegli{|' -e 's|::DJpegliMain|::djpegli::DJpegliMain|' tools/djpegli.cc
+          sed -i.bak -e 's|# Main compressor.|add_executable\(multicall multicall.cc\)\ntarget_link_libraries\(multicall jxl jxl_extras_codec jxl_extras-internal jxl_threads jxl_tool\)\nendif\(\)\nif\(0\)|' tools/CMakeLists.txt
           cd ..
           tar -cf jpegxl.tar --dereference jpegxl
   linux-x64:
@@ -101,7 +101,7 @@ jobs:
           tar -xf jpegxl.tar --strip-components 1
           apt update
           apt install -y build-essential pkg-config cmake ninja-build libgif-dev libjpeg-dev libpng-dev
-          sed -i CMakeLists.txt -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||'  -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||'
+          sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||'  -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' CMakeLists.txt
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=OFF -DJPEGXL_ENABLE_AVX512=OFF
           cmake --build build
           mv build/tools/multicall ./jpegxl
@@ -119,6 +119,41 @@ jobs:
           prerelease: true
           tag_name: "${{ 'asset_jpegxl_8835f5d_' }}${{ github.run_id }}"
           files: linux-x64.zip
+  mac-arm64:
+    needs: prepare
+    runs-on: macos-14
+    steps:
+      - name: Restore Cache Tar
+        uses: actions/cache/restore@v4
+        with:
+          enableCrossOsArchive: true
+          key: "asset_jpegxl_8835f5d"
+          path: jpegxl.tar
+      - name: Build
+        run: |
+          tar -xf jpegxl.tar --strip-components 1
+          ( unset CI ; brew install ninja giflib jpeg-turbo libpng )
+          to_bak(){ sudo mv $1 $1.bak ;}
+          to_bak /Library/Frameworks/Mono.framework/Versions/6.12.0/include/gif_lib.h # WHAT THE FUCK
+          to_bak /opt/homebrew/lib/libpng.dylib # static lib instead of dylib
+          to_bak /opt/homebrew/lib/libjpeg.dylib
+          to_bak /opt/homebrew/lib/libgif.dylib
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_FIND_LIBRARY_SUFFIXES='.a' -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=OFF -DJPEGXL_ENABLE_AVX512=OFF
+          cmake --build build
+          mv build/tools/multicall ./jpegxl
+          strip ./jpegxl
+          zip -9 mac-arm64.zip jpegxl
+      - name: Verify
+        run: |
+          otool -L ./jpegxl || true
+          ./jpegxl cjxl -V
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
+          prerelease: true
+          tag_name: "${{ 'asset_jpegxl_8835f5d_' }}${{ github.run_id }}"
+          files: mac-arm64.zip
   win-x64:
     needs: prepare
     runs-on: windows-2022

@@ -153,8 +153,8 @@ jobs:
             return 0;
           }
           EOF
-          brew install llvm ninja giflib jpeg-turbo libpng
-          sudo cp /opt/homebrew/include/gif_lib.h /Library/Frameworks/Mono.framework/Versions/6.12.0/include/gif_lib.h
+          ( unset CI ; brew install llvm ninja giflib jpeg-turbo libpng )
+          ( cd /Library/Frameworks/Mono.framework/Versions/6.12.0/include ; sudo mv gif_lib.h gif_lib.h.bak ) # WHAT THE FUCK
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWEBP_USE_THREAD=OFF
           cmake --build build
           objcopy="$(brew --prefix llvm)/bin/llvm-objcopy"
