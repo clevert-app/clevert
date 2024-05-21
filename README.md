@@ -19,7 +19,8 @@
 - [x] mp4box 三端
 - [x] 加入 uname -a
 - [x] rsync 四端
-- [x] jpegxl macos 有问题，没静态链接。
+- [x] 修复 jpegxl macos 有问题，没静态链接。
+- [ ] 可能可以在 mac 上跑虚拟机 linux/win arm64 ？ https://docs.orbstack.dev/machines/ https://docs.orbstack.dev/quick-start
 - [ ] 完善扩展安装逻辑
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 实现一个代码量最少的，用于 bootstrap 的 node unzip
@@ -38,6 +39,7 @@
 - [ ] 约定扩展目录是 id_1.2.3
 - [ ] 官方扩展 jpegxl
 - [ ] https://github.com/rsyncOSX/RsyncOSX
+- [ ] https://v2ex.com/t/1042387
 - [ ] 扩展商店初步
 
 ## 仓库结构
@@ -70,6 +72,11 @@
 利用 macos arm64 环境，虚拟化来跑 linux arm64 和 win arm64 的编译，尽量避免交叉编译，减少折腾。
 
 windows 可能需要支持 win arm64，以后可以当成宣传的卖点？高通那款芯片什么时候出啊。
+
+```sh
+# https://stackoverflow.com/a/73388939
+nm --dynamic --undefined-only --with-symbol-versions ./jpegxl | grep GLIBC | sed -e 's#.\+@##' | sort --unique
+```
 
 ## 其他
 

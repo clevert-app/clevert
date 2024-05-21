@@ -8,21 +8,18 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Build
-        shell: sudo bash -e {0}
         run: |
-          apt update
-          apt install -y musl-tools make gawk autoconf automake acl attr zlib1g-dev libattr1-dev libzstd-dev
-          curl -L https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.2.tar.gz | tar -zx
-          make -C xxHash-0.8.2 CC="musl-gcc -O3 -static" -j$(nproc)
-          curl -L https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.4.tar.gz | tar -zx
-          musl-gcc -c mimalloc-2.1.4/src/static.c -I mimalloc-2.1.4/include -o mimalloc.o -O2
+          sudo apt update
+          sudo apt install -y musl-tools make automake
+          curl \
+            -O -L http://ftp.debian.org/debian/pool/main/x/xxhash/libxxhash-dev_0.8.2-2+b1_amd64.deb \
+            -O -L http://ftp.debian.org/debian/pool/main/libz/libzstd/libzstd-dev_1.5.5+dfsg2-2_amd64.deb \
+            --parallel
+          for v in *.deb; do dpkg -x $v _debs; done
           curl -L https://github.com/RsyncProject/rsync/archive/refs/tags/v3.3.0.tar.gz | tar -zx --strip-components 1
-          cp -R -n /usr/include/zstd.h /usr/include/x86_64-linux-musl/
-          cp -R -n /usr/lib/x86_64-linux-gnu/libzstd.a /usr/lib/x86_64-linux-musl/
-          export CC="musl-gcc -O2 -static -I ./popt -I xxHash-0.8.2 -L xxHash-0.8.2 mimalloc.o"
+          export CC="musl-gcc -s -static -O2 -I _debs/usr/include -L _debs/usr/lib/x86_64-linux-gnu"
           ./configure CC="$CC" --disable-lz4 --disable-openssl --disable-md2man --disable-debug
           make CC="$CC" -j$(nproc)
-          strip rsync
           zip -9 linux-x64.zip rsync
       - name: Verify
         run: |
@@ -32,47 +29,38 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           tag_name: "${{ 'asset_rsync_3.3.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
   linux-arm64:
-    runs-on: ubuntu-22.04
+    runs-on: warp-ubuntu-2204-x64-2x
     steps:
       - name: Build
-        shell: sudo bash -e {0}
         run: |
-          curl -o libzstd-dev_arm64.deb -L http://ftp.debian.org/debian/pool/main/libz/libzstd/libzstd-dev_1.5.4+dfsg2-5_arm64.deb ; dpkg -x ./libzstd-dev_arm64.deb ./ # https://packages.debian.org/stable/libzstd-dev
-          curl -o libxxhash-dev_arm64.deb -L http://ftp.debian.org/debian/pool/main/x/xxhash/libxxhash-dev_0.8.1-1_arm64.deb ; dpkg -x ./libxxhash-dev_arm64.deb ./
-          chmod -R 777 ./
-          apt update
-          apt install -y binutils-aarch64-linux-gnu make gawk autoconf automake acl attr
-          curl https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz | tar -Jx
-          curl -L https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.4.tar.gz | tar -zx
-          zig-linux-x86_64-0.12.0/zig cc  -target aarch64-linux-musl -c mimalloc-2.1.4/src/static.c -I mimalloc-2.1.4/include -o mimalloc.o -O2
+          sudo apt update
+          sudo apt install -y musl-tools make automake
+          curl \
+            -O -L http://ftp.debian.org/debian/pool/main/x/xxhash/libxxhash-dev_0.8.2-2+b1_arm64.deb \
+            -O -L http://ftp.debian.org/debian/pool/main/libz/libzstd/libzstd-dev_1.5.5+dfsg2-2_arm64.deb \
+            --parallel
+          for v in *.deb; do dpkg -x $v _debs; done
           curl -L https://github.com/RsyncProject/rsync/archive/refs/tags/v3.3.0.tar.gz | tar -zx --strip-components 1
-          export CC="zig-linux-x86_64-0.12.0/zig cc -target aarch64-linux-musl -O2 -I usr/include -L usr/lib/aarch64-linux-gnu"
-          ./configure CC="$CC" --host aarch64 --disable-lz4 --disable-openssl --disable-md2man --disable-debug
-          sed -i Makefile -e 's|OBJS1=|OBJS1=mimalloc.o |'
-          make CC="$CC" -j$(nproc) || true
-          aarch64-linux-gnu-strip rsync
+          export CC="musl-gcc -s -static -O2 -I _debs/usr/include -L _debs/usr/lib/aarch64-linux-gnu"
+          ./configure CC="$CC" --disable-lz4 --disable-openssl --disable-md2man --disable-debug
+          make CC="$CC" -j$(nproc)
           zip -9 linux-arm64.zip rsync
       - name: Verify
-        uses: uraimo/run-on-arch-action@v2
-        with:
-          arch: aarch64
-          distro: bookworm
-          dockerRunArgs: --volume "${PWD}:/workdir"
-          run: |
-            uname -a
-            ldd /workdir/rsync || true
-            /workdir/rsync -V
+        run: |
+          uname -a
+          ldd ./rsync || true
+          ./rsync -V
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
           tag_name: "${{ 'asset_rsync_3.3.0_' }}${{ github.run_id }}"
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           files: linux-arm64.zip
   mac-arm64:
     runs-on: macos-14
@@ -94,9 +82,9 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
           tag_name: "${{ 'asset_rsync_3.3.0_' }}${{ github.run_id }}"
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           files: mac-arm64.zip
   win-x64:
     runs-on: windows-2022
@@ -116,17 +104,17 @@ jobs:
           zip -9 win-x64.zip rsync.exe msys-2.0.dll
       - name: Verify
         run: |
-          uname -a
-          ldd ./rsync.exe || true
-          ./rsync.exe -V
+          C:\msys64\usr\bin\uname -a
+          C:\msys64\usr\bin\ldd rsync.exe
+          rsync.exe -V
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
           tag_name: "${{ 'asset_rsync_3.3.0_' }}${{ github.run_id }}"
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           files: win-x64.zip
 # Tips:
-# - xxhash must be enabled, it improved the performance a lot
-# - linux-x64 and linux-arm64 totaly static, unlike other asstes, because I want to use them for other purpose like android phone and clean docker container
-# - win-x64 depends on msys2 dll, it's unavoidable currently
+# - Must enable xxhash, it improved the performance a lot.
+# - The linux-x64 and linux-arm64 totaly static, unlike other asstes, because I want to use them for other purpose like android phone and empty docker container.
+# - The win-x64 depends on msys2 dll, it's unavoidable currently. Try to fix?
