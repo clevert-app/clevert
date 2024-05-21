@@ -34,7 +34,7 @@ jobs:
           tag_name: "${{ 'asset_rsync_3.3.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
   linux-arm64:
-    runs-on: warp-ubuntu-2204-x64-2x
+    runs-on: warp-ubuntu-2204-arm64-2x
     steps:
       - name: Build
         run: |
