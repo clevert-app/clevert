@@ -84,7 +84,7 @@ jobs:
           cmake -B build -DECT_MULTITHREADING=OFF -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
           cmake --build build --config Release
           copy build\Release\ect.exe ect.exe
-          C:\msys64\usr\bin\zip -9 win-x64 ect.exe
+          7z a win-x64.zip ect.exe -mx=9
       - name: Verify
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
         run: |
