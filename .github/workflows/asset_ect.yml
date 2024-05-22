@@ -69,9 +69,9 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1
-          curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng :: the old one, match ect's submodule
-          curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg
+          curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -f - -zx --strip-components 1
+          curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -f - -zx --strip-components 1 -C src/libpng :: the old one, match ect's submodule
+          curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -f - -zx --strip-components 1 -C src/mozjpeg
           C:\msys64\usr\bin\mv src/* ./
           C:\msys64\usr\bin\sed -i.bak "s|set(PNG_BUILD_ZLIB |#|" optipng/CMakeLists.txt
           C:\msys64\usr\bin\sed -i.bak "s|message(FATAL_ERROR |#|" mozjpeg/CMakeLists.txt
