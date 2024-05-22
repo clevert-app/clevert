@@ -102,3 +102,30 @@ jobs:
 # https://github.com/google/zopfli/pull/119
 # https://github.com/fhanau/Efficient-Compression-Tool
 # curl -L https://github.com/JayXon/Leanify/archive/9daa4303cdc03f6b90b72c369e6377c6beb75c39.tar.gz | tar -zx --strip-components 1
+
+# [kkocdko@klf misc]$ time ./ect -7 a.ect-7.png
+# Processed 1 file
+# Saved 145.62KB out of 405.88KB (35.8765%)
+# real 0m6.239s
+# user 0m6.187s
+# sys 0m0.028s
+# [kkocdko@klf misc]$ time ./ect -7 a.ect-7.png
+# Processed 1 file
+# Saved 0B out of 260.27KB (0.0000%)
+# real 0m6.183s
+# user 0m6.137s
+# sys 0m0.031s
+
+# [kkocdko@klf misc]$ time ./leanify_avx2_core a.leanify.png
+# Processing: a.leanify.png
+# 405.88 KB -> 260.12 KB Leanified: 145.76 KB (35.91%)
+# 405.88 KB -> 260.12 KB Leanified: 145.76 KB (35.91%)
+# real 0m44.216s
+# user 0m44.005s
+# sys 0m0.056s
+# [kkocdko@klf misc]$ time ./leanify_avx2_core a.leanify.png
+# Processing: a.leanify.png
+# 260.12 KB -> 260.12 KB Leanified: 0 B (0.00%)
+# real 0m43.796s
+# user 0m43.641s
+# sys 0m0.037s
