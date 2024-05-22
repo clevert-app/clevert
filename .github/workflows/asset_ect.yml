@@ -67,7 +67,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: Build
-        shell: cmd.exe
+        shell: cmd
         run: |
           curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1
           curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng :: the old one, match ect's submodule
