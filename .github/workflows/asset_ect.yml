@@ -1,0 +1,103 @@
+name: asset_ect
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  linux-x64:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Build
+        run: |
+          curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
+          curl -L https://github.com/pnggroup/libpng/archive/f1848a3b560ddcad065242268433af475948461e.tar.gz | tar -zx --strip-components 1 -C src/libpng # 1.6.44
+          curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg # 4.1.5
+          mv src/* ./
+          sed -i.bak 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
+          sed -i.bak 's|message(FATAL_ERROR |#|' mozjpeg/CMakeLists.txt
+          sed -i.bak 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" -flto " -DCMAKE_C_FLAGS=" -flto " -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
+          cmake --build build
+          mv build/ect .
+          strip ect
+          zip -9 linux-x64.zip ect
+      - name: Verify
+        run: |
+          uname -a
+          ldd --version
+          ldd ./ect || true
+          ./ect
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
+          tag_name: "${{ 'asset_ect_0.9.5_' }}${{ github.run_id }}"
+          files: linux-x64.zip
+  mac-arm64:
+    runs-on: macos-14
+    steps:
+      - name: Build
+        run: |
+          curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
+          curl -L https://github.com/pnggroup/libpng/archive/f1848a3b560ddcad065242268433af475948461e.tar.gz | tar -zx --strip-components 1 -C src/libpng # 1.6.44
+          curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg # 4.1.5
+          mv src/* ./
+          sed -i.bak 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
+          sed -i.bak 's|message(FATAL_ERROR |#|' mozjpeg/CMakeLists.txt
+          sed -i.bak 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" -flto " -DCMAKE_C_FLAGS=" -flto " -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
+          cmake --build build
+          mv build/ect .
+          strip ect
+          zip -9 mac-arm64.zip ect
+      - name: Verify
+        run: |
+          uname -a
+          otool -L ./ect || true
+          ./ect
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
+          tag_name: "${{ 'asset_ect_0.9.5_' }}${{ github.run_id }}"
+          files: mac-arm64.zip
+  win-x64:
+    runs-on: windows-2022
+    steps:
+      - name: Build
+        shell: cmd.exe
+        run: |
+          curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1
+          curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng :: the old one, match ect's submodule
+          curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg
+          C:\msys64\usr\bin\mv src/* ./
+          C:\msys64\usr\bin\sed -i.bak "s|set(PNG_BUILD_ZLIB |#|" optipng/CMakeLists.txt
+          C:\msys64\usr\bin\sed -i.bak "s|message(FATAL_ERROR |#|" mozjpeg/CMakeLists.txt
+          C:\msys64\usr\bin\sed -i.bak "s|option(PNG_SUPPORTED |option(PNG_SUPPORTED '' FALSE) #|" mozjpeg/CMakeLists.txt
+          C:\msys64\usr\bin\sed -i.bak "s|option(ENABLE_SHARED |option(ENABLE_SHARED '' FALSE) #|" mozjpeg/CMakeLists.txt
+          C:\msys64\usr\bin\sed -i.bak "s|find_package(ZLIB REQUIRED)|#|" libpng/CMakeLists.txt
+          C:\msys64\usr\bin\sed -i.bak "s|__restrict__||g" zopfli/match.h
+          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -B build -DECT_MULTITHREADING=OFF -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build build --config Release
+          copy build\Release\ect.exe ect.exe
+          C:\msys64\usr\bin\zip -9 win-x64 ect.exe
+      - name: Verify
+        shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
+        run: |
+          uname -a
+          ldd ./ect.exe || true
+          ./ect.exe
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
+          tag_name: "${{ 'asset_ect_0.9.5_' }}${{ github.run_id }}"
+          files: win-x64.zip
+# ect is much faster than leanify / origin zopfli
+# https://github.com/google/zopfli/pull/119
+# https://github.com/fhanau/Efficient-Compression-Tool
+# curl -L https://github.com/JayXon/Leanify/archive/9daa4303cdc03f6b90b72c369e6377c6beb75c39.tar.gz | tar -zx --strip-components 1
