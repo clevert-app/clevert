@@ -99,7 +99,7 @@ jobs:
           tar -xf jpegxl.tar --strip-components 1
           sudo apt update
           sudo apt install -y build-essential pkg-config cmake ninja-build libgif-dev libjpeg-dev libpng-dev
-          sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||'  -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' CMakeLists.txt
+          sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||'  -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
           to_bak(){ sudo mv $1 $1.bak ;}
           to_bak /usr/lib/x86_64-linux-gnu/libz.a
           to_bak /usr/lib/x86_64-linux-gnu/libpthread.a
