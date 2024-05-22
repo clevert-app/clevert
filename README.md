@@ -20,7 +20,9 @@
 - [x] 加入 uname -a
 - [x] rsync 四端
 - [x] 修复 jpegxl macos 有问题，没静态链接。
-- [ ] 可能可以在 mac 上跑虚拟机 linux/win arm64 ？ https://docs.orbstack.dev/machines/ https://docs.orbstack.dev/quick-start
+- [x] 可能 (不可能，不支持嵌套虚拟化，已使用 warpbuild 替代) 可以在 mac 上跑虚拟机 linux/win arm64 ？ https://docs.orbstack.dev/machines/ https://docs.orbstack.dev/quick-start
+- [x] jpegxl: 链接自己的 jpegli 而不是传统 libjpeg-turbo (暂时不考虑了)，linux 下使用系统的 zlib 动态链接
+- [ ] 先不要纠结 assets 了
 - [ ] 完善扩展安装逻辑
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 实现一个代码量最少的，用于 bootstrap 的 node unzip
@@ -63,7 +65,7 @@
 
 我们自己编译的，统一用 zip -9
 
-- linux 要求环境必须为主流的环境，保证 glibc，libgcc，libstdc++，libz 可用。其他依赖应当静态链接。标准是 debian oldstable。
+- linux 要求环境必须为主流的环境，保证 glibc，libgcc，libstdc++，libz 可用。其他依赖应当静态链接。标准是 docker debian:12。
 - win 大多数时候使用 msys2 mingw，某些时候可能会需要 msys2 cygwin 比如 rsync，也尽量不要依赖 vc runtime。
 - mac 还没想好。
 

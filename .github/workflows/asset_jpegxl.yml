@@ -12,11 +12,10 @@ jobs:
         uses: actions/cache@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_8835f5d"
+          key: "asset_jpegxl_8835f5d_2"
           path: jpegxl.tar
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
-        shell: sudo bash -e {0}
         run: |
           curl -L https://github.com/libjxl/libjxl/archive/8835f5dfc4857f46277f6c703e47ac7817bd7aed.tar.gz | tar -zx
           mv libjxl-* jpegxl
@@ -93,16 +92,18 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_8835f5d"
+          key: "asset_jpegxl_8835f5d_2"
           path: jpegxl.tar
       - name: Build
-        shell: sudo bash -e {0}
         run: |
           tar -xf jpegxl.tar --strip-components 1
-          apt update
-          apt install -y build-essential pkg-config cmake ninja-build libgif-dev libjpeg-dev libpng-dev
+          sudo apt update
+          sudo apt install -y build-essential pkg-config cmake ninja-build libgif-dev libjpeg-dev libpng-dev
           sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||'  -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' CMakeLists.txt
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=OFF -DJPEGXL_ENABLE_AVX512=OFF
+          to_bak(){ sudo mv $1 $1.bak ;}
+          to_bak /usr/lib/x86_64-linux-gnu/libz.a
+          to_bak /usr/lib/x86_64-linux-gnu/libpthread.a
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF
           cmake --build build
           mv build/tools/multicall ./jpegxl
           strip ./jpegxl
@@ -116,8 +117,8 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           tag_name: "${{ 'asset_jpegxl_8835f5d_' }}${{ github.run_id }}"
           files: linux-x64.zip
   mac-arm64:
@@ -128,7 +129,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_8835f5d"
+          key: "asset_jpegxl_8835f5d_2"
           path: jpegxl.tar
       - name: Build
         run: |
@@ -139,7 +140,8 @@ jobs:
           to_bak /opt/homebrew/lib/libpng.dylib # static lib instead of dylib
           to_bak /opt/homebrew/lib/libjpeg.dylib
           to_bak /opt/homebrew/lib/libgif.dylib
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_FIND_LIBRARY_SUFFIXES='.a' -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_DEVTOOLS=OFF # FUCK the -DJPEGXL_STATIC=ON
+          sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||'  -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' CMakeLists.txt
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF
           cmake --build build
           mv build/tools/multicall ./jpegxl
           strip ./jpegxl
@@ -152,8 +154,8 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           tag_name: "${{ 'asset_jpegxl_8835f5d_' }}${{ github.run_id }}"
           files: mac-arm64.zip
   win-x64:
@@ -164,7 +166,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_8835f5d"
+          key: "asset_jpegxl_8835f5d_2"
           path: jpegxl.tar
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
@@ -184,7 +186,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           prerelease: true
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           tag_name: "${{ 'asset_jpegxl_8835f5d_' }}${{ github.run_id }}"
           files: win-x64.zip
