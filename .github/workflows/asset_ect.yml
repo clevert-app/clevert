@@ -9,22 +9,30 @@ jobs:
     steps:
       - name: Build
         run: |
+          # sudo apt install clang
           curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
-          curl -L https://github.com/pnggroup/libpng/archive/f1848a3b560ddcad065242268433af475948461e.tar.gz | tar -zx --strip-components 1 -C src/libpng # 1.6.44
+          curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng
           curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg # 4.1.5
           mv src/* ./
           sed -i.bak 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
           sed -i.bak 's|message(FATAL_ERROR |#|' mozjpeg/CMakeLists.txt
           sed -i.bak 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
-          s="-flto -fprofile-dir=$(pwd)/pgo -fprofile-generate=$(pwd)/pgo"
+          sed -i.bak "s|find_package(ZLIB REQUIRED)|#|" libpng/CMakeLists.txt
+          export CC="clang"
+          export CXX="clang++"
+          rm -rf build pgo-* sample.*
+          s="-flto -fprofile-instr-generate"
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" $s " -DCMAKE_C_FLAGS=" $s " -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
           cmake --build build
-          curl -o a.png -L 'https://user-images.githubusercontent.com/35271042/118224532-3842c400-b438-11eb-923d-a5f66fa6785a.png'
-          ./build/ect -5 a.png
-          ./build/ect -5 -zip _a.zip ./build/ect
-          ./build/ect -5 -gzip ./build/ect
+          curl -o sample.png -L 'https://user-images.githubusercontent.com/35271042/118224532-3842c400-b438-11eb-923d-a5f66fa6785a.png'
+          curl -o sample.tar.gz -L 'https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-musl.tar.gz'
+          gzip -d sample.tar.gz
+          LLVM_PROFILE_FILE="pgo-1.profraw" ./build/ect -5 -gzip ./sample.tar
+          LLVM_PROFILE_FILE="pgo-2.profraw" ./build/ect -5 -zip _a.zip ./sample.tar
+          LLVM_PROFILE_FILE="pgo-3.profraw" ./build/ect -5 --allfilters sample.png
+          llvm-profdata merge -output=pgo-0.profdata pgo-*.profraw
           rm -rf build
-          s="-fprofile-dir=$(pwd)/pgo -fprofile-use=$(pwd)/pgo -fprofile-correction"
+          s="-flto -fprofile-instr-use=$(pwd)/pgo-0.profdata"
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" $s " -DCMAKE_C_FLAGS=" $s " -DECT_MULTITHREADING=OFF 
           cmake --build build
           mv build/ect .
