@@ -63,6 +63,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect/ect -5 ect.png '
 - [ ] https://github.com/rsyncOSX/RsyncOSX
 - [ ] https://v2ex.com/t/1042387
 - [ ] 扩展商店初步
+- [ ] 改进 PGO 抽奖技术
 
 ## 仓库结构
 
