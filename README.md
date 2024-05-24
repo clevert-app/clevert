@@ -5,6 +5,24 @@
 <details>
 <summary>笔记</summary>
 
+```sh
+sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
+apt update ; apt install -y build-essential pkg-config cmake ninja-build curl
+export ALL_PROXY="socks://192.168.1.128:1090"
+```
+
+## 编译优化
+
+- https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html#Instrumentation-Options
+- https://gist.github.com/daniel-j-h/c4b109bff0b717fc9b24
+- https://github.com/zamazan4ik/awesome-pgo/#pgo-support-in-programming-languages-and-compilers
+- https://rigtorp.se/notes/pgo/
+- https://github.com/llvm/llvm-project/blob/main/bolt/README.md (但是 BOLT 似乎只对超大型程序效果显著)
+
+```sh
+clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect/ect -5 ect.png '
+```
+
 ## 开发进度
 
 - [x] 弄明白 electron nodeIntegration (不再使用)
@@ -22,7 +40,9 @@
 - [x] 修复 jpegxl macos 有问题，没静态链接。
 - [x] 可能 (不可能，不支持嵌套虚拟化，已使用 warpbuild 替代) 可以在 mac 上跑虚拟机 linux/win arm64 ？ https://docs.orbstack.dev/machines/ https://docs.orbstack.dev/quick-start
 - [x] jpegxl: 链接自己的 jpegli 而不是传统 libjpeg-turbo (暂时不考虑了)，linux 下使用系统的 zlib 动态链接
-- [ ] 先不要纠结 assets 了
+- [x] 先不要纠结编译 assets 了
+- [x] 不要尝试给 ect 增加不写入旧文件的逻辑。很麻烦很麻烦的。在扩展里面用复制文件的方法来替代。
+- [ ] ect 的 zip 和 gzip 优化需要先解压再压缩。ect 似乎不支持 unicode 文件名？这些都是可以考虑的，让扩展去做的补救措施。
 - [ ] 完善扩展安装逻辑
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 实现一个代码量最少的，用于 bootstrap 的 node unzip
