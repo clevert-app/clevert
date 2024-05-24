@@ -23,21 +23,23 @@ jobs:
           export CC="clang"
           export CXX="clang++"
           rm -rf build pgo-* sample.*
-          s="-flto -fprofile-instr-generate"
+          s="-flto -fprofile-generate"
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" $s " -DCMAKE_C_FLAGS=" $s " -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
           cmake --build build
           curl \
-            -o sample.1.png -L https://user-images.githubusercontent.com/35271042/118224532-3842c400-b438-11eb-923d-a5f66fa6785a.png \
-            -o sample.2.png -L https://raw.githubusercontent.com/microsoft/.github/105835e2f9324920c7b08d93364c70b4a6f4d4eb/images/open-at-microsoft.png \
+            -o sample.1.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png \
+            -o sample.2.png -L https://user-images.githubusercontent.com/35271042/118224532-3842c400-b438-11eb-923d-a5f66fa6785a.png \
+            -o sample.3.png -L https://raw.githubusercontent.com/microsoft/.github/105835e2f9324920c7b08d93364c70b4a6f4d4eb/images/open-at-microsoft.png \
             -o sample.tar.gz -L https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-musl.tar.gz \
             --parallel
           gzip -d sample.tar.gz
-          LLVM_PROFILE_FILE="pgo-1.profraw" ./build/ect -5 -gzip ./sample.tar
-          LLVM_PROFILE_FILE="pgo-2.profraw" ./build/ect -5 -zip sample.zip ./sample.tar
-          LLVM_PROFILE_FILE="pgo-3.profraw" ./build/ect -5 --allfilters sample.1.png sample.2.png
+          LLVM_PROFILE_FILE="pgo-1.profraw" ./build/ect -4 -gzip ./sample.tar
+          LLVM_PROFILE_FILE="pgo-2.profraw" ./build/ect -4 -zip sample.zip ./sample.tar
+          LLVM_PROFILE_FILE="pgo-3.profraw" ./build/ect -3 --allfilters sample.1.png
+          LLVM_PROFILE_FILE="pgo-4.profraw" ./build/ect -5 sample.2.png sample.3.png
           llvm-profdata merge -output=pgo-0.profdata pgo-*.profraw
           rm -rf build
-          s="-flto -fprofile-instr-use=$(pwd)/pgo-0.profdata"
+          s="-flto -fprofile-use=$(pwd)/pgo-0.profdata"
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" $s " -DCMAKE_C_FLAGS=" $s " -DECT_MULTITHREADING=OFF 
           cmake --build build
           mv build/ect .
