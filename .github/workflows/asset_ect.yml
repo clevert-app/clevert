@@ -16,7 +16,16 @@ jobs:
           sed -i.bak 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
           sed -i.bak 's|message(FATAL_ERROR |#|' mozjpeg/CMakeLists.txt
           sed -i.bak 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" -flto " -DCMAKE_C_FLAGS=" -flto " -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
+          s="-flto -fprofile-dir=$(pwd)/pgo -fprofile-generate=$(pwd)/pgo"
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" $s " -DCMAKE_C_FLAGS=" $s " -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
+          cmake --build build
+          curl -o a.png -L 'https://user-images.githubusercontent.com/35271042/118224532-3842c400-b438-11eb-923d-a5f66fa6785a.png'
+          ./build/ect -5 a.png
+          ./build/ect -5 -zip _a.zip ./build/ect
+          ./build/ect -5 -gzip ./build/ect
+          rm -rf build
+          s="-fprofile-dir=$(pwd)/pgo -fprofile-use=$(pwd)/pgo -fprofile-correction"
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" $s " -DCMAKE_C_FLAGS=" $s " -DECT_MULTITHREADING=OFF 
           cmake --build build
           mv build/ect .
           strip ect
