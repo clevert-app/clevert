@@ -9,7 +9,9 @@ jobs:
     steps:
       - name: Build
         run: |
-          # sudo apt install clang
+          # sudo apt update
+          # sudo apt install clang-15
+          export PATH="/usr/lib/llvm-15/bin:$PATH"
           curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
           curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng
           curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg # 4.1.5
