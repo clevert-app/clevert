@@ -23,7 +23,7 @@ jobs:
           export CC="clang"
           export CXX="clang++"
           rm -rf build pgo-* sample.*
-          s="-flto -fprofile-generate"
+          s="-flto -fprofile-instr-generate"
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" $s " -DCMAKE_C_FLAGS=" $s " -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
           cmake --build build
           curl \
@@ -37,7 +37,7 @@ jobs:
           LLVM_PROFILE_FILE="pgo-3.profraw" ./build/ect -5 --allfilters sample.1.png sample.2.png
           llvm-profdata merge -output=pgo-0.profdata pgo-*.profraw
           rm -rf build
-          s="-flto -fprofile-use=$(pwd)/pgo-0.profdata"
+          s="-flto -fprofile-instr-use=$(pwd)/pgo-0.profdata"
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=" $s " -DCMAKE_C_FLAGS=" $s " -DECT_MULTITHREADING=OFF 
           cmake --build build
           mv build/ect .
