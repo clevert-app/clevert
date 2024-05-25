@@ -9,12 +9,9 @@ jobs:
     steps:
       - name: Build
         run: |
-          sudo sh -c 'printf "deb http://archive.ubuntu.com/ubuntu/ noble main restricted\ndeb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted\ndeb http://archive.ubuntu.com/ubuntu/ noble universe\ndeb http://archive.ubuntu.com/ubuntu/ noble-updates universe\n" >> /etc/apt/sources.list'
+          sudo sh -c 'printf "deb [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main\ndeb-src [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main\n" >> /etc/apt/sources.list'
           sudo apt update
-          sudo apt install clang-18/noble
-          curl -o _llvmgold.deb -L "https://apt.llvm.org/mantic/pool/main/l/llvm-toolchain-18/llvm-18-linker-tools_18.1.6~%2B%2B20240518023429%2B1118c2e05e67-1~exp1~20240518143527.144_amd64.deb" # https://github.com/llvm/llvm-project/issues/84271#issuecomment-2016467829
-          dpkg -x _llvmgold.deb _llvmgold
-          sudo cp _llvmgold/usr/lib/llvm-18/lib/LLVMgold.so /usr/lib/llvm-18/lib/LLVMgold.so
+          sudo apt install -y clang-18/llvm-toolchain-jammy-18
           export PATH="/usr/lib/llvm-18/bin:$PATH"
           curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
           curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng
