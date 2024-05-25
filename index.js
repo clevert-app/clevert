@@ -1,12 +1,14 @@
 // @ts-check
-import { readFile, writeFile } from "node:fs/promises";
-import { mkdir, readdir, rename, rm } from "node:fs/promises";
+// import { readFile, writeFile } from "node:fs/promises";
+// import { mkdir, readdir, rename, rm } from "node:fs/promises";
+// import { mkdir, readdir, rename, rm } from "node:fs/promises";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import path from "node:path";
+import child_process from "node:child_process";
+import os from "node:os";
 import http from "node:http";
 import https from "node:https";
-import path from "node:path";
-import fs from "node:fs";
-import os from "node:os";
-import child_process from "node:child_process";
 import util from "node:util";
 import events from "node:events";
 import zlib from "node:zlib";
@@ -20,6 +22,8 @@ const StreamZip = (() => {
 
   // @license node-stream-zip | (c) 2020 Antelle | https://github.com/antelle/node-stream-zip/blob/master/LICENSE
   // Portions copyright https://github.com/cthackers/adm-zip | https://raw.githubusercontent.com/cthackers/adm-zip/master/LICENSE
+
+  // https://github.com/microsoft/TypeScript/issues/19573
 
   const consts = {
     /* The local file header */
@@ -2004,8 +2008,8 @@ const inServer = async () => {
       ? "mac-arm64"
       : assert(false, "unsupported platform")
   );
-  await mkdir(PATH_EXTENSIONS, { recursive: true });
-  await mkdir(PATH_CACHE, { recursive: true });
+  await fsp.mkdir(PATH_EXTENSIONS, { recursive: true });
+  await fsp.mkdir(PATH_CACHE, { recursive: true });
 
   const PARALLEL = 2;
   const runners = /** @type {Map<number, Runner>} */ (new Map());
@@ -2026,7 +2030,7 @@ const inServer = async () => {
     // TODO: 自动多源头下载
     const res = await fetch(url);
     const ab = await res.arrayBuffer();
-    await writeFile(path, Buffer.from(ab));
+    await fsp.writeFile(path, Buffer.from(ab));
   };
 
   const genEntries = async (
@@ -2038,7 +2042,7 @@ const inServer = async () => {
       }
       const entries = [];
       const inputDir = solvePath(false, opts.inputDir);
-      for (const v of await readdir(inputDir, {
+      for (const v of await fsp.readdir(inputDir, {
         withFileTypes: true,
         recursive: true,
       })) {
@@ -2070,7 +2074,7 @@ const inServer = async () => {
     }
 
     if (req.url === "/index.js") {
-      const buffer = await readFile(import.meta.filename);
+      const buffer = await fsp.readFile(import.meta.filename);
       const ret = excludeImport(buffer.toString(), /^node:.+$/);
       res.setHeader("Content-Type", "text/javascript; charset=utf-8");
       res.writeHead(200);
@@ -2173,7 +2177,7 @@ const inServer = async () => {
       const extensionMainJs = /** @type {string} */ (
         solvePath(true, PATH_EXTENSIONS, extensionId, "/index.js")
       );
-      const buffer = await readFile(extensionMainJs);
+      const buffer = await fsp.readFile(extensionMainJs);
       const ret = excludeImport(buffer.toString(), /^node:.+$/);
       res.setHeader("Content-Type", "text/javascript; charset=utf-8");
       res.writeHead(200);
@@ -2183,7 +2187,7 @@ const inServer = async () => {
 
     if (req.url === "/list-extensions") {
       const ret = /** @type {ListExtensionsResponse} */ ([]);
-      for (const entry of await readdir(PATH_EXTENSIONS)) {
+      for (const entry of await fsp.readdir(PATH_EXTENSIONS)) {
         const extensionIndexJs = /** @type {string} */ (
           solvePath(true, PATH_EXTENSIONS, entry, "/index.js")
         );
@@ -2223,8 +2227,8 @@ const inServer = async () => {
       const extensionDir = /** @type {string} */ (
         solvePath(true, PATH_EXTENSIONS, extension.id)
       );
-      await mkdir(extensionDir);
-      await rename(extensionTempIndexJs, extensionDir + "/index.js");
+      await fsp.mkdir(extensionDir);
+      await fsp.rename(extensionTempIndexJs, extensionDir + "/index.js");
       for (const asset of extension.assets) {
         if (asset.platform !== CURRENT_PLATFORM) {
           continue;
@@ -2248,14 +2252,14 @@ const inServer = async () => {
           PATH_CACHE + "/downloading-" + nextInt() + "." + assetExtName;
         await download(asset.url, assetTemp);
         if (asset.kind === "raw") {
-          await rename(assetTemp, extensionDir + "/" + asset.path);
+          await fsp.rename(assetTemp, extensionDir + "/" + asset.path);
         } else if (asset.kind === "zip") {
           const extractDir = extensionDir + "/" + asset.path;
           await child_process.spawn("unzip", [assetTemp, "-d", extractDir]);
         } else {
           assert(false, "unsupported yet");
         }
-        await rm(assetTemp, { recursive: true });
+        await fsp.rm(assetTemp, { recursive: true });
       }
       res.setHeader("Content-Type", "application/json");
       res.writeHead(200);
@@ -2299,7 +2303,7 @@ const inElectron = async () => {
         return new Response(new Blob([page()], { type }));
       }
       if (req.url === "resource:///index.js") {
-        const buffer = await readFile(import.meta.filename);
+        const buffer = await fsp.readFile(import.meta.filename);
         const type = "text/javascript; charset=utf-8";
         return new Response(new Blob([buffer], { type }));
       }
