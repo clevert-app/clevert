@@ -22,8 +22,8 @@ jobs:
           sed -i.bak "s|find_package(ZLIB REQUIRED)|#|" libpng/CMakeLists.txt
           export CC="clang"
           export CXX="clang++"
-          # curl -o pgo-0.profdata.zip -L https://github.com/clevert-app/clevert/releases/download/asset_pgo_files_store/asset_ect_linux-x64_1716610476.zip # github actions' machine is not enough stable to generate good profile
-          # unzip pgo-0.profdata.zip
+          curl -o pgo-0.profdata.zip -L https://github.com/clevert-app/clevert/releases/download/asset_pgo_files_store/asset_ect_linux-x64_1716610476.zip # github actions' machine is not enough stable to generate good profile
+          unzip pgo-0.profdata.zip
           if [ ! -e pgo-0.profdata ]; then
           rm -rf build pgo-*
           s="-flto -fprofile-instr-generate"
@@ -52,7 +52,7 @@ jobs:
           LLVM_PROFILE_FILE="pgo-01.profraw" ./build/ect -5 -gzip _sample/7.tar
           LLVM_PROFILE_FILE="pgo-02.profraw" ./build/ect -5 -gzip _sample/8.tar
           LLVM_PROFILE_FILE="pgo-03.profraw" ./build/ect -5 -zip _sample/9.zip _sample/7.tar _sample/8.tar
-          LLVM_PROFILE_FILE="pgo-04.profraw" ./build/ect -2 --allfilters _sample/1.png _sample/3.png _sample/5.png
+          LLVM_PROFILE_FILE="pgo-04.profraw" ./build/ect -3 --allfilters _sample/1.png _sample/3.png _sample/5.png
           LLVM_PROFILE_FILE="pgo-05.profraw" ./build/ect -5 _sample/2.png _sample/4.png _sample/6.png
           rm -rf _sample
           cp -R _sample_bak _sample
@@ -65,7 +65,7 @@ jobs:
           LLVM_PROFILE_FILE="pgo-11.profraw" ./build/ect -5 -gzip _sample/7.tar
           LLVM_PROFILE_FILE="pgo-12.profraw" ./build/ect -5 -gzip _sample/8.tar
           LLVM_PROFILE_FILE="pgo-13.profraw" ./build/ect -5 -zip _sample/9.zip _sample/7.tar _sample/8.tar
-          LLVM_PROFILE_FILE="pgo-14.profraw" ./build/ect -2 --allfilters _sample/1.png _sample/3.png _sample/5.png
+          LLVM_PROFILE_FILE="pgo-14.profraw" ./build/ect -3 --allfilters _sample/1.png _sample/3.png _sample/5.png
           LLVM_PROFILE_FILE="pgo-15.profraw" ./build/ect -5 _sample/2.png _sample/4.png _sample/6.png
           rm -rf _sample
           cp -R _sample_bak _sample
