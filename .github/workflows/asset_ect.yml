@@ -9,10 +9,7 @@ jobs:
     steps:
       - name: Build
         run: |
-          sudo echo 'deb http://archive.ubuntu.com/ubuntu/ noble main restricted' >>  /etc/apt/sources.list
-          sudo echo 'deb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted' >>  /etc/apt/sources.list
-          sudo echo 'deb http://archive.ubuntu.com/ubuntu/ noble universe' >>  /etc/apt/sources.list
-          sudo echo 'deb http://archive.ubuntu.com/ubuntu/ noble-updates universe' >>  /etc/apt/sources.list
+          sudo sh -c 'printf "deb http://archive.ubuntu.com/ubuntu/ noble main restricted\ndeb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted\ndeb http://archive.ubuntu.com/ubuntu/ noble universe\ndeb http://archive.ubuntu.com/ubuntu/ noble-updates universe\n" >> /etc/apt/sources.list'
           sudo apt update
           sudo apt install clang-18/noble
           export PATH="/usr/lib/llvm-18/bin:$PATH"
