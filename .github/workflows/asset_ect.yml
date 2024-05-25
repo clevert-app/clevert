@@ -11,7 +11,8 @@ jobs:
         run: |
           sudo sh -c 'printf "deb http://archive.ubuntu.com/ubuntu/ noble main restricted\ndeb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted\ndeb http://archive.ubuntu.com/ubuntu/ noble universe\ndeb http://archive.ubuntu.com/ubuntu/ noble-updates universe\n" >> /etc/apt/sources.list'
           sudo apt update
-          sudo apt install clang-18/noble
+          sudo apt install clang-18/noble llvm-17-linker-tools # https://github.com/llvm/llvm-project/issues/84271#issuecomment-2016467829
+          cp /usr/lib/llvm-17/lib/LLVMgold.so /usr/lib/llvm-18/lib/LLVMgold.so
           export PATH="/usr/lib/llvm-18/bin:$PATH"
           curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
           curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng
