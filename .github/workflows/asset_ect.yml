@@ -33,26 +33,26 @@ jobs:
           rm -rf _sample
           cp -R _sample_bak _sample
           else
-          mkdir _sample
+          mkdir _sample_bak
           curl \
-            -o _sample/1.png -L https://user-images.githubusercontent.com/634063/202742848-63fa1488-6254-49b5-af7c-96a6b50ea8af.png \
-            -o _sample/2.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png \
-            -o _sample/3.png -L https://user-images.githubusercontent.com/35271042/118224532-3842c400-b438-11eb-923d-a5f66fa6785a.png \
-            -o _sample/4.png -L https://raw.githubusercontent.com/microsoft/.github/105835e2f9324920c7b08d93364c70b4a6f4d4eb/images/open-at-microsoft.png \
-            -o _sample/5.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screenmac.png \
-            -o _sample/6.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screen.png \
-            -o _sample/7.tar.gz -L https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-musl.tar.gz \
-            -o _sample/8.tar.gz -L https://github.com/utmapp/UTM/archive/refs/tags/v4.5.3.tar.gz \
+            -o _sample_bak/1.png -L https://user-images.githubusercontent.com/634063/202742848-63fa1488-6254-49b5-af7c-96a6b50ea8af.png \
+            -o _sample_bak/2.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png \
+            -o _sample_bak/3.png -L https://user-images.githubusercontent.com/35271042/118224532-3842c400-b438-11eb-923d-a5f66fa6785a.png \
+            -o _sample_bak/4.png -L https://raw.githubusercontent.com/microsoft/.github/105835e2f9324920c7b08d93364c70b4a6f4d4eb/images/open-at-microsoft.png \
+            -o _sample_bak/5.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screenmac.png \
+            -o _sample_bak/6.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screen.png \
+            -o _sample_bak/7.tar.gz -L https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-musl.tar.gz \
+            -o _sample_bak/8.tar.gz -L https://github.com/utmapp/UTM/archive/refs/tags/v4.5.3.tar.gz \
             --parallel
-          gzip -d _sample/7.tar.gz
-          gzip -d _sample/8.tar.gz
+          gzip -d _sample_bak/7.tar.gz
+          gzip -d _sample_bak/8.tar.gz
           fi
           rm -rf _sample
           cp -R _sample_bak _sample
           LLVM_PROFILE_FILE="pgo-01.profraw" ./build/ect -5 -gzip _sample/7.tar
           LLVM_PROFILE_FILE="pgo-02.profraw" ./build/ect -5 -gzip _sample/8.tar
           LLVM_PROFILE_FILE="pgo-03.profraw" ./build/ect -5 -zip _sample/9.zip _sample/7.tar _sample/8.tar
-          LLVM_PROFILE_FILE="pgo-04.profraw" ./build/ect -3 --allfilters _sample/1.png _sample/3.png _sample/5.png
+          LLVM_PROFILE_FILE="pgo-04.profraw" ./build/ect -2 --allfilters _sample/1.png _sample/3.png _sample/5.png
           LLVM_PROFILE_FILE="pgo-05.profraw" ./build/ect -5 _sample/2.png _sample/4.png _sample/6.png
           rm -rf _sample
           cp -R _sample_bak _sample
@@ -65,7 +65,7 @@ jobs:
           LLVM_PROFILE_FILE="pgo-11.profraw" ./build/ect -5 -gzip _sample/7.tar
           LLVM_PROFILE_FILE="pgo-12.profraw" ./build/ect -5 -gzip _sample/8.tar
           LLVM_PROFILE_FILE="pgo-13.profraw" ./build/ect -5 -zip _sample/9.zip _sample/7.tar _sample/8.tar
-          LLVM_PROFILE_FILE="pgo-14.profraw" ./build/ect -3 --allfilters _sample/1.png _sample/3.png _sample/5.png
+          LLVM_PROFILE_FILE="pgo-14.profraw" ./build/ect -2 --allfilters _sample/1.png _sample/3.png _sample/5.png
           LLVM_PROFILE_FILE="pgo-15.profraw" ./build/ect -5 _sample/2.png _sample/4.png _sample/6.png
           rm -rf _sample
           cp -R _sample_bak _sample
