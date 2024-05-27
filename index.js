@@ -1,7 +1,4 @@
 // @ts-check
-// import { readFile, writeFile } from "node:fs/promises";
-// import { mkdir, readdir, rename, rm } from "node:fs/promises";
-// import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -730,12 +727,12 @@ const StreamZip = (() => {
   //   fs = customFs;
   // };
 
-  // StreamZip.debugLog = (...args) => {
-  //   if (StreamZip.debug) {
-  //     // eslint-disable-next-line no-console
-  //     console.log(...args);
-  //   }
-  // };
+  StreamZip.debugLog = (...args) => {
+    if (/** @type {any} */ (StreamZip).debug) {
+      // eslint-disable-next-line no-console
+      console.log(...args);
+    }
+  };
 
   util.inherits(StreamZip, events.EventEmitter);
 
@@ -1339,6 +1336,12 @@ const StreamZip = (() => {
   return StreamZip;
 })();
 
+// optimized, download from mirrors, keep-alive
+
+// 在应用打开的时候就做一次 mirror 查找？
+
+// 暂时先用内置 mirror 列表，以后可以考虑国内放一个或多个固定地址来存 mirror 的列表
+
 /**
  * Assert the value is true, or throw an error.
  * @param {boolean} value
@@ -1448,7 +1451,7 @@ const solvePath = (absolute, ...parts) => {
 } Platform 短期内不谋求增加新平台. 长远来看，应该是 ` "linux-x64" | "linux-arm64" | "mac-x64" | "mac-arm64" | "win-x64" | "win-arm64" `
 @typedef {
   {
-    platform: Platform,
+    platforms: Platform[],
     kind: "raw" | "zip" | "gzip" | "tar" | "tar-gzip",
     url: string,
     path: string,
@@ -1466,8 +1469,8 @@ const solvePath = (absolute, ...parts) => {
 @typedef {
   {
     progress: () => number,
-    stop: () => void,
-    wait: Promise<any>,
+    cancel: () => void,
+    wait: Promise<void>,
   }
 } ActionExecuteController
 @typedef {
@@ -1543,9 +1546,27 @@ const solvePath = (absolute, ...parts) => {
 } ListExtensionsResponse
 @typedef {
   {
+    progress: () => {
+      download: {
+        finished: number,
+        amount: number,
+      },
+    },
+    cancel: () => void,
+    wait: Promise<void>,
+  }
+} InstallExtensionController
+@typedef {
+  {
     url: string,
   }
 } InstallExtensionRequest
+@typedef {
+  {
+    id: string,
+    version: string,
+  }
+} UninstallExtensionRequest
 @typedef {
   {
     kind: "number-sequence",
@@ -1589,10 +1610,12 @@ const solvePath = (absolute, ...parts) => {
   {
     runnerId: number,
   }
-} GetRunnerProgressRequest
+} GetRunnerInfoRequest
 @typedef {
-  RunnerProgress
-} GetRunnerProgressResponse
+  {
+    progress: RunnerProgress,
+  }
+} GetRunnerInfoResponse
 */
 
 const html = (/** @type {any} */ [s]) => s;
@@ -1935,8 +1958,8 @@ const inPage = async () => {
         document.createElement("pre")
       );
       const refreshRunnerProgress = async (/** @type {number} */ runnerId) => {
-        const request = /** @type {GetRunnerProgressRequest} */ ({ runnerId });
-        const response = /** @type {GetRunnerProgressResponse} */ (
+        const request = /** @type {GetRunnerInfoRequest} */ ({ runnerId });
+        const response = /** @type {GetRunnerInfoResponse} */ (
           await (
             await fetch("/get-runner-progress", {
               method: "POST",
@@ -2032,6 +2055,156 @@ const inServer = async () => {
     const ab = await res.arrayBuffer();
     await fsp.writeFile(path, Buffer.from(ab));
   };
+
+  /**
+   * Determine a Promise is pending or not. https://stackoverflow.com/a/35820220
+   * @param {Promise<any>} p
+   * @returns {Promise<boolean>}
+   */
+  const isPending = async (p) => {
+    const t = {};
+    return (await Promise.race([p, t])) === t;
+  };
+
+  /**
+   * Like `chmod -R 777 ./dir` but only apply on files, not dir.
+   * @param {string} dir
+   */
+  const chmod777 = async (dir) => {
+    for (const v of await fsp.readdir(dir, {
+      withFileTypes: true,
+      recursive: true,
+    })) {
+      if (!v.isFile()) continue;
+      const a = /** @type {any} */ (v);
+      const parentPath = /** @type {string} */ (a.parentPath ?? a.path); // https://nodejs.org/api/fs.html#class-fsdirent
+      const p = solvePath(false, parentPath, v.name);
+      await fsp.chmod(p, 0o777); // https://stackoverflow.com/a/20769157
+    }
+  };
+
+  /**
+   * @param {InstallExtensionRequest} req
+   * @returns {InstallExtensionController}
+   */
+  const installExtension = (req) => {
+    const abortController = new AbortController();
+    let finished = 0;
+    let amount = 0;
+    let tempStreams = /** @type {Set<fs.WriteStream>} */ (new Set());
+    let tempPaths = /** @type {Set<string>} */ (new Set());
+    let allowCancel = true;
+    const wait = (async () => {
+      const indexJsResponse = await fetch(req.url, {
+        redirect: "follow",
+        signal: abortController.signal,
+      });
+      if (!indexJsResponse.body) {
+        throw new Error("response.body is null, url = " + req.url);
+      }
+      amount += parseInt(indexJsResponse.headers.get("Content-Length") || "0");
+      // for await (const chunk of response.body) downloaded += chunk.length;
+      const indexJsTempPath = solvePath(true, PATH_CACHE, nextInt() + ".js");
+      tempPaths.add(indexJsTempPath);
+      const indexJsTempStream = fs.createWriteStream(indexJsTempPath);
+      for await (const chunk of indexJsResponse.body) {
+        finished += chunk.length;
+        indexJsTempStream.write(chunk); // TODO: see docs about backpressure
+      }
+      await new Promise((resolve) => indexJsTempStream.end(resolve)); // https://github.com/nodejs/node/issues/2006
+      const extension = /** @type {Extension} */ (
+        (await import(indexJsTempPath)).default
+      );
+      const extensionDir = solvePath(
+        true,
+        PATH_EXTENSIONS,
+        extension.id + "_" + extension.version
+      );
+      tempPaths.add(extensionDir);
+      await fsp.mkdir(extensionDir, { recursive: true });
+      await fsp.rename(
+        indexJsTempPath,
+        solvePath(true, extensionDir, "index.js")
+      );
+      // const tasks = []; // TODO: parallel
+      for (const asset of extension.assets) {
+        if (!asset.platforms.includes(CURRENT_PLATFORM)) {
+          continue;
+        }
+        const tempExtName = false
+          ? /** @type {never} */ (undefined)
+          : asset.kind === "raw"
+          ? "raw"
+          : asset.kind === "zip"
+          ? "zip"
+          : /** @type {never} */ (assert(false, "unsupported asset kind"));
+        const tempPath = solvePath(
+          true,
+          PATH_CACHE,
+          nextInt() + "." + tempExtName
+        );
+        tempPaths.add(tempPath);
+        const response = await fetch(asset.url, {
+          redirect: "follow",
+          signal: abortController.signal,
+        });
+        const tempStream = fs.createWriteStream(tempPath);
+        if (!response.body) {
+          throw new Error("response.body is null, url = " + asset.url);
+        }
+        amount += parseInt(response.headers.get("Content-Length") || "0");
+        for await (const chunk of response.body) {
+          finished += chunk.length;
+          tempStream.write(chunk);
+        }
+        await new Promise((resolve) => tempStream.end(resolve));
+        if (asset.kind === "zip") {
+          const zip = new StreamZip.async({ file: tempPath });
+          await zip.extract(null, solvePath(true, extensionDir, asset.path));
+          await zip.close();
+          await fsp.rm(tempPath);
+        } else {
+          assert(false, "unsupported asset kind");
+        }
+        await chmod777(extensionDir);
+      }
+      allowCancel = false;
+    })();
+    const cancel = () => {
+      if (!allowCancel) {
+        return;
+      }
+      allowCancel = false;
+      abortController.abort();
+      (async () => {
+        // then delete the temporary files here
+        // 先关 stream 再删文件
+        for (const v of tempStreams) {
+          await new Promise((resolve) => v.end(resolve)); // 用 await 等一下，慢一些但是稳妥
+        }
+        for (const v of tempPaths) {
+          await fsp.rm(v, { force: true, recursive: true }); // 用 await 等一下，慢一些但是稳妥
+        }
+      })();
+    };
+    wait.catch(() => cancel());
+    return {
+      progress: () => ({ download: { finished, amount } }),
+      cancel: cancel,
+      wait: wait,
+    };
+  };
+
+  const ctrler = installExtension({
+    url: "http://127.0.0.1:8080/extensions/jpegxl/index.js",
+  });
+
+  setInterval(async () => {
+    console.log({ p: ctrler.progress() });
+  }, 1000);
+
+  await ctrler.wait;
+  throw new Error("end");
 
   const genEntries = async (
     /** @type {StartActionRequest["entries"]} */ opts
@@ -2132,7 +2305,7 @@ const inServer = async () => {
         },
         stop: () => {
           for (const controller of runningControllers) {
-            controller.stop();
+            controller.cancel();
             runningControllers.delete(controller);
           }
         },
@@ -2154,7 +2327,7 @@ const inServer = async () => {
     }
 
     if (req.url === "/get-runner-progress") {
-      const request = /** @type {GetRunnerProgressRequest} */ (
+      const request = /** @type {GetRunnerInfoRequest} */ (
         await reqToJson(req)
       );
       const runner = runners.get(request.runnerId);
@@ -2163,7 +2336,9 @@ const inServer = async () => {
         res.end(JSON.stringify({}));
         return;
       }
-      const ret = /** @type {GetRunnerProgressResponse} */ (runner.progress());
+      const ret = /** @type {GetRunnerInfoResponse} */ ({
+        progress: runner.progress(),
+      });
       res.setHeader("Content-Type", "application/json");
       res.writeHead(200);
       res.end(JSON.stringify(ret));
@@ -2230,7 +2405,7 @@ const inServer = async () => {
       await fsp.mkdir(extensionDir);
       await fsp.rename(extensionTempIndexJs, extensionDir + "/index.js");
       for (const asset of extension.assets) {
-        if (asset.platform !== CURRENT_PLATFORM) {
+        if (!asset.platforms.includes(CURRENT_PLATFORM)) {
           continue;
         }
         const assetExtName = /** @type {string} */ (

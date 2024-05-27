@@ -1,12 +1,11 @@
 // @ts-check
 /** @import { Extension } from "../../index.js" */
-import { spawn } from "node:child_process";
-import { join } from "node:path";
-// excluded: import { spawn } from "node:child_process"; // 可以这种形式为前端禁用 // 这些砍 import 的魔法，在加载扩展的时候做
-// 统一用 import { a } from "b"; 而不是  import b from "b" 然后 b.a， 因为我们自己写的时候导出一般不会再故意弄一个 default export
+import child_process from "node:child_process";
+import path from "node:path";
+// excluded: import util from "node:util"; // 可以这种形式为前端禁用 // 这些砍 import 的魔法，在加载扩展的时候做
 
-const C = /** @type {"_"} */ (globalThis.process?.versions?.node) && {
-  exe: join(import.meta.dirname, "jpegxl"), // 这个不太好用依赖注入搞?因为 import.meta.url 只在当前文件中才能拿到正确的
+const C = globalThis.process && {
+  exe: path.join(import.meta.dirname, "jpegxl"), // 这个不太好用依赖注入搞?因为 import.meta.url 只在当前文件中才能拿到正确的
 };
 
 // 暂时还没有需要 hook 或者依赖注入的地方
@@ -24,14 +23,16 @@ export default /** @type {Extension} */ ({
   dependencies: [], // 可以填写其他的 extension 的 id (这个功能需要扩展商店)（注意考虑 semver？）
   assets: [
     {
-      platform: "linux-x64",
-      // 如果是zip，那就直接用我们的unzip，如果不是，那就麻烦了，就要搞一个 archives 扩展，集成7zip， https://github.com/libarchive/libarchive 等等，用来解压
+      platforms: ["linux-x64"], // 匹配平台，非当前平台不下载
+      // 如果是zip，那就直接用我们的js的unzip实现，如果不是，那就麻烦了，就要搞一个 archives 扩展，集成7zip， https://github.com/libarchive/libarchive 等等，用来解压
       kind: "zip", // 比如可以做 tar --strip-components 这样的
       path: "./", // 从扩展文件夹路径开始算
       // url 就直接填 github，然后让核心去做镜像加速
-      url: "https://github.com/clevert-app/clevert/releases/download/asset_jpegxl_b2fb216_8900231253/linux-x64.zip",
+      url: "https://github.com/clevert-app/clevert/releases/download/asset_jpegxl_8835f5d_9186772397/linux-x64.zip",
     },
   ],
+  // action 和 profile 某种程度上是有重合的，比如可以造一个全能action，然后根据profile做不同动作。但是这是不好的实践。
+  // 而且，同个扩展可能有不同的 action kind，比如既可以当转换器，也可以当daemon，那就必然要多个 action。所以我建议不同主要功能，拆分不同action
   actions: [
     // Action 的设计，是有一个 ui(profile)=>controller, 有一个 execute(profile,entry)=>controller
     // ui 不应该返回所有 entry，至少在大多数情况不应该。因为文件夹里可能有大量文件。这里我们选择 ui 只出 profile，而 entries 由核心根据 `kind: "converter"` 出。发到后端得请求应该是 entriesGenOptions 或者别的名字。
@@ -97,7 +98,7 @@ export default /** @type {Extension} */ ({
       execute: (profile, { input, output }) => {
         // 这个函数在后端跑，要求不 block 主线程，只能 async。如果要 block 请自行开 worker
         // 后续提供调用其他 action 的功能？
-        const child = spawn(C.exe, [
+        const child = child_process.spawn(C.exe, [
           "cjpegli",
           input.main[0],
           output.main[0],
@@ -113,7 +114,7 @@ export default /** @type {Extension} */ ({
           progress: () => {
             return progressValue;
           },
-          stop: () => {
+          cancel: () => {
             child.kill("SIGTERM");
           },
           wait: new Promise((resolve, reject) => {
@@ -121,7 +122,7 @@ export default /** @type {Extension} */ ({
             // child.on("exit", (code) => (code ? reject({ code }) : resolve(0)));
             child.on("exit", (code) => {
               setTimeout(() => {
-                code ? reject({ code }) : resolve(0);
+                code ? reject({ code }) : resolve(undefined);
               }, Math.random() * 2000);
             });
           }),
@@ -150,3 +151,4 @@ export default /** @type {Extension} */ ({
     },
   ],
 });
+// https://opensource.googleblog.com/2024/04/introducing-jpegli-new-jpeg-coding-library.html
