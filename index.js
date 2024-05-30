@@ -1676,6 +1676,96 @@ const page = () => html`
           --active: #444;
         }
       }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        font-family: system-ui;
+        background: var(--bg);
+      }
+      top_bar_ {
+        position: fixed;
+        display: flex;
+        gap: 8px;
+        width: 100%;
+        height: calc(48px + 1px);
+        padding: 8px;
+        left: 0;
+        top: 0;
+        line-height: 32px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+      }
+      side_bar_ {
+        display: block;
+        width: 220px;
+        height: 100vh;
+        /* padding: 8px; */
+        /* padding-top: calc(48px + 1px + 8px); */
+        border-right: 1px solid var(--border);
+        position: absolute;
+        top: 0;
+        background: var(--bg);
+        overflow: hidden;
+      }
+      main_list_,
+      actions_list_ {
+        display: block;
+        width: 100%;
+        padding: 8px;
+        height: 100%;
+        transition: 0.5s;
+      }
+      actions_list_ {
+        position: relative;
+        top: -100%;
+        left: 100%;
+      }
+      main_list_[second_],
+      actions_list_[second_] {
+        transform: translateX(-100%);
+      }
+      side_bar_item_ {
+        display: block;
+        padding: 8px;
+        line-height: 16px;
+      }
+      side_bar_item_:hover {
+        background: var(--hover);
+      }
+      side_bar_item_:active {
+        background: var(--active);
+      }
+      extensions_market_,
+      current_action_ {
+        position: fixed;
+        top: 0;
+        right: 0;
+        left: 220px;
+        height: 100vh;
+        padding: 8px;
+        padding-top: calc(48px + 1px + 8px);
+        overflow: auto;
+        transition: 0.5s;
+      }
+      extensions_market_[page_off_],
+      current_action_[page_off_] {
+        visibility: hidden;
+        opacity: 0;
+      }
+      input_output_config_,
+      action_root_,
+      action_controls_ {
+        display: block;
+      }
+      entries_common_files_,
+      entries_common_files_ > div {
+        display: grid;
+        gap: 8px;
+        /* border: 1px solid var(--border); */
+      }
+      entries_common_files_ {
+        margin-bottom: 8px;
+      }
     </style>
   </head>
   <body>
