@@ -3,17 +3,17 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
-import child_process from "node:child_process";
 import os from "node:os";
 import http from "node:http";
 import https from "node:https";
-import util from "node:util";
 import events from "node:events";
 import zlib from "node:zlib";
 import stream from "node:stream";
 // import module from "node:module";
 
 const StreamZip = (() => {
+  if (!globalThis.process) return /** @type {never} */ (null);
+
   // the std node:zlib.Unzip is misnamed IMO. it just deflate, not uncompress zip.
 
   // https://github.com/antelle/node-stream-zip/blob/7c5d50393418b261668b0dd4c8d9ccaa9ac913ce/node_stream_zip.js
@@ -735,7 +735,18 @@ const StreamZip = (() => {
     }
   };
 
-  util.inherits(StreamZip, events.EventEmitter);
+  const inherits = function (ctor, superCtor) {
+    ctor.super_ = superCtor;
+    ctor.prototype = Object.create(superCtor.prototype, {
+      constructor: {
+        value: ctor,
+        enumerable: false,
+        writable: true,
+        configurable: true,
+      },
+    });
+  };
+  inherits(StreamZip, events.EventEmitter);
 
   const propZip = Symbol("zip");
 
@@ -1337,12 +1348,6 @@ const StreamZip = (() => {
   return StreamZip;
 })();
 
-// optimized, download from mirrors, keep-alive
-
-// 在应用打开的时候就做一次 mirror 查找？
-
-// 暂时先用内置 mirror 列表，以后可以考虑国内放一个或多个固定地址来存 mirror 的列表
-
 /**
  * Assert the value is true, or throw an error.
  * @param {boolean} value
@@ -1639,6 +1644,7 @@ const solvePath = (absolute, ...parts) => {
     actionId: string,
     profile: any,
     entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence,
+    parallel: number,
   }
 } RunActionRequest
 */
@@ -1652,7 +1658,6 @@ const page = () => html`
     <meta name="viewport" content="width=device-width" />
     <meta name="color-scheme" content="light dark" />
     <title>clevert</title>
-    <!-- 虽然缩进比较多，但是 css 没啥问题 -->
     <style>
       * {
         box-sizing: border-box;
@@ -1670,96 +1675,6 @@ const page = () => html`
           --hover: #222;
           --active: #444;
         }
-      }
-      body {
-        min-height: 100vh;
-        margin: 0;
-        font-family: system-ui;
-        background: var(--bg);
-      }
-      top_bar_ {
-        position: fixed;
-        display: flex;
-        gap: 8px;
-        width: 100%;
-        height: calc(48px + 1px);
-        padding: 8px;
-        left: 0;
-        top: 0;
-        line-height: 32px;
-        background: var(--bg);
-        border-bottom: 1px solid var(--border);
-      }
-      side_bar_ {
-        display: block;
-        width: 220px;
-        height: 100vh;
-        /* padding: 8px; */
-        /* padding-top: calc(48px + 1px + 8px); */
-        border-right: 1px solid var(--border);
-        position: absolute;
-        top: 0;
-        background: var(--bg);
-        overflow: hidden;
-      }
-      main_list_,
-      actions_list_ {
-        display: block;
-        width: 100%;
-        padding: 8px;
-        height: 100%;
-        transition: 0.5s;
-      }
-      actions_list_ {
-        position: relative;
-        top: -100%;
-        left: 100%;
-      }
-      main_list_[second_],
-      actions_list_[second_] {
-        transform: translateX(-100%);
-      }
-      side_bar_item_ {
-        display: block;
-        padding: 8px;
-        line-height: 16px;
-      }
-      side_bar_item_:hover {
-        background: var(--hover);
-      }
-      side_bar_item_:active {
-        background: var(--active);
-      }
-      extensions_market_,
-      current_action_ {
-        position: fixed;
-        top: 0;
-        right: 0;
-        left: 220px;
-        height: 100vh;
-        padding: 8px;
-        padding-top: calc(48px + 1px + 8px);
-        overflow: auto;
-        transition: 0.5s;
-      }
-      extensions_market_[page_off_],
-      current_action_[page_off_] {
-        visibility: hidden;
-        opacity: 0;
-      }
-      input_output_config_,
-      action_root_,
-      action_controls_ {
-        display: block;
-      }
-      entries_common_files_,
-      entries_common_files_ > div {
-        display: grid;
-        gap: 8px;
-        /* border: 1px solid var(--border); */
-      }
-      entries_common_files_ {
-        margin-bottom: 8px;
       }
     </style>
   </head>
@@ -2043,6 +1958,9 @@ const inServer = async () => {
   // is in main
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
+  await fsp.mkdir(PATH_EXTENSIONS, { recursive: true });
+  await fsp.mkdir(PATH_CACHE, { recursive: true });
+
   /** @type {Platform} */
   const CURRENT_PLATFORM = false
     ? /** @type {never} */ (undefined)
@@ -2053,10 +1971,7 @@ const inServer = async () => {
     : process.platform === "darwin" && process.arch === "arm64"
     ? "mac-arm64"
     : /** @type {never} */ (assert(false, "unsupported platform"));
-  await fsp.mkdir(PATH_EXTENSIONS, { recursive: true });
-  await fsp.mkdir(PATH_CACHE, { recursive: true });
 
-  const PARALLEL = 2;
   /** @type {Map<string, Runner>} */
   const runners = new Map(); // runner 永远不删除
   /** @type {Map<string, InstallExtensionController>} */
@@ -2101,25 +2016,6 @@ const inServer = async () => {
     }
   };
 
-  // /**
-  //  * @param {InstallExtensionRequest} request
-  //  * @returns {InstallExtensionController}
-  //  */
-  // const installExtension = async (request) => {
-
-  // };
-
-  // const ctrler = installExtension({
-  //   url: "http://127.0.0.1:8080/extensions/jpegxl/index.js",
-  // });
-
-  // setInterval(async () => {
-  //   console.log({ p: ctrler.progress() });
-  // }, 1000);
-
-  // await ctrler.wait;
-  // throw new Error("end");
-
   const genEntries = async (
     /** @type {RunActionRequest["entries"]} */ opts
   ) => {
@@ -2151,7 +2047,7 @@ const inServer = async () => {
   };
 
   const server = http.createServer(async (_, r) => {
-    // console.log({ url: req.url });
+    r.setHeader("Cache-Control", "no-store");
 
     if (r.req.url === "/") {
       r.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -2198,7 +2094,7 @@ const inServer = async () => {
         new Set()
       );
       const wait = Promise.all(
-        [...Array(PARALLEL)].map((_, i) =>
+        [...Array(req.parallel)].map((_, i) =>
           (async () => {
             for (let entry; (entry = entries.shift()); ) {
               const controller = action.execute(req.profile, entry);
@@ -2234,13 +2130,12 @@ const inServer = async () => {
       assert(false, "todo");
       r.setHeader("Content-Type", "application/json; charset=utf-8");
       r.writeHead(200);
-      r.end(JSON.stringify({}));
+      r.end();
       return;
     }
 
     if (r.req.url === "/get-status") {
       r.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-      r.setHeader("Cache-Control", "no-store");
       r.writeHead(200);
       const sendEvent = (/** @type {GetStatusResponseEvent} */ event) => {
         r.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -2301,22 +2196,8 @@ const inServer = async () => {
       return;
     }
 
-    if (r.req.url?.startsWith("/extension/")) {
-      const [, , dirName, fileName] = r.req.url.split("/");
-      assert(fileName === "index.js");
-      const extensionIndexJsPath = /** @type {string} */ (
-        solvePath(true, PATH_EXTENSIONS, dirName, "index.js")
-      );
-      r.setHeader("Content-Type", "text/javascript; charset=utf-8");
-      r.writeHead(200);
-      const buffer = await fsp.readFile(extensionIndexJsPath);
-      r.end(excludeImport(buffer.toString(), /^node:.+$/));
-      return;
-    }
-
     if (r.req.url === "/list-extensions") {
       r.setHeader("Content-Type", "application/json; charset=utf-8");
-      r.setHeader("Cache-Control", "no-store");
       r.writeHead(200);
       const ret = /** @type {ListExtensionsResponse} */ ([]);
       for (const entry of await fsp.readdir(PATH_EXTENSIONS)) {
@@ -2456,6 +2337,20 @@ const inServer = async () => {
       // https://stackoverflow.com/a/49771109
       // https://developer.mozilla.org/zh-CN/docs/Web/API/Server-sent_events/Using_server-sent_events
 
+      r.end();
+      return;
+    }
+
+    if (r.req.url?.startsWith("/extension/")) {
+      const [, , dirName, fileName] = r.req.url.split("/");
+      assert(fileName === "index.js");
+      const extensionIndexJsPath = /** @type {string} */ (
+        solvePath(true, PATH_EXTENSIONS, dirName, "index.js")
+      );
+      r.setHeader("Content-Type", "text/javascript; charset=utf-8");
+      r.writeHead(200);
+      const buffer = await fsp.readFile(extensionIndexJsPath);
+      r.write(excludeImport(buffer.toString(), /^node:.+$/));
       r.end();
       return;
     }
@@ -2638,3 +2533,10 @@ console.log(import.meta.url);
 // (以后做)  profile = extension + action + profile
 
 // mkdir -p node_modules/electron ; dl_prefix="https://registry.npmmirror.com/electron/30.0.2/files" ; curl -o node_modules/electron/electron.d.ts -L $dl_prefix/electron.d.ts -o node_modules/electron/package.json -L $dl_prefix/package.json
+// http://127.0.0.1:8080/extensions/jpegxl/index.js
+
+// optimized, download from mirrors, keep-alive
+
+// 在应用打开的时候就做一次 mirror 查找？
+
+// 暂时先用内置 mirror 列表，以后可以考虑国内放一个或多个固定地址来存 mirror 的列表
