@@ -1,4 +1,5 @@
 // @ts-check
+/// <reference lib="esnext" />
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -1419,12 +1420,23 @@ const excludeImport = (sourceCode, regexp) => {
 };
 
 /**
- * Get next auto increased int number. Used for id generate or others.
- * @returns {number}
+ * Get next unique id. Format = `1716887172_000123` = unix stamp + underscore + sequence number inside this second.
+ * @returns {string}
  */
-const nextInt = (() => {
-  let v = 0;
-  return () => ++v;
+const nextId = (() => {
+  let lastT = Math.floor(Date.now() / 1000);
+  let lastV = 0;
+  return () => {
+    let curT = Math.floor(Date.now() / 1000);
+    let curV = 0;
+    if (curT === lastT) {
+      curV = ++lastV;
+    } else {
+      lastV = 0;
+    }
+    lastT = curT;
+    return curT + "_" + (curV + "").padStart(6, "0");
+  };
 })();
 
 /**
@@ -1469,7 +1481,7 @@ const solvePath = (absolute, ...parts) => {
 @typedef {
   {
     progress: () => number,
-    cancel: () => void,
+    stop: () => void,
     wait: Promise<void>,
   }
 } ActionExecuteController
@@ -1492,7 +1504,7 @@ const solvePath = (absolute, ...parts) => {
     id: string,
     name: string,
     description: string,
-    kind: StartActionRequest["entries"]["kind"],
+    kind: RunActionRequest["entries"]["kind"],
     ui: (profile: any) => ActionUiController,
     execute: (profile: any, entry: any) => ActionExecuteController,
   }
@@ -1529,6 +1541,7 @@ const solvePath = (absolute, ...parts) => {
   {
     id: string,
     name: string,
+    version: string,
     description: string,
     actions: {
       id: string,
@@ -1546,21 +1559,48 @@ const solvePath = (absolute, ...parts) => {
 } ListExtensionsResponse
 @typedef {
   {
-    progress: () => {
-      download: {
-        finished: number,
-        amount: number,
-      },
-    },
-    cancel: () => void,
-    wait: Promise<void>,
-  }
-} InstallExtensionController
-@typedef {
-  {
     url: string,
   }
 } InstallExtensionRequest
+@typedef {
+  {
+    download: {
+      finished: number,
+      amount: number,
+    },
+  }
+} InstallExtensionProgress
+@typedef {
+  {
+    kind: "runner-progress",
+    id: string,
+    progress: RunnerProgress,
+  } | {
+    kind: "runner-success",
+    id: string,
+  } | {
+    kind: "runner-error",
+    id: string,
+    error: any,
+  } | {
+    kind: "install-extension-progress",
+    id: string,
+    progress: InstallExtensionProgress,
+  } | {
+    kind: "install-extension-success",
+    id: string,
+  } | {
+    kind: "install-extension-error",
+    id: string,
+    error: any,
+  }
+} GetStatusResponseEvent
+@typedef {
+  {
+    progress: () => InstallExtensionProgress,
+    wait: Promise<any>,
+  }
+} InstallExtensionController
 @typedef {
   {
     id: string,
@@ -1600,22 +1640,7 @@ const solvePath = (absolute, ...parts) => {
     profile: any,
     entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence,
   }
-} StartActionRequest
-@typedef {
-  {
-    runnerId: number,
-  }
-} StartActionResponse
-@typedef {
-  {
-    runnerId: number,
-  }
-} GetRunnerInfoRequest
-@typedef {
-  {
-    progress: RunnerProgress,
-  }
-} GetRunnerInfoResponse
+} RunActionRequest
 */
 
 const html = (/** @type {any} */ [s]) => s;
@@ -1957,11 +1982,11 @@ const inPage = async () => {
       const $runnerProgress = $actionControls.appendChild(
         document.createElement("pre")
       );
-      const refreshRunnerProgress = async (/** @type {number} */ runnerId) => {
-        const request = /** @type {GetRunnerInfoRequest} */ ({ runnerId });
-        const response = /** @type {GetRunnerInfoResponse} */ (
+      const refreshRunnerProgress = async (/** @type {string} */ runnerId) => {
+        const request = /** @type {any} */ ({ runnerId });
+        const response = /** @type {any} */ (
           await (
-            await fetch("/get-runner-progress", {
+            await fetch("/get-runner-info", {
               method: "POST",
               body: JSON.stringify(request),
             })
@@ -1974,7 +1999,7 @@ const inPage = async () => {
       );
       $startButton.textContent = "Start";
       $startButton.onclick = async () => {
-        const startActionRequest = /** @type {StartActionRequest} */ ({
+        const startActionRequest = /** @type {RunActionRequest} */ ({
           extensionId: extension.id,
           actionId: action.id,
           profile: ui.profile(),
@@ -1985,7 +2010,7 @@ const inPage = async () => {
             outputExtension: $outputExtension.value,
           },
         });
-        const startActionResponse = /** @type {StartActionResponse} */ (
+        const startActionResponse = /** @type {any} */ (
           await (
             await fetch("/start-action", {
               method: "POST",
@@ -2018,24 +2043,24 @@ const inServer = async () => {
   // is in main
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
-  const CURRENT_PLATFORM = /** @type {Platform} */ (
-    false
-      ? undefined
-      : process.platform === "linux" && process.arch === "x64"
-      ? "linux-x64"
-      : process.platform === "win32" && process.arch === "x64"
-      ? "win-x64"
-      : process.platform === "darwin" && process.arch === "x64"
-      ? "mac-x64"
-      : process.platform === "darwin" && process.arch === "arm64"
-      ? "mac-arm64"
-      : assert(false, "unsupported platform")
-  );
+  /** @type {Platform} */
+  const CURRENT_PLATFORM = false
+    ? /** @type {never} */ (undefined)
+    : process.platform === "linux" && process.arch === "x64"
+    ? "linux-x64"
+    : process.platform === "win32" && process.arch === "x64"
+    ? "win-x64"
+    : process.platform === "darwin" && process.arch === "arm64"
+    ? "mac-arm64"
+    : /** @type {never} */ (assert(false, "unsupported platform"));
   await fsp.mkdir(PATH_EXTENSIONS, { recursive: true });
   await fsp.mkdir(PATH_CACHE, { recursive: true });
 
   const PARALLEL = 2;
-  const runners = /** @type {Map<number, Runner>} */ (new Map());
+  /** @type {Map<string, Runner>} */
+  const runners = new Map(); // runner 永远不删除
+  /** @type {Map<string, InstallExtensionController>} */
+  const installExtensionControllers = new Map();
 
   const reqToJson = async (req) => {
     return new Promise((resolve) => {
@@ -2047,13 +2072,6 @@ const inServer = async () => {
         resolve(JSON.parse(body));
       });
     });
-  };
-
-  const download = async (url, path, accelerated) => {
-    // TODO: 自动多源头下载
-    const res = await fetch(url);
-    const ab = await res.arrayBuffer();
-    await fsp.writeFile(path, Buffer.from(ab));
   };
 
   /**
@@ -2083,131 +2101,27 @@ const inServer = async () => {
     }
   };
 
-  /**
-   * @param {InstallExtensionRequest} req
-   * @returns {InstallExtensionController}
-   */
-  const installExtension = (req) => {
-    const abortController = new AbortController();
-    let finished = 0;
-    let amount = 0;
-    let tempStreams = /** @type {Set<fs.WriteStream>} */ (new Set());
-    let tempPaths = /** @type {Set<string>} */ (new Set());
-    let allowCancel = true;
-    const wait = (async () => {
-      const indexJsResponse = await fetch(req.url, {
-        redirect: "follow",
-        signal: abortController.signal,
-      });
-      if (!indexJsResponse.body) {
-        throw new Error("response.body is null, url = " + req.url);
-      }
-      amount += parseInt(indexJsResponse.headers.get("Content-Length") || "0");
-      // for await (const chunk of response.body) downloaded += chunk.length;
-      const indexJsTempPath = solvePath(true, PATH_CACHE, nextInt() + ".js");
-      tempPaths.add(indexJsTempPath);
-      const indexJsTempStream = fs.createWriteStream(indexJsTempPath);
-      for await (const chunk of indexJsResponse.body) {
-        finished += chunk.length;
-        indexJsTempStream.write(chunk); // TODO: see docs about backpressure
-      }
-      await new Promise((resolve) => indexJsTempStream.end(resolve)); // https://github.com/nodejs/node/issues/2006
-      const extension = /** @type {Extension} */ (
-        (await import(indexJsTempPath)).default
-      );
-      const extensionDir = solvePath(
-        true,
-        PATH_EXTENSIONS,
-        extension.id + "_" + extension.version
-      );
-      tempPaths.add(extensionDir);
-      await fsp.mkdir(extensionDir, { recursive: true });
-      await fsp.rename(
-        indexJsTempPath,
-        solvePath(true, extensionDir, "index.js")
-      );
-      // const tasks = []; // TODO: parallel
-      for (const asset of extension.assets) {
-        if (!asset.platforms.includes(CURRENT_PLATFORM)) {
-          continue;
-        }
-        const tempExtName = false
-          ? /** @type {never} */ (undefined)
-          : asset.kind === "raw"
-          ? "raw"
-          : asset.kind === "zip"
-          ? "zip"
-          : /** @type {never} */ (assert(false, "unsupported asset kind"));
-        const tempPath = solvePath(
-          true,
-          PATH_CACHE,
-          nextInt() + "." + tempExtName
-        );
-        tempPaths.add(tempPath);
-        const response = await fetch(asset.url, {
-          redirect: "follow",
-          signal: abortController.signal,
-        });
-        const tempStream = fs.createWriteStream(tempPath);
-        if (!response.body) {
-          throw new Error("response.body is null, url = " + asset.url);
-        }
-        amount += parseInt(response.headers.get("Content-Length") || "0");
-        for await (const chunk of response.body) {
-          finished += chunk.length;
-          tempStream.write(chunk);
-        }
-        await new Promise((resolve) => tempStream.end(resolve));
-        if (asset.kind === "zip") {
-          const zip = new StreamZip.async({ file: tempPath });
-          await zip.extract(null, solvePath(true, extensionDir, asset.path));
-          await zip.close();
-          await fsp.rm(tempPath);
-        } else {
-          assert(false, "unsupported asset kind");
-        }
-        await chmod777(extensionDir);
-      }
-      allowCancel = false;
-    })();
-    const cancel = () => {
-      if (!allowCancel) {
-        return;
-      }
-      allowCancel = false;
-      abortController.abort();
-      (async () => {
-        // then delete the temporary files here
-        // 先关 stream 再删文件
-        for (const v of tempStreams) {
-          await new Promise((resolve) => v.end(resolve)); // 用 await 等一下，慢一些但是稳妥
-        }
-        for (const v of tempPaths) {
-          await fsp.rm(v, { force: true, recursive: true }); // 用 await 等一下，慢一些但是稳妥
-        }
-      })();
-    };
-    wait.catch(() => cancel());
-    return {
-      progress: () => ({ download: { finished, amount } }),
-      cancel: cancel,
-      wait: wait,
-    };
-  };
+  // /**
+  //  * @param {InstallExtensionRequest} request
+  //  * @returns {InstallExtensionController}
+  //  */
+  // const installExtension = async (request) => {
 
-  const ctrler = installExtension({
-    url: "http://127.0.0.1:8080/extensions/jpegxl/index.js",
-  });
+  // };
 
-  setInterval(async () => {
-    console.log({ p: ctrler.progress() });
-  }, 1000);
+  // const ctrler = installExtension({
+  //   url: "http://127.0.0.1:8080/extensions/jpegxl/index.js",
+  // });
 
-  await ctrler.wait;
-  throw new Error("end");
+  // setInterval(async () => {
+  //   console.log({ p: ctrler.progress() });
+  // }, 1000);
+
+  // await ctrler.wait;
+  // throw new Error("end");
 
   const genEntries = async (
-    /** @type {StartActionRequest["entries"]} */ opts
+    /** @type {RunActionRequest["entries"]} */ opts
   ) => {
     if (opts.kind === "common-files") {
       if (opts.entries) {
@@ -2236,66 +2150,67 @@ const inServer = async () => {
     assert(false, "todo");
   };
 
-  const server = http.createServer(async (req, res) => {
+  const server = http.createServer(async (_, r) => {
     // console.log({ url: req.url });
 
-    if (req.url === "/") {
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.writeHead(200);
-      res.end(page());
+    if (r.req.url === "/") {
+      r.setHeader("Content-Type", "text/html; charset=utf-8");
+      r.writeHead(200);
+      r.end(page());
       return;
     }
 
-    if (req.url === "/index.js") {
+    if (r.req.url === "/index.js") {
       const buffer = await fsp.readFile(import.meta.filename);
       const ret = excludeImport(buffer.toString(), /^node:.+$/);
-      res.setHeader("Content-Type", "text/javascript; charset=utf-8");
-      res.writeHead(200);
-      res.end(ret);
+      r.setHeader("Content-Type", "text/javascript; charset=utf-8");
+      r.writeHead(200);
+      r.end(ret);
       return;
     }
 
-    if (req.url === "/favicon.ico") {
-      res.setHeader("Content-Type", "image/png");
-      res.writeHead(200);
-      res.end();
+    if (r.req.url === "/favicon.ico") {
+      r.setHeader("Content-Type", "image/png");
+      r.writeHead(200);
+      r.end();
       return;
     }
 
-    if (req.url === "/start-action") {
-      const request = /** @type {StartActionRequest} */ (await reqToJson(req));
-      const extensionIndexJs = /** @type {string} */ (
-        solvePath(true, PATH_EXTENSIONS, request.extensionId, "/index.js")
+    if (r.req.url === "/run-action") {
+      const req = /** @type {RunActionRequest} */ (await reqToJson(r.req));
+      const extensionIndexJsPath = /** @type {string} */ (
+        solvePath(true, PATH_EXTENSIONS, req.extensionId, "/index.js")
       );
       const extension = /** @type {Extension} */ (
-        (await import(extensionIndexJs)).default
+        (await import(extensionIndexJsPath)).default
       );
       const action = extension.actions.find(
-        (action) => action.id === request.actionId
+        (action) => action.id === req.actionId
       );
       if (action === undefined) {
         assert(false, "action not found");
         return;
       }
-      const entries = await genEntries(request.entries);
-      const runnerId = nextInt();
+      const entries = await genEntries(req.entries);
       const amount = entries.length;
       let finished = 0;
       const runningControllers = /** @type {Set<ActionExecuteController>} */ (
         new Set()
       );
-      const promises = [...Array(PARALLEL)].map((_, i) =>
-        (async () => {
-          for (let entry; (entry = entries.shift()); ) {
-            const controller = action.execute(request.profile, entry);
-            runningControllers.add(controller);
-            await controller.wait;
-            runningControllers.delete(controller);
-            finished += 1;
-          }
-        })()
+      const wait = Promise.all(
+        [...Array(PARALLEL)].map((_, i) =>
+          (async () => {
+            for (let entry; (entry = entries.shift()); ) {
+              const controller = action.execute(req.profile, entry);
+              runningControllers.add(controller);
+              await controller.wait;
+              runningControllers.delete(controller);
+              finished += 1;
+            }
+          })()
+        )
       );
-      runners.set(runnerId, {
+      runners.set(nextId(), {
         progress: () => {
           let running = 0;
           for (const controller of runningControllers) {
@@ -2305,73 +2220,116 @@ const inServer = async () => {
         },
         stop: () => {
           for (const controller of runningControllers) {
-            controller.cancel();
+            controller.stop();
             runningControllers.delete(controller);
           }
         },
-        wait: Promise.all(promises),
+        wait,
       });
-      const ret = /** @type {StartActionResponse} */ ({ runnerId });
-      res.setHeader("Content-Type", "application/json");
-      res.writeHead(200);
-      res.end(JSON.stringify(ret));
+      r.end();
       return;
     }
 
-    if (req.url === "/stop-runner") {
+    if (r.req.url === "/stop-runner") {
       assert(false, "todo");
-      res.setHeader("Content-Type", "application/json");
-      res.writeHead(200);
-      res.end(JSON.stringify({}));
+      r.setHeader("Content-Type", "application/json; charset=utf-8");
+      r.writeHead(200);
+      r.end(JSON.stringify({}));
       return;
     }
 
-    if (req.url === "/get-runner-progress") {
-      const request = /** @type {GetRunnerInfoRequest} */ (
-        await reqToJson(req)
-      );
-      const runner = runners.get(request.runnerId);
-      if (runner === undefined) {
-        res.writeHead(404);
-        res.end(JSON.stringify({}));
-        return;
+    if (r.req.url === "/get-status") {
+      r.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      r.setHeader("Cache-Control", "no-store");
+      r.writeHead(200);
+      const sendEvent = (/** @type {GetStatusResponseEvent} */ event) => {
+        r.write(`data: ${JSON.stringify(event)}\n\n`);
+      };
+      /** @type {Set<string>} */
+      const preventedIds = new Set();
+      /** @type {Set<string>} */
+      const waitingIds = new Set();
+      while (!r.closed) {
+        for (const [id, runner] of runners) {
+          if (preventedIds.has(id)) {
+            continue; // 如果在阻止列表里，直接跳过，比如已经退出的 runner
+          }
+          sendEvent({
+            kind: "runner-progress",
+            id,
+            progress: runner.progress(),
+          });
+          if (!waitingIds.has(id)) {
+            waitingIds.add(id);
+            // 如果不在 waitingIds 中，新开一个 promise 来 wait 这个 runner
+            runner.wait.then(() => {
+              sendEvent({ kind: "runner-success", id });
+            });
+            runner.wait.catch((error) => {
+              sendEvent({ kind: "runner-error", id, error });
+            });
+            runner.wait.finally(() => {
+              preventedIds.add(id); // 发现 runner 已经退出，所以添加到阻止列表，以后跳过查询
+            });
+          }
+        }
+        for (const [id, ctrler] of installExtensionControllers) {
+          if (preventedIds.has(id)) {
+            continue;
+          }
+          sendEvent({
+            kind: "install-extension-progress",
+            id,
+            progress: ctrler.progress(),
+          });
+          if (!waitingIds.has(id)) {
+            waitingIds.add(id);
+            ctrler.wait.then(() => {
+              sendEvent({ kind: "install-extension-success", id });
+            });
+            ctrler.wait.catch((error) => {
+              sendEvent({ kind: "install-extension-error", id, error });
+            });
+            ctrler.wait.finally(() => {
+              preventedIds.add(id);
+            });
+          }
+        }
+        const INTERVAL = 1000; // 轮询间隔，不是 SSE 的发送间隔
+        await new Promise((resolve) => setTimeout(resolve, INTERVAL));
       }
-      const ret = /** @type {GetRunnerInfoResponse} */ ({
-        progress: runner.progress(),
-      });
-      res.setHeader("Content-Type", "application/json");
-      res.writeHead(200);
-      res.end(JSON.stringify(ret));
       return;
     }
 
-    if (req.url?.startsWith("/extension/")) {
-      console.log(req.url.split("/"));
-      const [, , extensionId, fileName] = req.url.split("/");
+    if (r.req.url?.startsWith("/extension/")) {
+      const [, , dirName, fileName] = r.req.url.split("/");
       assert(fileName === "index.js");
-      const extensionMainJs = /** @type {string} */ (
-        solvePath(true, PATH_EXTENSIONS, extensionId, "/index.js")
+      const extensionIndexJsPath = /** @type {string} */ (
+        solvePath(true, PATH_EXTENSIONS, dirName, "index.js")
       );
-      const buffer = await fsp.readFile(extensionMainJs);
-      const ret = excludeImport(buffer.toString(), /^node:.+$/);
-      res.setHeader("Content-Type", "text/javascript; charset=utf-8");
-      res.writeHead(200);
-      res.end(ret);
+      r.setHeader("Content-Type", "text/javascript; charset=utf-8");
+      r.writeHead(200);
+      const buffer = await fsp.readFile(extensionIndexJsPath);
+      r.end(excludeImport(buffer.toString(), /^node:.+$/));
       return;
     }
 
-    if (req.url === "/list-extensions") {
+    if (r.req.url === "/list-extensions") {
+      r.setHeader("Content-Type", "application/json; charset=utf-8");
+      r.setHeader("Cache-Control", "no-store");
+      r.writeHead(200);
       const ret = /** @type {ListExtensionsResponse} */ ([]);
       for (const entry of await fsp.readdir(PATH_EXTENSIONS)) {
-        const extensionIndexJs = /** @type {string} */ (
-          solvePath(true, PATH_EXTENSIONS, entry, "/index.js")
+        const extensionIndexJsPath = /** @type {string} */ (
+          solvePath(true, PATH_EXTENSIONS, entry, "index.js")
         );
         const extension = /** @type {Extension} */ (
-          (await import(extensionIndexJs)).default
+          (await import(extensionIndexJsPath)).default
         );
-        assert(extension.id === entry);
+        assert(entry === extension.id + "_" + extension.version);
         ret.push({
           id: extension.id,
+          version: extension.version,
           name: extension.name,
           description: extension.description,
           actions: extension.actions.map((action) => ({
@@ -2382,67 +2340,128 @@ const inServer = async () => {
           profiles: extension.profiles,
         });
       }
-      res.setHeader("Content-Type", "application/json");
-      res.writeHead(200);
-      res.end(JSON.stringify(ret));
+      r.end(JSON.stringify(ret));
       return;
     }
 
-    if (req.url === "/install-extension") {
+    if (r.req.url === "/install-extension") {
       const request = /** @type {InstallExtensionRequest} */ (
-        await reqToJson(req)
+        await reqToJson(r.req)
       );
-      const extensionTempIndexJs = /** @type {string} */ (
-        solvePath(true, PATH_CACHE, "downloading-" + nextInt() + ".js")
-      );
-      await download(request.url, extensionTempIndexJs);
-      const extension = /** @type {Extension} */ (
-        (await import(extensionTempIndexJs)).default
-      );
-      const extensionDir = /** @type {string} */ (
-        solvePath(true, PATH_EXTENSIONS, extension.id)
-      );
-      await fsp.mkdir(extensionDir);
-      await fsp.rename(extensionTempIndexJs, extensionDir + "/index.js");
-      for (const asset of extension.assets) {
-        if (!asset.platforms.includes(CURRENT_PLATFORM)) {
-          continue;
+      const abortController = new AbortController();
+      let finished = 0;
+      let amount = 0;
+      let tempStreams = /** @type {Set<fs.WriteStream>} */ (new Set());
+      let tempPaths = /** @type {Set<string>} */ (new Set());
+
+      const wait = (async () => {
+        const indexJsResponse = await fetch(request.url, {
+          redirect: "follow",
+          signal: abortController.signal,
+        });
+        if (!indexJsResponse.body) {
+          throw new Error("response.body is null, url = " + request.url);
         }
-        const assetExtName = /** @type {string} */ (
-          false
-            ? undefined
+        amount += parseInt(
+          indexJsResponse.headers.get("Content-Length") || "0"
+        );
+        // for await (const chunk of response.body) downloaded += chunk.length;
+        const indexJsTempPath = solvePath(true, PATH_CACHE, nextId() + ".js");
+        tempPaths.add(indexJsTempPath);
+        const indexJsTempStream = fs.createWriteStream(indexJsTempPath);
+        for await (const chunk of indexJsResponse.body) {
+          finished += chunk.length;
+          indexJsTempStream.write(chunk); // TODO: see docs about backpressure
+        }
+        await new Promise((resolve) => indexJsTempStream.end(resolve)); // use .end() instead of .close() https://github.com/nodejs/node/issues/2006
+        const extension = /** @type {Extension} */ (
+          (await import(indexJsTempPath)).default
+        );
+        const extensionDir = solvePath(
+          true,
+          PATH_EXTENSIONS,
+          extension.id + "_" + extension.version
+        );
+        tempPaths.add(extensionDir);
+        await fsp.rm(extensionDir, { recursive: true, force: true });
+        await fsp.mkdir(extensionDir, { recursive: true });
+        await fsp.rename(
+          indexJsTempPath,
+          solvePath(true, extensionDir, "index.js")
+        );
+        // const tasks = []; // TODO: parallel
+        for (const asset of extension.assets) {
+          if (!asset.platforms.includes(CURRENT_PLATFORM)) {
+            continue;
+          }
+          const tempExtName = false
+            ? /** @type {never} */ (undefined)
             : asset.kind === "raw"
             ? "raw"
             : asset.kind === "zip"
             ? "zip"
-            : asset.kind === "gzip"
-            ? "gz"
-            : asset.kind === "tar"
-            ? "tar"
-            : asset.kind === "tar-gzip"
-            ? "tar.gz"
-            : assert(false, "unsupported asset kind")
-        );
-        const assetTemp =
-          PATH_CACHE + "/downloading-" + nextInt() + "." + assetExtName;
-        await download(asset.url, assetTemp);
-        if (asset.kind === "raw") {
-          await fsp.rename(assetTemp, extensionDir + "/" + asset.path);
-        } else if (asset.kind === "zip") {
-          const extractDir = extensionDir + "/" + asset.path;
-          await child_process.spawn("unzip", [assetTemp, "-d", extractDir]);
-        } else {
-          assert(false, "unsupported yet");
+            : /** @type {never} */ (assert(false, "unsupported asset kind"));
+          const tempPath = solvePath(
+            true,
+            PATH_CACHE,
+            nextId() + "." + tempExtName
+          );
+          tempPaths.add(tempPath);
+          const assetResponse = await fetch(asset.url, {
+            redirect: "follow",
+            signal: abortController.signal,
+          });
+          const tempStream = fs.createWriteStream(tempPath);
+          if (!assetResponse.body) {
+            throw new Error("response.body is null, url = " + asset.url);
+          }
+          amount += parseInt(
+            assetResponse.headers.get("Content-Length") || "0"
+          );
+          for await (const chunk of assetResponse.body) {
+            finished += chunk.length;
+            tempStream.write(chunk);
+          }
+          await new Promise((resolve) => tempStream.end(resolve));
+          if (asset.kind === "zip") {
+            const zip = new StreamZip.async({ file: tempPath });
+            await zip.extract(null, solvePath(true, extensionDir, asset.path));
+            await zip.close();
+            await fsp.rm(tempPath);
+          } else {
+            assert(false, "unsupported asset kind");
+          }
+          await chmod777(extensionDir);
         }
-        await fsp.rm(assetTemp, { recursive: true });
-      }
-      res.setHeader("Content-Type", "application/json");
-      res.writeHead(200);
-      res.end(JSON.stringify({}));
+      })();
+
+      wait.catch(async () => {
+        abortController.abort();
+        // then delete the temporary files here
+        // 先关 stream 再删文件
+        for (const v of tempStreams) {
+          await new Promise((resolve) => v.end(resolve)); // 用 await 等一下，慢一些但是稳妥
+        }
+        for (const v of tempPaths) {
+          await fsp.rm(v, { force: true, recursive: true }); // 用 await 等一下，慢一些但是稳妥
+        }
+      });
+
+      installExtensionControllers.set(nextId(), {
+        progress: () => ({ download: { finished, amount } }),
+        wait: wait,
+      });
+
+      // 不支持cancel，但是保证别的不出错？比如出错了自动删除。因为vscode也不支持cancel
+      // https://stackoverflow.com/a/49771109
+      // https://developer.mozilla.org/zh-CN/docs/Web/API/Server-sent_events/Using_server-sent_events
+
+      r.end();
       return;
     }
 
-    res.writeHead(404).end("not found");
+    r.writeHead(404);
+    r.end();
   });
 
   server.listen(9393, "127.0.0.1");

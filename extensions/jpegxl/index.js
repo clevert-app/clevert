@@ -114,7 +114,7 @@ export default /** @type {Extension} */ ({
           progress: () => {
             return progressValue;
           },
-          cancel: () => {
+          stop: () => {
             child.kill("SIGTERM");
           },
           wait: new Promise((resolve, reject) => {
