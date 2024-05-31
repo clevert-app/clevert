@@ -3,20 +3,17 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
 import http from "node:http";
-import https from "node:https";
 import events from "node:events";
 import zlib from "node:zlib";
 import stream from "node:stream";
 // import module from "node:module";
 
+/**
+ * Copy from [node-stream-zip](https://github.com/antelle/node-stream-zip/blob/7c5d50393418b261668b0dd4c8d9ccaa9ac913ce/node_stream_zip.js) . MIT License.
+ */
 const StreamZip = (() => {
   if (!globalThis.process) return /** @type {never} */ (null);
-
-  // the std node:zlib.Unzip is misnamed IMO. it just deflate, not uncompress zip.
-
-  // https://github.com/antelle/node-stream-zip/blob/7c5d50393418b261668b0dd4c8d9ccaa9ac913ce/node_stream_zip.js
 
   // @license node-stream-zip | (c) 2020 Antelle | https://github.com/antelle/node-stream-zip/blob/master/LICENSE
   // Portions copyright https://github.com/cthackers/adm-zip | https://raw.githubusercontent.com/cthackers/adm-zip/master/LICENSE
@@ -1445,22 +1442,35 @@ const nextId = (() => {
 })();
 
 /**
- * Solve path, like path.resolve + support of home dir prefix.
- * @param {boolean} absolute
+ * Solve path, like path.resolve with support of home dir prefix.
+ *
+ * ```js
+ * if (process.platform === "win32") {
+ *   assert(solvePath("C:\\a\\b", "c/d", "\\e") === "C:\\a\\b\\c\\d\\e");
+ *   assert(solvePath("C:\\a\\\\b", "c\\d", "..\\e") === "C:\\a\\b\\c\\e");
+ * } else {
+ *   assert(solvePath("a/b", "../c", "/d") === import.meta.dirname + "/a/c/d");
+ *   assert(solvePath("~/a//b", "c/d", "../e") === process.env.HOME + "/a/b/c/e");
+ * }
+ * ```
+ *
  * @param {...string} parts
  * @returns {string}
  */
-const solvePath = (absolute, ...parts) => {
+const solvePath = (...parts) => {
   if (parts[0].startsWith("~")) {
     parts[0] = parts[0].slice(1);
-    parts.unshift(os.homedir());
+    parts.unshift(/** @type {string} */ (process.env.HOME));
+    // process.env.USERPROFILE
   }
   // we do not use path.resolve directy because we want to control absolute or not
-  if (!path.isAbsolute(parts[0]) && absolute) {
+  if (!path.isAbsolute(parts[0])) {
     parts.unshift(process.cwd());
   }
   return path.join(...parts); // path.join will convert '\\' to '/' also, like path.resolve
 };
+
+// /** @type {1} */ (process.exit());
 
 /**
 @typedef {
@@ -1496,14 +1506,14 @@ const solvePath = (absolute, ...parts) => {
     running: number,
     amount: number,
   }
-} RunnerProgress The `running` property may be float.
+} RunActionProgress The `running` property may be float.
 @typedef {
   {
-    progress: () => RunnerProgress,
+    progress: () => RunActionProgress,
     stop: () => void,
     wait: Promise<any>,
   }
-} Runner
+} RunActionController
 @typedef {
   {
     id: string,
@@ -1526,22 +1536,6 @@ const solvePath = (absolute, ...parts) => {
     profiles: any[],
   }
 } Extension
-@typedef {
-  {
-    input: {
-      main: string[],
-    },
-    output: {
-      main: string[],
-    },
-  }
-} ConverterEntry
-@typedef {
-  {
-    path: string,
-    type: "file" | "dir",
-  }[]
-} ReadDirResponse
 @typedef {
   {
     id: string,
@@ -1577,14 +1571,14 @@ const solvePath = (absolute, ...parts) => {
 } InstallExtensionProgress
 @typedef {
   {
-    kind: "runner-progress",
+    kind: "run-action-progress",
     id: string,
-    progress: RunnerProgress,
+    progress: RunActionProgress,
   } | {
-    kind: "runner-success",
+    kind: "run-action-success",
     id: string,
   } | {
-    kind: "runner-error",
+    kind: "run-action-error",
     id: string,
     error: any,
   } | {
@@ -1611,7 +1605,7 @@ const solvePath = (absolute, ...parts) => {
     id: string,
     version: string,
   }
-} UninstallExtensionRequest
+} RemoveExtensionRequest
 @typedef {
   {
     kind: "number-sequence",
@@ -1657,6 +1651,7 @@ const page = () => html`
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
     <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:" />
     <title>clevert</title>
     <style>
       * {
@@ -1886,7 +1881,7 @@ const inPage = async () => {
    */
   const refreshCurrentAction = async (extensionId, actionId) => {
     const extension = /** @type {Extension} */ (
-      (await import("/extension/" + extensionId + "/index.js")).default
+      (await import("/extension/" + extensionId + "index.js")).default
     );
     const action = extension.actions.find((action) => action.id === actionId);
     if (action === undefined) {
@@ -2062,8 +2057,8 @@ const inServer = async () => {
     ? "mac-arm64"
     : /** @type {never} */ (assert(false, "unsupported platform"));
 
-  /** @type {Map<string, Runner>} */
-  const runners = new Map(); // runner 永远不删除
+  /** @type {Map<string, RunActionController>} */
+  const runActionControllers = new Map(); // 永远不删除
   /** @type {Map<string, InstallExtensionController>} */
   const installExtensionControllers = new Map();
 
@@ -2099,39 +2094,44 @@ const inServer = async () => {
       recursive: true,
     })) {
       if (!v.isFile()) continue;
-      const a = /** @type {any} */ (v);
-      const parentPath = /** @type {string} */ (a.parentPath ?? a.path); // https://nodejs.org/api/fs.html#class-fsdirent
-      const p = solvePath(false, parentPath, v.name);
-      await fsp.chmod(p, 0o777); // https://stackoverflow.com/a/20769157
+      const parentPath = /** @type {string} */ (v.parentPath ?? v.path); // https://nodejs.org/api/fs.html#class-fsdirent
+      await fsp.chmod(solvePath(parentPath, v.name), 0o777); // https://stackoverflow.com/a/20769157
     }
   };
 
-  const genEntries = async (
-    /** @type {RunActionRequest["entries"]} */ opts
-  ) => {
+  /**
+   * @param {RunActionRequest["entries"]} opts
+   * @returns {Promise<any>}
+   */
+  const genEntries = async (opts) => {
     if (opts.kind === "common-files") {
       if (opts.entries) {
         assert(false, "todo");
       }
       const entries = [];
-      const inputDir = solvePath(false, opts.inputDir);
+      const inputDir = solvePath(opts.inputDir);
+      const outputDir = solvePath(opts.outputDir);
       for (const v of await fsp.readdir(inputDir, {
         withFileTypes: true,
         recursive: true,
       })) {
-        const a = /** @type {any} */ (v);
-        const parentPath = /** @type {string} */ (a.parentPath ?? a.path); // https://nodejs.org/api/fs.html#class-fsdirent
-        const input = solvePath(false, parentPath, v.name);
-        const relative = input
-          .slice(inputDir.length)
-          .replace(/(?<=\.)[^\\/\.]+$/, opts.outputExtension);
-        const output = solvePath(false, opts.outputDir, relative);
+        const parentPath = v.parentPath ?? v.path; // https://nodejs.org/api/fs.html#class-fsdirent
+        const input = solvePath(parentPath, v.name);
+        let output = path.relative(inputDir, input);
+        if (opts.outputExtension) {
+          const extname = path.extname(input); // includes the dot char
+          if (extname) {
+            output = output.slice(0, output.length - extname.length);
+          }
+          output += "." + opts.outputExtension;
+        }
+        output = solvePath(outputDir, output);
         entries.push({
           input: { main: [input] },
           output: { main: [output] },
         });
       }
-      return /** @type {any} */ (entries);
+      return entries;
     }
     assert(false, "todo");
   };
@@ -2147,11 +2147,11 @@ const inServer = async () => {
     }
 
     if (r.req.url === "/index.js") {
-      const buffer = await fsp.readFile(import.meta.filename);
-      const ret = excludeImport(buffer.toString(), /^node:.+$/);
       r.setHeader("Content-Type", "text/javascript; charset=utf-8");
       r.writeHead(200);
-      r.end(ret);
+      const buffer = await fsp.readFile(import.meta.filename);
+      r.write(excludeImport(buffer.toString(), /^node:.+$/));
+      r.end();
       return;
     }
 
@@ -2164,8 +2164,10 @@ const inServer = async () => {
 
     if (r.req.url === "/run-action") {
       const req = /** @type {RunActionRequest} */ (await reqToJson(r.req));
-      const extensionIndexJsPath = /** @type {string} */ (
-        solvePath(true, PATH_EXTENSIONS, req.extensionId, "/index.js")
+      const extensionIndexJsPath = solvePath(
+        PATH_EXTENSIONS,
+        req.extensionId + "_" + req.extensionVersion,
+        "index.js"
       );
       const extension = /** @type {Extension} */ (
         (await import(extensionIndexJsPath)).default
@@ -2180,9 +2182,8 @@ const inServer = async () => {
       const entries = await genEntries(req.entries);
       const amount = entries.length;
       let finished = 0;
-      const runningControllers = /** @type {Set<ActionExecuteController>} */ (
-        new Set()
-      );
+      /** @type {Set<ActionExecuteController>} */
+      const runningControllers = new Set();
       const wait = Promise.all(
         [...Array(req.parallel)].map((_, i) =>
           (async () => {
@@ -2196,7 +2197,7 @@ const inServer = async () => {
           })()
         )
       );
-      runners.set(nextId(), {
+      runActionControllers.set(nextId(), {
         progress: () => {
           let running = 0;
           for (const controller of runningControllers) {
@@ -2216,7 +2217,7 @@ const inServer = async () => {
       return;
     }
 
-    if (r.req.url === "/stop-runner") {
+    if (r.req.url === "/stop-action") {
       assert(false, "todo");
       r.setHeader("Content-Type", "application/json; charset=utf-8");
       r.writeHead(200);
@@ -2235,47 +2236,47 @@ const inServer = async () => {
       /** @type {Set<string>} */
       const waitingIds = new Set();
       while (!r.closed) {
-        for (const [id, runner] of runners) {
+        for (const [id, controller] of runActionControllers) {
           if (preventedIds.has(id)) {
-            continue; // 如果在阻止列表里，直接跳过，比如已经退出的 runner
+            continue; // 如果在阻止列表里，直接跳过，比如已经退出的 controller
           }
           sendEvent({
-            kind: "runner-progress",
+            kind: "run-action-progress",
             id,
-            progress: runner.progress(),
+            progress: controller.progress(),
           });
           if (!waitingIds.has(id)) {
             waitingIds.add(id);
-            // 如果不在 waitingIds 中，新开一个 promise 来 wait 这个 runner
-            runner.wait.then(() => {
-              sendEvent({ kind: "runner-success", id });
+            // 如果不在 waitingIds 中，新开 promise 来 wait 这个 controller
+            controller.wait.then(() => {
+              sendEvent({ kind: "run-action-success", id });
             });
-            runner.wait.catch((error) => {
-              sendEvent({ kind: "runner-error", id, error });
+            controller.wait.catch((error) => {
+              sendEvent({ kind: "run-action-error", id, error });
             });
-            runner.wait.finally(() => {
-              preventedIds.add(id); // 发现 runner 已经退出，所以添加到阻止列表，以后跳过查询
+            controller.wait.finally(() => {
+              preventedIds.add(id); // 发现 controller 已经退出，所以添加到阻止列表，以后跳过查询
             });
           }
         }
-        for (const [id, ctrler] of installExtensionControllers) {
+        for (const [id, controller] of installExtensionControllers) {
           if (preventedIds.has(id)) {
             continue;
           }
           sendEvent({
             kind: "install-extension-progress",
             id,
-            progress: ctrler.progress(),
+            progress: controller.progress(),
           });
           if (!waitingIds.has(id)) {
             waitingIds.add(id);
-            ctrler.wait.then(() => {
+            controller.wait.then(() => {
               sendEvent({ kind: "install-extension-success", id });
             });
-            ctrler.wait.catch((error) => {
+            controller.wait.catch((error) => {
               sendEvent({ kind: "install-extension-error", id, error });
             });
-            ctrler.wait.finally(() => {
+            controller.wait.finally(() => {
               preventedIds.add(id);
             });
           }
@@ -2292,7 +2293,7 @@ const inServer = async () => {
       const ret = /** @type {ListExtensionsResponse} */ ([]);
       for (const entry of await fsp.readdir(PATH_EXTENSIONS)) {
         const extensionIndexJsPath = /** @type {string} */ (
-          solvePath(true, PATH_EXTENSIONS, entry, "index.js")
+          solvePath(PATH_EXTENSIONS, entry, "index.js")
         );
         const extension = /** @type {Extension} */ (
           (await import(extensionIndexJsPath)).default
@@ -2337,7 +2338,7 @@ const inServer = async () => {
           indexJsResponse.headers.get("Content-Length") || "0"
         );
         // for await (const chunk of response.body) downloaded += chunk.length;
-        const indexJsTempPath = solvePath(true, PATH_CACHE, nextId() + ".js");
+        const indexJsTempPath = solvePath(PATH_CACHE, nextId() + ".js");
         tempPaths.add(indexJsTempPath);
         const indexJsTempStream = fs.createWriteStream(indexJsTempPath);
         for await (const chunk of indexJsResponse.body) {
@@ -2349,17 +2350,13 @@ const inServer = async () => {
           (await import(indexJsTempPath)).default
         );
         const extensionDir = solvePath(
-          true,
           PATH_EXTENSIONS,
           extension.id + "_" + extension.version
         );
         tempPaths.add(extensionDir);
         await fsp.rm(extensionDir, { recursive: true, force: true });
         await fsp.mkdir(extensionDir, { recursive: true });
-        await fsp.rename(
-          indexJsTempPath,
-          solvePath(true, extensionDir, "index.js")
-        );
+        await fsp.rename(indexJsTempPath, solvePath(extensionDir, "index.js"));
         // const tasks = []; // TODO: parallel
         for (const asset of extension.assets) {
           if (!asset.platforms.includes(CURRENT_PLATFORM)) {
@@ -2372,11 +2369,7 @@ const inServer = async () => {
             : asset.kind === "zip"
             ? "zip"
             : /** @type {never} */ (assert(false, "unsupported asset kind"));
-          const tempPath = solvePath(
-            true,
-            PATH_CACHE,
-            nextId() + "." + tempExtName
-          );
+          const tempPath = solvePath(PATH_CACHE, nextId() + "." + tempExtName);
           tempPaths.add(tempPath);
           const assetResponse = await fetch(asset.url, {
             redirect: "follow",
@@ -2396,7 +2389,7 @@ const inServer = async () => {
           await new Promise((resolve) => tempStream.end(resolve));
           if (asset.kind === "zip") {
             const zip = new StreamZip.async({ file: tempPath });
-            await zip.extract(null, solvePath(true, extensionDir, asset.path));
+            await zip.extract(null, solvePath(extensionDir, asset.path));
             await zip.close();
             await fsp.rm(tempPath);
           } else {
@@ -2432,11 +2425,8 @@ const inServer = async () => {
     }
 
     if (r.req.url?.startsWith("/extension/")) {
-      const [, , dirName, fileName] = r.req.url.split("/");
-      assert(fileName === "index.js");
-      const extensionIndexJsPath = /** @type {string} */ (
-        solvePath(true, PATH_EXTENSIONS, dirName, "index.js")
-      );
+      const relative = r.req.url.split("/extension/")[1];
+      const extensionIndexJsPath = solvePath(PATH_EXTENSIONS, relative);
       r.setHeader("Content-Type", "text/javascript; charset=utf-8");
       r.writeHead(200);
       const buffer = await fsp.readFile(extensionIndexJsPath);
