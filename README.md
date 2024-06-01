@@ -100,18 +100,15 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 
 - linux 要求环境必须为主流的环境，保证 glibc，libgcc，libstdc++，libz 可用。其他依赖应当静态链接。标准是 docker debian:12。
 - win 大多数时候使用 msys2 mingw，某些时候可能会需要 msys2 cygwin 比如 rsync，也尽量不要依赖 vc runtime。
-- mac 还没想好。
-
-可能可以提供 macos arm64 环境: [flyci](https://flyci.net/) 和 [scaleway](https://console.scaleway.com/)
-
-利用 macos arm64 环境，虚拟化来跑 linux arm64 和 win arm64 的编译，尽量避免交叉编译，减少折腾。
-
-windows 可能需要支持 win arm64，以后可以当成宣传的卖点？高通那款芯片什么时候出啊。
+- win arm64 可以用 linux arm64 跑 wine。windows 可能需要支持 win arm64，以后可以当成宣传的卖点？
+- mac 只支持 arm64
 
 ```sh
 # https://stackoverflow.com/a/73388939
 nm --dynamic --undefined-only --with-symbol-versions ./jpegxl | grep GLIBC | sed -e 's#.\+@##' | sort --unique
 ```
+
+注意 ffmpeg 的 release 保留策略，要用每个月的最后一次 build https://github.com/BtbN/FFmpeg-Builds?tab=readme-ov-file#release-retention-policy
 
 ## 其他
 
