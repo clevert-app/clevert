@@ -1347,8 +1347,14 @@ const StreamZip = (() => {
 
 /**
  * Assert the value is true, or throw an error.
+ * @overload
  * @param {boolean} value
  * @param {string | Error | any} [message]
+ * @returns {void}
+ * @overload
+ * @param {false} value
+ * @param {string | Error | any} [message]
+ * @returns {never}
  */
 const assert = (value, message) => {
   // like "node:assert", but cross platform
@@ -1365,7 +1371,7 @@ const assert = (value, message) => {
  * @param {RegExp} regexp
  * @returns {string}
  */
-const excludeImport = (sourceCode, regexp) => {
+const excludeImports = (sourceCode, regexp) => {
   // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import
   // we dont support the "string name import" in reference just match quotas, and ensure the "import" keyword in line beginning, and ensure imports in the head of file
   let ret = "";
@@ -2048,14 +2054,14 @@ const inServer = async () => {
 
   /** @type {Platform} */
   const CURRENT_PLATFORM = false
-    ? /** @type {never} */ (undefined)
+    ? assert(false)
     : process.platform === "linux" && process.arch === "x64"
     ? "linux-x64"
     : process.platform === "win32" && process.arch === "x64"
     ? "win-x64"
     : process.platform === "darwin" && process.arch === "arm64"
     ? "mac-arm64"
-    : /** @type {never} */ (assert(false, "unsupported platform"));
+    : assert(false, "unsupported platform");
 
   /** @type {Map<string, RunActionController>} */
   const runActionControllers = new Map(); // 永远不删除
@@ -2147,11 +2153,11 @@ const inServer = async () => {
     }
 
     if (r.req.url === "/index.js") {
+      const buffer = await fsp.readFile(import.meta.filename);
+      const ret = excludeImports(buffer.toString(), /^node:.+$/);
       r.setHeader("Content-Type", "text/javascript; charset=utf-8");
       r.writeHead(200);
-      const buffer = await fsp.readFile(import.meta.filename);
-      r.write(excludeImport(buffer.toString(), /^node:.+$/));
-      r.end();
+      r.end(ret);
       return;
     }
 
@@ -2159,160 +2165,6 @@ const inServer = async () => {
       r.setHeader("Content-Type", "image/png");
       r.writeHead(200);
       r.end();
-      return;
-    }
-
-    if (r.req.url === "/run-action") {
-      const req = /** @type {RunActionRequest} */ (await reqToJson(r.req));
-      const extensionIndexJsPath = solvePath(
-        PATH_EXTENSIONS,
-        req.extensionId + "_" + req.extensionVersion,
-        "index.js"
-      );
-      const extension = /** @type {Extension} */ (
-        (await import(extensionIndexJsPath)).default
-      );
-      const action = extension.actions.find(
-        (action) => action.id === req.actionId
-      );
-      if (action === undefined) {
-        assert(false, "action not found");
-        return;
-      }
-      const entries = await genEntries(req.entries);
-      const amount = entries.length;
-      let finished = 0;
-      /** @type {Set<ActionExecuteController>} */
-      const runningControllers = new Set();
-      const wait = Promise.all(
-        [...Array(req.parallel)].map((_, i) =>
-          (async () => {
-            for (let entry; (entry = entries.shift()); ) {
-              const controller = action.execute(req.profile, entry);
-              runningControllers.add(controller);
-              await controller.wait;
-              runningControllers.delete(controller);
-              finished += 1;
-            }
-          })()
-        )
-      );
-      runActionControllers.set(nextId(), {
-        progress: () => {
-          let running = 0;
-          for (const controller of runningControllers) {
-            running += controller.progress();
-          }
-          return { finished, running, amount };
-        },
-        stop: () => {
-          for (const controller of runningControllers) {
-            controller.stop();
-            runningControllers.delete(controller);
-          }
-        },
-        wait,
-      });
-      r.end();
-      return;
-    }
-
-    if (r.req.url === "/stop-action") {
-      assert(false, "todo");
-      r.setHeader("Content-Type", "application/json; charset=utf-8");
-      r.writeHead(200);
-      r.end();
-      return;
-    }
-
-    if (r.req.url === "/get-status") {
-      r.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-      r.writeHead(200);
-      const sendEvent = (/** @type {GetStatusResponseEvent} */ event) => {
-        r.write(`data: ${JSON.stringify(event)}\n\n`);
-      };
-      /** @type {Set<string>} */
-      const preventedIds = new Set();
-      /** @type {Set<string>} */
-      const waitingIds = new Set();
-      while (!r.closed) {
-        for (const [id, controller] of runActionControllers) {
-          if (preventedIds.has(id)) {
-            continue; // 如果在阻止列表里，直接跳过，比如已经退出的 controller
-          }
-          sendEvent({
-            kind: "run-action-progress",
-            id,
-            progress: controller.progress(),
-          });
-          if (!waitingIds.has(id)) {
-            waitingIds.add(id);
-            // 如果不在 waitingIds 中，新开 promise 来 wait 这个 controller
-            controller.wait.then(() => {
-              sendEvent({ kind: "run-action-success", id });
-            });
-            controller.wait.catch((error) => {
-              sendEvent({ kind: "run-action-error", id, error });
-            });
-            controller.wait.finally(() => {
-              preventedIds.add(id); // 发现 controller 已经退出，所以添加到阻止列表，以后跳过查询
-            });
-          }
-        }
-        for (const [id, controller] of installExtensionControllers) {
-          if (preventedIds.has(id)) {
-            continue;
-          }
-          sendEvent({
-            kind: "install-extension-progress",
-            id,
-            progress: controller.progress(),
-          });
-          if (!waitingIds.has(id)) {
-            waitingIds.add(id);
-            controller.wait.then(() => {
-              sendEvent({ kind: "install-extension-success", id });
-            });
-            controller.wait.catch((error) => {
-              sendEvent({ kind: "install-extension-error", id, error });
-            });
-            controller.wait.finally(() => {
-              preventedIds.add(id);
-            });
-          }
-        }
-        const INTERVAL = 1000; // 轮询间隔，不是 SSE 的发送间隔
-        await new Promise((resolve) => setTimeout(resolve, INTERVAL));
-      }
-      return;
-    }
-
-    if (r.req.url === "/list-extensions") {
-      r.setHeader("Content-Type", "application/json; charset=utf-8");
-      r.writeHead(200);
-      const ret = /** @type {ListExtensionsResponse} */ ([]);
-      for (const entry of await fsp.readdir(PATH_EXTENSIONS)) {
-        const extensionIndexJsPath = /** @type {string} */ (
-          solvePath(PATH_EXTENSIONS, entry, "index.js")
-        );
-        const extension = /** @type {Extension} */ (
-          (await import(extensionIndexJsPath)).default
-        );
-        assert(entry === extension.id + "_" + extension.version);
-        ret.push({
-          id: extension.id,
-          version: extension.version,
-          name: extension.name,
-          description: extension.description,
-          actions: extension.actions.map((action) => ({
-            id: action.id,
-            name: action.name,
-            description: action.description,
-          })),
-          profiles: extension.profiles,
-        });
-      }
-      r.end(JSON.stringify(ret));
       return;
     }
 
@@ -2363,12 +2215,12 @@ const inServer = async () => {
             continue;
           }
           const tempExtName = false
-            ? /** @type {never} */ (undefined)
+            ? assert(false)
             : asset.kind === "raw"
             ? "raw"
             : asset.kind === "zip"
             ? "zip"
-            : /** @type {never} */ (assert(false, "unsupported asset kind"));
+            : assert(false, "unsupported asset kind");
           const tempPath = solvePath(PATH_CACHE, nextId() + "." + tempExtName);
           tempPaths.add(tempPath);
           const assetResponse = await fetch(asset.url, {
@@ -2424,13 +2276,170 @@ const inServer = async () => {
       return;
     }
 
-    if (r.req.url?.startsWith("/extension/")) {
-      const relative = r.req.url.split("/extension/")[1];
-      const extensionIndexJsPath = solvePath(PATH_EXTENSIONS, relative);
-      r.setHeader("Content-Type", "text/javascript; charset=utf-8");
+    if (r.req.url === "/list-extensions") {
+      const ret = /** @type {ListExtensionsResponse} */ ([]);
+      for (const entry of await fsp.readdir(PATH_EXTENSIONS)) {
+        const extensionIndexJsPath = solvePath(
+          PATH_EXTENSIONS,
+          entry,
+          "index.js"
+        );
+        const extension = /** @type {Extension} */ (
+          (await import(extensionIndexJsPath)).default
+        );
+        assert(entry === extension.id + "_" + extension.version);
+        ret.push({
+          id: extension.id,
+          version: extension.version,
+          name: extension.name,
+          description: extension.description,
+          actions: extension.actions.map((action) => ({
+            id: action.id,
+            name: action.name,
+            description: action.description,
+          })),
+          profiles: extension.profiles,
+        });
+      }
+      r.setHeader("Content-Type", "application/json; charset=utf-8");
       r.writeHead(200);
-      const buffer = await fsp.readFile(extensionIndexJsPath);
-      r.write(excludeImport(buffer.toString(), /^node:.+$/));
+      r.end(JSON.stringify(ret));
+      return;
+    }
+
+    if (r.req.url?.startsWith("/extensions/")) {
+      const relative = r.req.url.split("/extensions/")[1];
+      if (relative === "index.js") {
+        const extensionIndexJsPath = solvePath(PATH_EXTENSIONS, relative);
+        const buffer = await fsp.readFile(extensionIndexJsPath);
+        const ret = excludeImports(buffer.toString(), /^node:.+$/);
+        r.setHeader("Content-Type", "text/javascript; charset=utf-8");
+        r.writeHead(200);
+        r.end(ret);
+      } else {
+        assert(false, "todo"); // add mime guess and more
+      }
+      return;
+    }
+
+    if (r.req.url === "/run-action") {
+      const req = /** @type {RunActionRequest} */ (await reqToJson(r.req));
+      const extensionIndexJsPath = solvePath(
+        PATH_EXTENSIONS,
+        req.extensionId + "_" + req.extensionVersion,
+        "index.js"
+      );
+      const extension = /** @type {Extension} */ (
+        (await import(extensionIndexJsPath)).default
+      );
+      const action = extension.actions.find(
+        (action) => action.id === req.actionId
+      );
+      if (action === undefined) {
+        assert(false, "action not found");
+        return;
+      }
+      const entries = await genEntries(req.entries);
+      const amount = entries.length;
+      let finished = 0;
+      const runningControllers = /** @type {Set<ActionExecuteController>} */ (
+        new Set()
+      );
+      const wait = Promise.all(
+        [...Array(req.parallel)].map((_, i) =>
+          (async () => {
+            for (let entry; (entry = entries.shift()); ) {
+              const controller = action.execute(req.profile, entry);
+              runningControllers.add(controller);
+              await controller.wait;
+              runningControllers.delete(controller);
+              finished += 1;
+            }
+          })()
+        )
+      );
+      runActionControllers.set(nextId(), {
+        progress: () => {
+          let running = 0;
+          for (const controller of runningControllers) {
+            running += controller.progress();
+          }
+          return { finished, running, amount };
+        },
+        stop: () => {
+          for (const controller of runningControllers) {
+            controller.stop();
+            runningControllers.delete(controller);
+          }
+        },
+        wait,
+      });
+      r.end();
+      return;
+    }
+
+    if (r.req.url === "/stop-action") {
+      assert(false, "todo");
+      r.end();
+      return;
+    }
+
+    if (r.req.url === "/get-status") {
+      r.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      r.writeHead(200);
+      /** @param {GetStatusResponseEvent} e */
+      const send = (e) => r.write(`data: ${JSON.stringify(e)}\n\n`);
+      const preventedIds = /** @type {Set<string>} */ (new Set());
+      const waitingIds = /** @type {Set<string>} */ (new Set());
+      while (!r.closed) {
+        for (const [id, controller] of runActionControllers) {
+          if (preventedIds.has(id)) {
+            continue; // 如果在阻止列表里，直接跳过，比如已经退出的 controller
+          }
+          send({
+            kind: "run-action-progress",
+            id,
+            progress: controller.progress(),
+          });
+          if (!waitingIds.has(id)) {
+            waitingIds.add(id);
+            // 如果不在 waitingIds 中，新开 promise 来 wait 这个 controller
+            controller.wait.then(() => {
+              send({ kind: "run-action-success", id });
+            });
+            controller.wait.catch((error) => {
+              send({ kind: "run-action-error", id, error });
+            });
+            controller.wait.finally(() => {
+              preventedIds.add(id); // 发现 controller 已经退出，所以添加到阻止列表，以后跳过查询
+            });
+          }
+        }
+        for (const [id, controller] of installExtensionControllers) {
+          if (preventedIds.has(id)) {
+            continue;
+          }
+          send({
+            kind: "install-extension-progress",
+            id,
+            progress: controller.progress(),
+          });
+          if (!waitingIds.has(id)) {
+            waitingIds.add(id);
+            controller.wait.then(() => {
+              send({ kind: "install-extension-success", id });
+            });
+            controller.wait.catch((error) => {
+              send({ kind: "install-extension-error", id, error });
+            });
+            controller.wait.finally(() => {
+              preventedIds.add(id);
+            });
+          }
+        }
+        const INTERVAL = 1000; // 轮询间隔，不是 SSE 的发送间隔
+        await new Promise((resolve) => setTimeout(resolve, INTERVAL));
+      }
       r.end();
       return;
     }
