@@ -2,6 +2,8 @@
 
 [简体中文](#translation-zh-cn)
 
+The universal file converter platform.
+
 <details>
 <summary>笔记</summary>
 
@@ -76,6 +78,8 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [ ] https://v2ex.com/t/1042387
 - [ ] 扩展商店初步
 - [ ] 改进 PGO 抽奖技术
+- [ ] https://v2ex.com/t/984548#reply17
+- [ ] 上线
 
 ## 仓库结构
 
