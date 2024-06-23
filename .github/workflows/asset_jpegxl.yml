@@ -12,7 +12,7 @@ jobs:
         uses: actions/cache@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_98299fe_2"
+          key: "asset_jpegxl_98299fe_3"
           path: jpegxl.tar
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
@@ -75,7 +75,7 @@ jobs:
             return 0;
           }
           EOF
-          sed -i.bak -e 's| = malloc| = (uint8_t*)malloc|g' -e 's| = realloc| = (uint8_t*)realloc|g' tools/jxlinfo.c
+          sed -i.bak -e 's|name = malloc|name = (char*)malloc|g' -e 's|box_data = malloc|box_data = (uint8_t*)malloc|g' -e 's|box_data = realloc|box_data = (uint8_t*)realloc|g' tools/jxlinfo.c
           sed -i.bak -e 's|int main(|int cmd_jxlinfo_main(int argc, const char** argv){//|' tools/jxlinfo.c
           sed -i.bak -e 's|int main(|int cmd_cjxl_main(int argc, const char** argv){//|' tools/cjxl_main.cc
           sed -i.bak -e 's|int main(|int cmd_djxl_main(int argc, const char** argv){//|' tools/djxl_main.cc
@@ -92,7 +92,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_98299fe_2"
+          key: "asset_jpegxl_98299fe_3"
           path: jpegxl.tar
       - name: Build
         run: |
@@ -129,7 +129,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_98299fe_2"
+          key: "asset_jpegxl_98299fe_3"
           path: jpegxl.tar
       - name: Build
         run: |
@@ -166,7 +166,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_98299fe_2"
+          key: "asset_jpegxl_98299fe_3"
           path: jpegxl.tar
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
