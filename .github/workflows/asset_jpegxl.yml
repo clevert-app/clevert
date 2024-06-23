@@ -12,12 +12,12 @@ jobs:
         uses: actions/cache@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_8835f5d_2"
+          key: "asset_jpegxl_98299fe_1"
           path: jpegxl.tar
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          curl -L https://github.com/libjxl/libjxl/archive/8835f5dfc4857f46277f6c703e47ac7817bd7aed.tar.gz | tar -zx
+          curl -L https://github.com/libjxl/libjxl/archive/98299fec196db9d98263b690e1f9076cda22fdb5.tar.gz | tar -zx
           mv libjxl-* jpegxl
           cd jpegxl
           sed -i.bak -e 's|download_github testdata|#|' deps.sh
@@ -92,7 +92,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_8835f5d_2"
+          key: "asset_jpegxl_98299fe_1"
           path: jpegxl.tar
       - name: Build
         run: |
@@ -119,7 +119,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_jpegxl_8835f5d_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_jpegxl_98299fe_' }}${{ github.run_id }}"
           files: linux-x64.zip
   mac-arm64:
     needs: prepare
@@ -129,7 +129,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_8835f5d_2"
+          key: "asset_jpegxl_98299fe_1"
           path: jpegxl.tar
       - name: Build
         run: |
@@ -156,7 +156,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_jpegxl_8835f5d_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_jpegxl_98299fe_' }}${{ github.run_id }}"
           files: mac-arm64.zip
   win-x64:
     needs: prepare
@@ -166,7 +166,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
-          key: "asset_jpegxl_8835f5d_2"
+          key: "asset_jpegxl_98299fe_1"
           path: jpegxl.tar
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
@@ -188,5 +188,5 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_jpegxl_8835f5d_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_jpegxl_98299fe_' }}${{ github.run_id }}"
           files: win-x64.zip
