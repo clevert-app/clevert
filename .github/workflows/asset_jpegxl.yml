@@ -101,9 +101,9 @@ jobs:
           sudo apt install -y build-essential pkg-config cmake ninja-build libgif-dev libjpeg-dev libpng-dev
           sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||'  -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
           to_bak(){ sudo mv $1 $1.bak ;}
-          to_bak /usr/lib/x86_64-linux-gnu/libz.a
           to_bak /usr/lib/x86_64-linux-gnu/libpthread.a
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF
+          sed -i.bak -e 's|libz.a|libz.so|' build/build.ninja
           cmake --build build
           mv build/tools/multicall ./jpegxl
           strip ./jpegxl
