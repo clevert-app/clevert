@@ -7,6 +7,7 @@ import http from "node:http";
 import events from "node:events";
 import zlib from "node:zlib";
 import stream from "node:stream";
+
 // import module from "node:module";
 
 /**
@@ -1346,21 +1347,51 @@ const StreamZip = (() => {
 })();
 
 /**
- * Assert the value is true, or throw an error.
- * @overload
- * @param {boolean} value
- * @param {string | Error | any} [message]
- * @returns {void}
- * @overload
- * @param {false} value
- * @param {string | Error | any} [message]
- * @returns {never}
+ * Get next unique id. Format = `1716887172_000123` = unix stamp + underscore + sequence number inside this second.
+ * @returns {string}
  */
-const assert = (value, message) => {
-  // like "node:assert", but cross platform
+const nextId = (() => {
+  let lastT = Math.floor(Date.now() / 1000);
+  let lastV = 0;
+  return () => {
+    let curT = Math.floor(Date.now() / 1000);
+    let curV = 0;
+    if (curT === lastT) {
+      curV = ++lastV;
+    } else {
+      lastV = 0;
+    }
+    lastT = curT;
+    return curT + "_" + (curV + "").padStart(6, "0");
+  };
+})();
+
+/**
+ * Assert the value is true, or throw an error. Like "node:assert", but cross platform.
+ * @param {any} value
+ * @param {any} [info]
+ * @returns {asserts value}
+ */
+const assert = (value, info) => {
   if (!value) {
-    throw new Error(message ?? "assertion failed");
+    throw new Error(info ?? "assertion failed");
   }
+};
+
+/**
+ * Returns a debounced version of the input function.
+ * @param {any} f
+ * @param {number} delay
+ * @return {any}
+ */
+const debounce = (f, delay) => {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      f(...args);
+    }, delay);
+  };
 };
 
 /**
@@ -1426,26 +1457,6 @@ const excludeImports = (sourceCode, regexp) => {
   ret += sourceCode.slice(position);
   return ret;
 };
-
-/**
- * Get next unique id. Format = `1716887172_000123` = unix stamp + underscore + sequence number inside this second.
- * @returns {string}
- */
-const nextId = (() => {
-  let lastT = Math.floor(Date.now() / 1000);
-  let lastV = 0;
-  return () => {
-    let curT = Math.floor(Date.now() / 1000);
-    let curV = 0;
-    if (curT === lastT) {
-      curV = ++lastV;
-    } else {
-      lastV = 0;
-    }
-    lastT = curT;
-    return curT + "_" + (curV + "").padStart(6, "0");
-  };
-})();
 
 /**
  * Solve path, like path.resolve with support of home dir prefix.
@@ -1533,13 +1544,24 @@ const solvePath = (...parts) => {
 @typedef {
   {
     id: string,
+    name: string,
+    description: string,
+    actionId: string,
+    extensionId: string,
+    extensionVersion: string,
+    [key: string]: any,
+  }
+} Profile
+@typedef {
+  {
+    id: string,
     version: string,
     name: string,
     description: string,
     dependencies: string[],
     assets: Asset[],
     actions: Action[],
-    profiles: any[],
+    profiles: Profile[],
   }
 } Extension
 @typedef {
@@ -1559,6 +1581,7 @@ const solvePath = (...parts) => {
       description: string,
       actionId: string,
       extensionId: string,
+      extensionVersion: string,
     }[],
   }[]
 } ListExtensionsResponse
@@ -1649,9 +1672,91 @@ const solvePath = (...parts) => {
 } RunActionRequest
 */
 
-const html = (/** @type {any} */ [s]) => s;
-
-const page = () => html`
+const css = String.raw;
+const html = String.raw;
+const pageCss = css`
+  /* 约定，需要显示和隐藏的东西，默认显示，有 off 才隐藏 */
+  /* 这里是临时的做法，省得写 xxx.off */
+  .off {
+    visibility: hidden;
+  }
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  body {
+    height: 100vh;
+    margin: 0;
+    font-family: system-ui;
+  }
+  body > div {
+    position: fixed;
+    top: 36px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 36px;
+    display: flex;
+    padding: 4px;
+    gap: 4px;
+    background: #7777;
+  }
+  header > button {
+    background: #7777;
+    border: none;
+  }
+  header > button:hover {
+    background: #7779;
+  }
+  header > button:active {
+    background: #777f;
+  }
+  label:has(> input[type="radio"]) {
+    display: inline-block;
+    line-height: 1;
+  }
+  label:has(> input[type="radio"]) > input {
+    display: none;
+  }
+  label:has(> input[type="radio"])::before {
+    content: "";
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 1px solid #000;
+    vertical-align: top;
+    border-radius: 50%;
+  }
+  label:has(> input[type="radio"]:checked)::before {
+    box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 16px #000;
+  }
+  label:has(> input[type="checkbox"]) {
+    display: inline-block;
+    line-height: 1;
+  }
+  label:has(> input[type="checkbox"]) > input {
+    display: none;
+  }
+  label:has(> input[type="checkbox"])::before {
+    content: "";
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 1px solid #000;
+    vertical-align: top;
+  }
+  label:has(> input[type="checkbox"]:checked)::before {
+    box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 16px #000;
+  }
+`;
+const pageHtml = html`
   <!DOCTYPE html>
   <head>
     <meta charset="utf-8" />
@@ -1659,393 +1764,264 @@ const page = () => html`
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" href="data:" />
     <title>clevert</title>
+    <!-- module script defer by default -->
+    <script type="module" src="/index.js"></script>
     <style>
-      * {
-        box-sizing: border-box;
-      }
-      html {
-        --bg: #fff;
-        --border: #888;
-        --hover: #eee;
-        --active: #aaa7;
-      }
-      @media (prefers-color-scheme: dark) {
-        html {
-          --bg: #000;
-          --border: #888;
-          --hover: #222;
-          --active: #444;
-        }
-      }
-      body {
-        min-height: 100vh;
-        margin: 0;
-        font-family: system-ui;
-        background: var(--bg);
-      }
-      top_bar_ {
-        position: fixed;
-        display: flex;
-        gap: 8px;
-        width: 100%;
-        height: calc(48px + 1px);
-        padding: 8px;
-        left: 0;
-        top: 0;
-        line-height: 32px;
-        background: var(--bg);
-        border-bottom: 1px solid var(--border);
-      }
-      side_bar_ {
-        display: block;
-        width: 220px;
-        height: 100vh;
-        /* padding: 8px; */
-        /* padding-top: calc(48px + 1px + 8px); */
-        border-right: 1px solid var(--border);
-        position: absolute;
-        top: 0;
-        background: var(--bg);
-        overflow: hidden;
-      }
-      main_list_,
-      actions_list_ {
-        display: block;
-        width: 100%;
-        padding: 8px;
-        height: 100%;
-        transition: 0.5s;
-      }
-      actions_list_ {
-        position: relative;
-        top: -100%;
-        left: 100%;
-      }
-      main_list_[second_],
-      actions_list_[second_] {
-        transform: translateX(-100%);
-      }
-      side_bar_item_ {
-        display: block;
-        padding: 8px;
-        line-height: 16px;
-      }
-      side_bar_item_:hover {
-        background: var(--hover);
-      }
-      side_bar_item_:active {
-        background: var(--active);
-      }
-      extensions_market_,
-      current_action_ {
-        position: fixed;
-        top: 0;
-        right: 0;
-        left: 220px;
-        height: 100vh;
-        padding: 8px;
-        padding-top: calc(48px + 1px + 8px);
-        overflow: auto;
-        transition: 0.5s;
-      }
-      extensions_market_[page_off_],
-      current_action_[page_off_] {
-        visibility: hidden;
-        opacity: 0;
-      }
-      input_output_config_,
-      action_root_,
-      action_controls_ {
-        display: block;
-      }
-      entries_common_files_,
-      entries_common_files_ > div {
-        display: grid;
-        gap: 8px;
-        /* border: 1px solid var(--border); */
-      }
-      entries_common_files_ {
-        margin-bottom: 8px;
-      }
+      ${pageCss}
     </style>
   </head>
-  <body>
-    <script type="module" src="/index.js"></script>
-  </body>
+  <body></body>
 `;
 
-const inPage = async () => {
-  // Extension Market
-  const $extensionsMarket = document.body.appendChild(
-    document.createElement("extensions_market_")
-  );
-  $extensionsMarket.appendChild(document.createElement("label")).textContent =
-    "Install URL: ";
-  const $extensionInstallUrl = $extensionsMarket.appendChild(
-    document.createElement("input")
-  );
-  const $extensionInstallButton = $extensionsMarket.appendChild(
-    document.createElement("button")
-  );
-  $extensionInstallButton.textContent = "Install";
-  $extensionInstallButton.onclick = async () => {
-    const request = /** @type {InstallExtensionRequest} */ ({
-      url: $extensionInstallUrl.value,
-    });
-    await fetch("/install-extension", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-    await refreshMainList();
-  };
-
-  // Current Action
-  const $currentAction = document.body.appendChild(
-    document.createElement("current_action_")
-  );
-
-  // Top Bar
-  const $topBar = document.body.appendChild(document.createElement("top_bar_"));
-  const $unfoldSideBarButton = $topBar.appendChild(
-    document.createElement("button")
-  );
-  $unfoldSideBarButton.textContent = "Unfold";
-  $unfoldSideBarButton.onclick = async () => {
-    $sideBar.removeAttribute("fold_");
-  };
-
-  // Side Bar
-  const $sideBar = document.body.appendChild(
-    document.createElement("side_bar_")
-  );
-  const $mainList = $sideBar.appendChild(document.createElement("main_list_"));
-  const $foldSideBarButton = $mainList.appendChild(
-    document.createElement("side_bar_item_")
-  );
-  $foldSideBarButton.textContent = "Fold";
-  $foldSideBarButton.onclick = async () => {
-    $sideBar.setAttribute("fold_", "");
-  };
-  const $toExtensionMarketButton = $mainList.appendChild(
-    document.createElement("side_bar_item_")
-  );
-  $toExtensionMarketButton.textContent = "Extension Market";
-  $toExtensionMarketButton.onclick = async () => {
-    $extensionsMarket.removeAttribute("page_off_");
-    $currentAction.setAttribute("page_off_", "");
-  };
-  const $actionsList = $sideBar.appendChild(
-    document.createElement("actions_list_")
-  );
-  const $backToMainListButton = $actionsList.appendChild(
-    document.createElement("side_bar_item_")
-  );
-  $backToMainListButton.textContent = "Back";
-  $backToMainListButton.onclick = async () => {
-    $mainList.removeAttribute("second_");
-    $actionsList.removeAttribute("second_");
-  };
-
-  const refreshMainList = async () => {
-    const extensions = /** @type {ListExtensionsResponse} */ (
-      await (await fetch("/list-extensions")).json()
-    );
-    $mainList.innerHTML = "";
-    $mainList.appendChild($foldSideBarButton);
-    $mainList.appendChild(document.createElement("hr"));
-    $mainList.appendChild($toExtensionMarketButton);
-    $mainList.appendChild(document.createElement("hr"));
-    for (const extension of extensions) {
-      const $extension = $mainList.appendChild(
-        document.createElement("side_bar_item_")
+const pageMain = async () => {
+  // $profiles
+  const $profiles = document.createElement("div"); // 选择 extension，action，profile 等. 其实用户眼中应该全都是 profile，所有的目标都是 profile
+  document.body.appendChild($profiles);
+  $profiles.id = "profiles";
+  $profiles.classList.add("off");
+  // profile dataset keys
+  const D_PROFILE_ID = "id";
+  const D_PROFILE_ACTION_ID = "action_id"; // Uncaught DOMException: Failed to set a named property 'a-b' on 'DOMStringMap': 'a-b' is not a valid property name.
+  const D_PROFILE_EXTENSION_ID = "extension_id";
+  const D_PROFILE_EXTENSION_VERSION = "extension_version";
+  // const $filterStyle = document.createElement("style");
+  // $profiles.appendChild($filterStyle);
+  // const $filter = document.createElement("input");
+  // $profiles.appendChild($filter);
+  // $filter.oninput = debounce(async () => {
+  //   const value = $filter.value;
+  //   $filterStyle.textContent = css``;
+  // }, 700);
+  // TODO: add filter to filter the profiles. use CSS to filter
+  const $choices = document.createElement("ul");
+  $profiles.appendChild($choices);
+  /** @type {ListExtensionsResponse[0]["profiles"]} */
+  const profiles = [];
+  const r$profiles = async () => {
+    const res = await fetch("/list-extensions")
+      .then((r) => r.json())
+      .then((r) => /** @type {ListExtensionsResponse} */ (r));
+    $choices.replaceChildren();
+    profiles.length = 0; // empty the array
+    // TODO: add user defined profiles
+    // extension built-in profiles
+    for (const extension of res) {
+      for (const profile of extension.profiles) {
+        profiles.push(profile);
+      }
+    }
+    const onclick = function () {
+      r$action(
+        this.dataset[D_PROFILE_EXTENSION_ID],
+        this.dataset[D_PROFILE_EXTENSION_VERSION],
+        this.dataset[D_PROFILE_ID]
       );
-      $extension.textContent = extension.id;
-      $extension.onclick = async () => {
-        $actionsList.innerHTML = "";
-        $actionsList.appendChild($backToMainListButton);
-        $actionsList.appendChild(document.createElement("hr"));
-        for (const action of extension.actions) {
-          const $action = $actionsList.appendChild(
-            document.createElement("side_bar_item_")
-          );
-          $action.textContent = action.id;
-          $action.onclick = async () => {
-            await refreshCurrentAction(extension.id, action.id);
-            $extensionsMarket.setAttribute("page_off_", "");
-            $currentAction.removeAttribute("page_off_");
-          };
-        }
-        $mainList.setAttribute("second_", "");
-        $actionsList.setAttribute("second_", "");
-      };
+      $profiles.classList.add("off");
+      $action.classList.remove("off");
+    };
+    for (const profile of profiles) {
+      const $profile = document.createElement("li");
+      $choices.appendChild($profile);
+      $profile.textContent = profile.name;
+      $profile.dataset[D_PROFILE_ID] = profile.id;
+      $profile.dataset[D_PROFILE_ACTION_ID] = profile.actionId;
+      $profile.dataset[D_PROFILE_EXTENSION_ID] = profile.extensionId;
+      $profile.dataset[D_PROFILE_EXTENSION_VERSION] = profile.extensionVersion;
+      $profile.onclick = onclick;
     }
   };
+  r$profiles(); // 每次安装 extension 结束后调用一次这个
 
+  // $action
+  const $action = document.createElement("div"); // 在选择好 action 之后，装入这个元素中
+  document.body.appendChild($action);
+  $action.id = "action";
+  $action.classList.add("off");
   /**
    * @param {string} extensionId
-   * @param {string} actionId
+   * @param {string} extensionVersion
+   * @param {string} profileId
    */
-  const refreshCurrentAction = async (extensionId, actionId) => {
+  const r$action = async (extensionId, extensionVersion, profileId) => {
+    const extensionIndexJsUrl =
+      "/extensions/" + extensionId + "_" + extensionVersion + "/index.js";
     const extension = /** @type {Extension} */ (
-      (await import("/extension/" + extensionId + "index.js")).default
+      (await import(extensionIndexJsUrl)).default
     );
-    const action = extension.actions.find((action) => action.id === actionId);
-    if (action === undefined) {
-      alert("action === undefined");
-      return;
-    }
     const profile = extension.profiles.find(
-      (profile) => profile.actionId === action.id
+      (profile) => profile.id === profileId
     );
-    if (profile === undefined) {
-      alert("profile === undefined");
-      return;
-    }
-    $currentAction.innerHTML = "";
-    $currentAction.setAttribute("kind_", action.kind);
-
+    assert(profile !== undefined);
+    const action = extension.actions.find(
+      (action) => action.id === profile.actionId
+    );
+    assert(action !== undefined);
+    $action.replaceChildren();
+    let getEntries;
     if (action.kind === "common-files") {
-      // 允许使用 dir, 单个文件列表等。这里提供一个切换？
-      // 适配一种场景，就是 yt-dlp 这样凭空出个文件
-      const $entriesCommonFiles = $currentAction.appendChild(
-        document.createElement("entries_common_files_")
-      );
-      const $select = $entriesCommonFiles.appendChild(
-        document.createElement("select")
-      );
-      const $optDir = $select.appendChild(document.createElement("option"));
-      $optDir.textContent = "Dir mode";
-      $optDir.value = "dir";
-      const $optFiles = $select.appendChild(document.createElement("option"));
-      $optFiles.textContent = "Files mode";
-      $optFiles.value = "files";
-      // ---
-      const $optDirPanel = $entriesCommonFiles.appendChild(
-        document.createElement("div")
-      );
-      const $inputDir = $optDirPanel.appendChild(
-        document.createElement("input")
-      );
+      const $entries = document.createElement("div");
+      $action.appendChild($entries);
+      const $inputDir = document.createElement("input");
+      $entries.appendChild($inputDir);
       $inputDir.placeholder = "Input Dir";
-      $inputDir.value = "/home/kkocdko/misc/code/clevert/temp/converter-test/i"; // does not support "~/adbf" ?
-      const $outputDir = $optDirPanel.appendChild(
-        document.createElement("input")
-      );
+      const $outputDir = document.createElement("input");
+      $entries.appendChild($outputDir);
       $outputDir.placeholder = "Output Dir";
-      $outputDir.value =
-        "/home/kkocdko/misc/code/clevert/temp/converter-test/o";
-      let $outputExtension;
-      if (profile?.entries?.outputExtensionOptions) {
-        const options = profile.entries.outputExtensionOptions;
-        $outputExtension = $optDirPanel.appendChild(
-          document.createElement("select")
-        );
-        for (const option of options) {
-          const $option = $outputExtension.appendChild(
-            document.createElement("option")
-          );
-          $option.textContent = option;
-          if (profile?.entries?.outputExtension) {
-            if (profile?.entries?.outputExtension === option) {
-              $option.selected = true;
-            }
-          } else {
-            if (options[0] === option) {
-              $option.selected = true;
-            }
-          }
-        }
-      } else {
-        $outputExtension = $optDirPanel.appendChild(
-          document.createElement("input")
-        );
-        $outputExtension.placeholder = "Output Extension";
-        if (profile?.entries?.outputExtension) {
-          $outputExtension.value = profile?.entries?.outputExtension;
-        }
-      }
-
-      // ---
-      // const $optFilesPanel = $entriesCommonFiles.appendChild(
-      //   document.createElement("div")
-      // );
-      // $select.onchange = () => {
-      //   if ($select.value === "dir") {
-      //   } else if ($select.value === "files") {
-      //   } else {
-      //   }
-      // };
-
-      const ui = action.ui(profile);
-      if (ui.entriesRoot) {
-        $currentAction.appendChild(ui.entriesRoot);
-      }
-      $currentAction.appendChild(ui.profileRoot);
-
-      const $actionControls = $currentAction.appendChild(
-        document.createElement("action_controls_")
-      );
-      const $runnerProgress = $actionControls.appendChild(
-        document.createElement("pre")
-      );
-      const refreshRunnerProgress = async (/** @type {string} */ runnerId) => {
-        const request = /** @type {any} */ ({ runnerId });
-        const response = /** @type {any} */ (
-          await (
-            await fetch("/get-runner-info", {
-              method: "POST",
-              body: JSON.stringify(request),
-            })
-          ).json()
-        );
-        $runnerProgress.textContent = JSON.stringify(response);
+      const $outputExtension = document.createElement("input");
+      $entries.appendChild($outputExtension);
+      $outputExtension.placeholder = "Output Extension";
+      getEntries = () => {
+        /** @type {EntriesCommonFiles} */
+        const entries = {
+          kind: "common-files",
+          inputDir: $inputDir.value,
+          outputDir: $outputDir.value,
+          outputExtension: $outputExtension.value,
+        };
+        return entries;
       };
-      const $startButton = $actionControls.appendChild(
-        document.createElement("button")
-      );
-      $startButton.textContent = "Start";
-      $startButton.onclick = async () => {
-        const startActionRequest = /** @type {RunActionRequest} */ ({
-          extensionId: extension.id,
-          actionId: action.id,
-          profile: ui.profile(),
-          entries: {
-            kind: "common-files",
-            inputDir: $inputDir.value,
-            outputDir: $outputDir.value,
-            outputExtension: $outputExtension.value,
-          },
-        });
-        const startActionResponse = /** @type {any} */ (
-          await (
-            await fetch("/start-action", {
-              method: "POST",
-              body: JSON.stringify(startActionRequest),
-            })
-          ).json()
-        );
-        setInterval(async () => {
-          refreshRunnerProgress(startActionResponse.runnerId);
-        }, 1000);
+    } else if (action.kind === "plain") {
+      // todo
+      const $entries = document.createElement("div");
+      $action.appendChild($entries);
+      getEntries = () => {
+        /** @type {EntriesPlain} */
+        const entries = {
+          kind: "plain",
+          entries: [],
+        };
+        return entries;
       };
-      return;
+    } else {
+      assert(false, "todo");
     }
+    // todo: custom entries for yt-dlp
+    const controller = action.ui(profile); // must be div?
+    $action.appendChild(controller.profileRoot);
+    const $run = document.createElement("button");
+    $action.appendChild($run);
+    $run.textContent = "Run";
+    $run.onclick = async () => {
+      /** @type {RunActionRequest} */
+      const req = {
+        extensionId,
+        extensionVersion,
+        actionId: action.id,
+        profile: controller.profile(),
+        entries: getEntries(),
+        parallel: 2,
+      };
+      await fetch("/run-action", { method: "POST", body: JSON.stringify(req) });
+    };
+  };
 
-    {
-      alert("todo:" + action.kind);
-      return;
+  // $market
+  const $market = document.createElement("div");
+  document.body.appendChild($market);
+  $market.id = "market";
+  $market.classList.add("off");
+  const r$market = async () => {
+    // todo: add real market
+    const $url = document.createElement("input");
+    $market.appendChild($url);
+    $url.placeholder = "url";
+    const $install = document.createElement("button");
+    $market.appendChild($install);
+    $install.textContent = "install";
+    $install.onclick = async () => {
+      assert($url.value.trim() !== "");
+      const request = /** @type {InstallExtensionRequest} */ ({
+        url: $url.value,
+      });
+      await fetch("/install-extension", {
+        method: "POST",
+        body: JSON.stringify(request),
+      });
+    };
+  };
+  r$market();
+
+  // $top
+  const $top = document.createElement("header"); // 如果要移动端，就**不可能**侧栏了。而顶栏在桌面端也可以忍受
+  document.body.appendChild($top);
+  $top.id = "top";
+  const $logo = document.createElement("svg");
+  $top.appendChild($logo);
+  $logo.style.padding = "4px";
+  $logo.innerHTML = "<text>LOGO</text>";
+  // TODO: add svg logo
+  const $toProfiles = document.createElement("button");
+  $top.appendChild($toProfiles);
+  $toProfiles.textContent = "Profiles";
+  $toProfiles.onclick = async () => {
+    $profiles.classList.remove("off");
+    $action.classList.add("off");
+    $market.classList.add("off");
+  };
+  const $toMarket = document.createElement("button");
+  $top.appendChild($toMarket);
+  $toMarket.textContent = "Market";
+  $toMarket.onclick = async () => {
+    $profiles.classList.add("off");
+    $action.classList.add("off");
+    $market.classList.remove("off");
+  };
+  // TODO: use pure css to style it. When fold, it's a icon in top bar; when unfole, it's a dialog on desktop or fullpage dialog in mobile.
+  const $tasks = document.createElement("ul");
+  $top.appendChild($tasks);
+  const D_TASK_ID = "id";
+  new EventSource("/get-status").onmessage = async (message) => {
+    // https://stackoverflow.com/questions/24564030/
+    const e = /** @type {GetStatusResponseEvent} */ (JSON.parse(message.data));
+    console.log(e);
+    if (
+      e.kind === "run-action-progress" ||
+      e.kind === "run-action-success" ||
+      e.kind === "run-action-error"
+    ) {
+      /** @type {HTMLLIElement | null} */
+      let el = $tasks.querySelector(`li[data-${D_TASK_ID}="${e.id}"]`);
+      if (!el) {
+        el = document.createElement("li");
+        $tasks.appendChild(el);
+        el.dataset[D_TASK_ID] = e.id;
+      }
+      if (e.kind === "run-action-progress") {
+        el.textContent = JSON.stringify({ id: e.id, progress: e.progress });
+      } else if (e.kind === "run-action-success") {
+        el.textContent = JSON.stringify({ id: e.id, success: true });
+      } else if (e.kind === "run-action-error") {
+        el.textContent = JSON.stringify({ id: e.id, error: e.error });
+      }
+    } else if (
+      e.kind === "install-extension-progress" ||
+      e.kind === "install-extension-success" ||
+      e.kind === "install-extension-error"
+    ) {
+      /** @type {HTMLLIElement | null} */
+      let el = $tasks.querySelector(`li[data-${D_TASK_ID}=${e.id}]`);
+      if (!el) {
+        el = document.createElement("li");
+        $tasks.appendChild(el);
+        el.dataset[D_TASK_ID] = e.id;
+      }
+      if (e.kind === "install-extension-progress") {
+        el.textContent = JSON.stringify({ id: e.id, progress: e.progress });
+      } else if (e.kind === "install-extension-success") {
+        el.textContent = JSON.stringify({ id: e.id, success: true });
+      } else if (e.kind === "install-extension-error") {
+        el.textContent = JSON.stringify({ id: e.id, error: e.error });
+      }
     }
   };
 
+  // main
   {
-    // main
-    await refreshMainList();
-    $extensionsMarket.removeAttribute("page_off_");
-    $currentAction.setAttribute("page_off_", "");
+    $market.classList.remove("off");
   }
 };
 
-const inServer = async () => {
+const serverMain = async () => {
   // is in main
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
@@ -2054,14 +2030,14 @@ const inServer = async () => {
 
   /** @type {Platform} */
   const CURRENT_PLATFORM = false
-    ? assert(false)
+    ? /** @type {never} */ (assert(false))
     : process.platform === "linux" && process.arch === "x64"
     ? "linux-x64"
     : process.platform === "win32" && process.arch === "x64"
     ? "win-x64"
     : process.platform === "darwin" && process.arch === "arm64"
     ? "mac-arm64"
-    : assert(false, "unsupported platform");
+    : /** @type {never} */ (assert(false, "unsupported platform"));
 
   /** @type {Map<string, RunActionController>} */
   const runActionControllers = new Map(); // 永远不删除
@@ -2148,7 +2124,7 @@ const inServer = async () => {
     if (r.req.url === "/") {
       r.setHeader("Content-Type", "text/html; charset=utf-8");
       r.writeHead(200);
-      r.end(page());
+      r.end(pageHtml);
       return;
     }
 
@@ -2309,7 +2285,7 @@ const inServer = async () => {
 
     if (r.req.url?.startsWith("/extensions/")) {
       const relative = r.req.url.split("/extensions/")[1];
-      if (relative === "index.js") {
+      if (relative.endsWith("/index.js")) {
         const extensionIndexJsPath = solvePath(PATH_EXTENSIONS, relative);
         const buffer = await fsp.readFile(extensionIndexJsPath);
         const ret = excludeImports(buffer.toString(), /^node:.+$/);
@@ -2335,10 +2311,7 @@ const inServer = async () => {
       const action = extension.actions.find(
         (action) => action.id === req.actionId
       );
-      if (action === undefined) {
-        assert(false, "action not found");
-        return;
-      }
+      assert(action !== undefined, "action not found");
       const entries = await genEntries(req.entries);
       const amount = entries.length;
       let finished = 0;
@@ -2349,8 +2322,10 @@ const inServer = async () => {
         [...Array(req.parallel)].map((_, i) =>
           (async () => {
             for (let entry; (entry = entries.shift()); ) {
+              // console.log({ entry, req });
               const controller = action.execute(req.profile, entry);
               runningControllers.add(controller);
+              await new Promise((r) => setTimeout(r, 100));
               await controller.wait;
               runningControllers.delete(controller);
               finished += 1;
@@ -2358,6 +2333,7 @@ const inServer = async () => {
           })()
         )
       );
+      wait.catch(() => {}); // https://stackoverflow.com/q/40500490/
       runActionControllers.set(nextId(), {
         progress: () => {
           let running = 0;
@@ -2404,14 +2380,15 @@ const inServer = async () => {
           if (!waitingIds.has(id)) {
             waitingIds.add(id);
             // 如果不在 waitingIds 中，新开 promise 来 wait 这个 controller
-            controller.wait.then(() => {
+            let wait = controller.wait;
+            wait = wait.then(() => {
               send({ kind: "run-action-success", id });
             });
-            controller.wait.catch((error) => {
+            wait = wait.catch((error) => {
               send({ kind: "run-action-error", id, error });
             });
-            controller.wait.finally(() => {
-              preventedIds.add(id); // 发现 controller 已经退出，所以添加到阻止列表，以后跳过查询
+            wait = wait.finally(() => {
+              preventedIds.add(id); // 发现 controller 已经退出，所以添加到阻止列表，以后跳过查询. 但是这不会阻止上面的 controller.wait.then 等。所以当新的 /get-status 时，至少会响应一次 run-action-success | run-action-error
             });
           }
         }
@@ -2425,14 +2402,14 @@ const inServer = async () => {
             progress: controller.progress(),
           });
           if (!waitingIds.has(id)) {
-            waitingIds.add(id);
-            controller.wait.then(() => {
+            let wait = controller.wait;
+            wait = wait.then(() => {
               send({ kind: "install-extension-success", id });
             });
-            controller.wait.catch((error) => {
+            wait = wait.catch((error) => {
               send({ kind: "install-extension-error", id, error });
             });
-            controller.wait.finally(() => {
+            wait = wait.finally(() => {
               preventedIds.add(id);
             });
           }
@@ -2451,10 +2428,9 @@ const inServer = async () => {
   server.listen(9393, "127.0.0.1");
 };
 
-const inElectron = async () => {
+const electronMain = async () => {
   // @ts-ignore
   const { app, protocol, BrowserWindow } = await import("electron");
-
   const createWindow = () => {
     const win = new BrowserWindow({
       width: 1280,
@@ -2478,7 +2454,7 @@ const inElectron = async () => {
       console.log(req.url);
       if (req.url === "resource:///main.html") {
         const type = "text/html; charset=utf-8";
-        return new Response(new Blob([page()], { type }));
+        return new Response(new Blob([pageHtml], { type }));
       }
       if (req.url === "resource:///index.js") {
         const buffer = await fsp.readFile(import.meta.filename);
@@ -2505,9 +2481,9 @@ const inElectron = async () => {
 // inElectron()
 
 if (globalThis.document) {
-  inPage();
+  pageMain();
 } else {
-  inServer();
+  serverMain();
 }
 
 /*
@@ -2608,6 +2584,8 @@ import { hello } from "a:main";
 console.log({ hello });
 console.log(import.meta.url);
 */
+
+// type Boxify<T> = { [K in keyof T]: Box<T> };
 // http://127.0.0.1:8080/extensions/jpegxl/index.js
 // let c = {};
 
