@@ -28,7 +28,7 @@ export default /** @type {Extension} */ ({
       kind: "zip", // 比如可以做 tar --strip-components 这样的
       path: "./", // 从扩展文件夹路径开始算
       // url 就直接填 github，然后让核心去做镜像加速
-      url: "https://github.com/clevert-app/clevert/releases/download/asset_jpegxl_8835f5d_9186772397/linux-x64.zip",
+      url: "https://github.com/clevert-app/clevert/releases/download/asset_jpegxl_98299fe_9630498903/linux-x64.zip",
     },
   ],
   // action 和 profile 某种程度上是有重合的，比如可以造一个全能action，然后根据profile做不同动作。但是这是不好的实践。
@@ -54,10 +54,11 @@ export default /** @type {Extension} */ ({
         // <option value="cat">Cat</option>
         // <option value="parrot">Parrot</option>
         // </select>
-        const css = (/** @type {any} */ [s]) => s;
-        const $profile = document.createElement("action_profile_");
+        const css = String.raw;
+        const $profile = document.createElement("div");
+        $profile.classList.add("profile");
         $profile.appendChild(document.createElement("style")).textContent = css`
-          action_profile_ {
+          #action .profile {
             visibility: visible;
           }
         `;
@@ -105,11 +106,26 @@ export default /** @type {Extension} */ ({
           "-q",
           String(profile.quality),
         ]);
+        // console.log([
+        //   "cjpegli",
+        //   input.main[0],
+        //   output.main[0],
+        //   "-q",
+        //   String(profile.quality),
+        // ]);
         let progressValue = 0;
         child.stderr.on("data", (/** @type {Buffer} */ data) => {
           const chunk = data.toString();
           progressValue = 0.01; // 比较明显能看出来，不要是整数
         });
+        // child.stdout.on("data", (/** @type {Buffer} */ data) => {
+        //   const chunk = data.toString();
+        //   console.log({ stdout: chunk });
+        // });
+        // child.stderr.on("data", (/** @type {Buffer} */ data) => {
+        //   const chunk = data.toString();
+        //   console.log({ stderr: chunk });
+        // });
         return {
           progress: () => {
             return progressValue;
@@ -119,12 +135,12 @@ export default /** @type {Extension} */ ({
           },
           wait: new Promise((resolve, reject) => {
             child.on("error", (err) => reject(err));
-            // child.on("exit", (code) => (code ? reject({ code }) : resolve(0)));
-            child.on("exit", (code) => {
-              setTimeout(() => {
-                code ? reject({ code }) : resolve(undefined);
-              }, Math.random() * 2000);
-            });
+            child.on("exit", (code) => (code ? reject({ code }) : resolve()));
+            // child.on("exit", (code) => {
+            //   setTimeout(() => {
+            //     code ? reject({ code }) : resolve(undefined);
+            //   }, Math.random() * 2000);
+            // });
           }),
         };
       },
@@ -133,13 +149,14 @@ export default /** @type {Extension} */ ({
   // 设计上，profile 应该是非开发者也能保存的一个纯 JSON。action 是扩展开发者编写的
   profiles: [
     // 一些预设的 profile，弱类型
-    // 约定：对于相同的 action, 这个profile列表中最考前的，就是 default的。
+    // 约定：对于相同的 action, 这个profile列表中 profile.id == action.id 的就是默认的
     {
       name: "cjpegli default",
       description: "cjpegli default profile description",
-      id: "cjpegli-default",
+      id: "cjpegli",
       actionId: "cjpegli",
       extensionId: "jpegxl",
+      extensionVersion: "0.1.0",
       quality: 75,
       // 用户：我上次output dir 到这，这次还想要到这，存profile 里，所以 entries 选项放在profile 里而不是固定在 action里
       // 对 entries 的选项 给出建议?
