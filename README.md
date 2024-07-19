@@ -7,6 +7,8 @@ The universal file converter platform.
 <details>
 <summary>笔记</summary>
 
+- http://127.0.0.1:9439/extensions/jpegxl/index.js
+
 ```sh
 sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
 apt update ; apt install -y g++ make pkg-config cmake ninja-build curl
@@ -21,7 +23,6 @@ printf "deb [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 mai
 apt update
 apt install -y cmake g++ make
 apt install -y clang-18/llvm-toolchain-jammy-18
-
 ```
 
 ## 编译优化
@@ -69,17 +70,32 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [ ] 扩展商店改进
 - [ ] 下载包再解压的模式，不做流式解压了
 - [ ] 支持 7z，zstd，xz 等，用扩展形式
-- [ ] bsdtar https://stackoverflow.com/a/23108309/11338291 https://www.libarchive.org/
 - [ ] 一个扩展的多个版本共存
 - [ ] 更多扩展
 - [ ] 约定扩展目录是 id_1.2.3
 - [ ] 官方扩展 jpegxl
-- [ ] https://github.com/rsyncOSX/RsyncOSX
 - [ ] https://v2ex.com/t/1042387
 - [ ] 扩展商店初步
 - [ ] 改进 PGO 抽奖技术
-- [ ] https://v2ex.com/t/984548#reply17
 - [ ] 上线
+
+## 扩展灵感
+
+- https://v2ex.com/t/1059035#reply52
+- https://v2ex.com/t/984548
+- https://v2ex.com/t/1041478
+- https://v2ex.com/t/1052395#reply10
+- https://github.com/rsyncOSX/RsyncOSX
+- https://v2ex.com/t/1044205
+- https://github.com/rubickCenter/rubick
+- https://github.com/nginx/nginx/archive/refs/tags/release-1.27.0.tar.gz
+- https://github.com/ghtz08/kuguo-kgm-decoder
+- https://github.com/jifengg/ffmpeg-script
+- https://github.com/RimoChan/unvcode
+- https://github.com/qpdf/qpdf
+- https://github.com/ArtifexSoftware/mupdf
+- https://github.com/VikParuchuri/marker
+- https://github.com/caj2pdf/caj2pdf
 
 ## 仓库结构
 
@@ -115,6 +131,8 @@ nm --dynamic --undefined-only --with-symbol-versions ./jpegxl | grep GLIBC | sed
 注意 ffmpeg 的 release 保留策略，要用每个月的最后一次 build https://github.com/BtbN/FFmpeg-Builds?tab=readme-ov-file#release-retention-policy
 
 ## 其他
+
+这个项目的扩展应该不需要太复杂的功能，主要就是一堆表单而已，原生 web 技术应该够用
 
 输出可能是不同类型的两个文件，比如视频文件 拆分成视频轨道和音频轨道
 

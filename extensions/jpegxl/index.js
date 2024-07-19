@@ -59,7 +59,7 @@ export default /** @type {Extension} */ ({
         $profile.classList.add("profile");
         $profile.appendChild(document.createElement("style")).textContent = css`
           #action .profile {
-            visibility: visible;
+            display: block;
           }
         `;
         const $qualityLabel = $profile.appendChild(
@@ -151,7 +151,7 @@ export default /** @type {Extension} */ ({
     // 一些预设的 profile，弱类型
     // 约定：对于相同的 action, 这个profile列表中 profile.id == action.id 的就是默认的
     {
-      name: "cjpegli default",
+      name: "cjpegli",
       description: "cjpegli default profile description",
       id: "cjpegli",
       actionId: "cjpegli",

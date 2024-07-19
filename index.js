@@ -1347,26 +1347,6 @@ const StreamZip = (() => {
 })();
 
 /**
- * Get next unique id. Format = `1716887172_000123` = unix stamp + underscore + sequence number inside this second.
- * @returns {string}
- */
-const nextId = (() => {
-  let lastT = Math.floor(Date.now() / 1000);
-  let lastV = 0;
-  return () => {
-    let curT = Math.floor(Date.now() / 1000);
-    let curV = 0;
-    if (curT === lastT) {
-      curV = ++lastV;
-    } else {
-      lastV = 0;
-    }
-    lastT = curT;
-    return curT + "_" + (curV + "").padStart(6, "0");
-  };
-})();
-
-/**
  * Assert the value is true, or throw an error. Like "node:assert", but cross platform.
  * @param {any} value
  * @param {any} [info]
@@ -1470,7 +1450,6 @@ const excludeImports = (sourceCode, regexp) => {
  *   assert(solvePath("~/a//b", "c/d", "../e") === process.env.HOME + "/a/b/c/e");
  * }
  * ```
- *
  * @param {...string} parts
  * @returns {string}
  */
@@ -1488,6 +1467,8 @@ const solvePath = (...parts) => {
 };
 
 // /** @type {1} */ (process.exit());
+
+// TODO: 逗号换成分号
 
 /**
 @typedef {
@@ -1519,6 +1500,12 @@ const solvePath = (...parts) => {
 } ActionExecuteController
 @typedef {
   {
+    begin: number,
+    expectedEnd: number,
+  }
+} RunActionTiming all with `seconds` unit
+@typedef {
+  {
     finished: number,
     running: number,
     amount: number,
@@ -1526,6 +1513,8 @@ const solvePath = (...parts) => {
 } RunActionProgress The `running` property may be float.
 @typedef {
   {
+    title: string,
+    timing: () => RunActionTiming,
     progress: () => RunActionProgress,
     stop: () => void,
     wait: Promise<any>,
@@ -1602,6 +1591,8 @@ const solvePath = (...parts) => {
   {
     kind: "run-action-progress",
     id: string,
+    title: string, // 甚至可以在 client 指定自定义标题？
+    timing: RunActionTiming,
     progress: RunActionProgress,
   } | {
     kind: "run-action-success",
@@ -1662,6 +1653,7 @@ const solvePath = (...parts) => {
 } EntriesPlain 直接就是 entries 本身，也许可以适配 yt-dlp 这种凭空出个文件的场景
 @typedef {
   {
+    title: string,
     extensionId: string,
     extensionVersion: string,
     actionId: string,
@@ -1674,6 +1666,7 @@ const solvePath = (...parts) => {
 
 const css = String.raw;
 const html = String.raw;
+
 const pageCss = css`
   /* 约定，需要显示和隐藏的东西，默认显示，有 off 才隐藏 */
   /* 这里是临时的做法，省得写 xxx.off */
@@ -1718,44 +1711,8 @@ const pageCss = css`
   header > button:active {
     background: #777f;
   }
-  label:has(> input[type="radio"]) {
-    display: inline-block;
-    line-height: 1;
-  }
-  label:has(> input[type="radio"]) > input {
-    display: none;
-  }
-  label:has(> input[type="radio"])::before {
-    content: "";
-    display: inline-block;
-    width: 1em;
-    height: 1em;
-    border: 1px solid #000;
-    vertical-align: top;
-    border-radius: 50%;
-  }
-  label:has(> input[type="radio"]:checked)::before {
-    box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 16px #000;
-  }
-  label:has(> input[type="checkbox"]) {
-    display: inline-block;
-    line-height: 1;
-  }
-  label:has(> input[type="checkbox"]) > input {
-    display: none;
-  }
-  label:has(> input[type="checkbox"])::before {
-    content: "";
-    display: inline-block;
-    width: 1em;
-    height: 1em;
-    border: 1px solid #000;
-    vertical-align: top;
-  }
-  label:has(> input[type="checkbox"]:checked)::before {
-    box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 16px #000;
-  }
 `;
+
 const pageHtml = html`
   <!DOCTYPE html>
   <head>
@@ -1773,62 +1730,104 @@ const pageHtml = html`
   <body></body>
 `;
 
+// 立刻返回 id
+
 const pageMain = async () => {
+  // $tasks
+  const $tasks = document.createElement("div");
+  document.body.appendChild($tasks);
+  $tasks.id = "tasks";
+  $tasks.classList.add("off");
+  new EventSource("/get-status").onmessage = async (message) => {
+    // https://stackoverflow.com/q/24564030/
+    const e = /** @type {GetStatusResponseEvent} */ (JSON.parse(message.data));
+    if (
+      e.kind === "run-action-progress" ||
+      e.kind === "run-action-success" ||
+      e.kind === "run-action-error"
+    ) {
+      /** @type {HTMLElement | null} */
+      let $task = $tasks.querySelector(`section[data-id=${e.id}]`);
+      if (!$task) {
+        assert(e.kind === "run-action-progress"); // 显然
+        $task = document.createElement("section");
+        $tasks.appendChild($task);
+        $task.appendChild(document.createElement("h6"));
+        $task.appendChild(document.createElement("span"));
+        $task.appendChild(document.createElement("div"));
+        $task.appendChild(document.createElement("progress"));
+      }
+      // todo : 预计完成时间计算
+      const [$title, $tips, $ops, $bar] = $task.children;
+      if (e.kind === "run-action-progress") {
+        $title.textContent = e.title;
+      } else if (e.kind === "run-action-success") {
+        $task.textContent = JSON.stringify({ id: e.id, success: true });
+      } else if (e.kind === "run-action-error") {
+        $task.textContent = JSON.stringify({ id: e.id, error: e.error });
+      }
+    } else if (
+      e.kind === "install-extension-progress" ||
+      e.kind === "install-extension-success" ||
+      e.kind === "install-extension-error"
+    ) {
+      // /** @type {HTMLLIElement | null} */
+      // let el = $tasks.querySelector(`li[data-${D_TASK_ID}=${e.id}]`);
+      // if (!el) {
+      //   el = document.createElement("li");
+      //   $tasks.appendChild(el);
+      //   el.dataset[D_TASK_ID] = e.id;
+      // }
+      // if (e.kind === "install-extension-progress") {
+      //   el.textContent = JSON.stringify({ id: e.id, progress: e.progress });
+      // } else if (e.kind === "install-extension-success") {
+      //   el.textContent = JSON.stringify({ id: e.id, success: true });
+      // } else if (e.kind === "install-extension-error") {
+      //   el.textContent = JSON.stringify({ id: e.id, error: e.error });
+      // }
+    }
+  };
+
   // $profiles
   const $profiles = document.createElement("div"); // 选择 extension，action，profile 等. 其实用户眼中应该全都是 profile，所有的目标都是 profile
   document.body.appendChild($profiles);
   $profiles.id = "profiles";
   $profiles.classList.add("off");
-  // profile dataset keys
-  const D_PROFILE_ID = "id";
-  const D_PROFILE_ACTION_ID = "action_id"; // Uncaught DOMException: Failed to set a named property 'a-b' on 'DOMStringMap': 'a-b' is not a valid property name.
-  const D_PROFILE_EXTENSION_ID = "extension_id";
-  const D_PROFILE_EXTENSION_VERSION = "extension_version";
-  // const $filterStyle = document.createElement("style");
-  // $profiles.appendChild($filterStyle);
-  // const $filter = document.createElement("input");
-  // $profiles.appendChild($filter);
-  // $filter.oninput = debounce(async () => {
-  //   const value = $filter.value;
-  //   $filterStyle.textContent = css``;
-  // }, 700);
-  // TODO: add filter to filter the profiles. use CSS to filter
+  // TODO: add filter to filter the profiles
   const $choices = document.createElement("ul");
   $profiles.appendChild($choices);
   /** @type {ListExtensionsResponse[0]["profiles"]} */
   const profiles = [];
-  const r$profiles = async () => {
-    const res = await fetch("/list-extensions")
-      .then((r) => r.json())
-      .then((r) => /** @type {ListExtensionsResponse} */ (r));
+  /** @param {{ (profile: typeof profiles[0]): boolean }} filter */
+  const r$choices = async (filter) => {
     $choices.replaceChildren();
+    for (const profile of profiles) {
+      if (!filter(profile)) {
+        continue;
+      }
+      const $profile = document.createElement("li");
+      $choices.appendChild($profile);
+      $profile.textContent = profile.name;
+      $profile.onclick = async () => {
+        r$action(profile.extensionId, profile.extensionVersion, profile.id);
+        $profiles.classList.add("off");
+        $action.classList.remove("off");
+      };
+    }
+  };
+  const r$profiles = async () => {
+    const response = await fetch("/list-extensions")
+      .then((r) => r.json())
+      .then((a) => /** @type {ListExtensionsResponse} */ (a));
     profiles.length = 0; // empty the array
     // TODO: add user defined profiles
     // extension built-in profiles
-    for (const extension of res) {
+    for (const extension of response) {
       for (const profile of extension.profiles) {
         profiles.push(profile);
       }
     }
-    const onclick = function () {
-      r$action(
-        this.dataset[D_PROFILE_EXTENSION_ID],
-        this.dataset[D_PROFILE_EXTENSION_VERSION],
-        this.dataset[D_PROFILE_ID]
-      );
-      $profiles.classList.add("off");
-      $action.classList.remove("off");
-    };
-    for (const profile of profiles) {
-      const $profile = document.createElement("li");
-      $choices.appendChild($profile);
-      $profile.textContent = profile.name;
-      $profile.dataset[D_PROFILE_ID] = profile.id;
-      $profile.dataset[D_PROFILE_ACTION_ID] = profile.actionId;
-      $profile.dataset[D_PROFILE_EXTENSION_ID] = profile.extensionId;
-      $profile.dataset[D_PROFILE_EXTENSION_VERSION] = profile.extensionVersion;
-      $profile.onclick = onclick;
-    }
+    r$choices(() => true);
   };
   r$profiles(); // 每次安装 extension 结束后调用一次这个
 
@@ -1861,6 +1860,7 @@ const pageMain = async () => {
     if (action.kind === "common-files") {
       const $entries = document.createElement("div");
       $action.appendChild($entries);
+      $entries.classList.add("entries");
       const $inputDir = document.createElement("input");
       $entries.appendChild($inputDir);
       $inputDir.placeholder = "Input Dir";
@@ -1896,14 +1896,20 @@ const pageMain = async () => {
       assert(false, "todo");
     }
     // todo: custom entries for yt-dlp
-    const controller = action.ui(profile); // must be div?
+    const controller = action.ui(profile);
+    assert(controller.profileRoot.localName === "div");
+    assert(controller.profileRoot.classList.contains("profile"));
     $action.appendChild(controller.profileRoot);
-    const $run = document.createElement("button");
-    $action.appendChild($run);
-    $run.textContent = "Run";
-    $run.onclick = async () => {
+    const $operations = document.createElement("div");
+    $operations.classList.add("operations");
+    $action.appendChild($operations);
+    const $runAction = document.createElement("button");
+    $operations.appendChild($runAction);
+    $runAction.textContent = "Run";
+    $runAction.onclick = async () => {
       /** @type {RunActionRequest} */
-      const req = {
+      const request = {
+        title: `${action.id} - ${extensionId}`,
         extensionId,
         extensionVersion,
         actionId: action.id,
@@ -1911,7 +1917,10 @@ const pageMain = async () => {
         entries: getEntries(),
         parallel: 2,
       };
-      await fetch("/run-action", { method: "POST", body: JSON.stringify(req) });
+      await fetch("/run-action", {
+        method: "POST",
+        body: JSON.stringify(request),
+      });
     };
   };
 
@@ -1945,15 +1954,20 @@ const pageMain = async () => {
   const $top = document.createElement("header"); // 如果要移动端，就**不可能**侧栏了。而顶栏在桌面端也可以忍受
   document.body.appendChild($top);
   $top.id = "top";
-  const $logo = document.createElement("svg");
-  $top.appendChild($logo);
-  $logo.style.padding = "4px";
-  $logo.innerHTML = "<text>LOGO</text>";
-  // TODO: add svg logo
+  const $toTasks = document.createElement("button");
+  $top.appendChild($toTasks);
+  $toTasks.textContent = "Tasks";
+  $toTasks.onclick = () => {
+    $tasks.classList.remove("off");
+    $profiles.classList.add("off");
+    $action.classList.add("off");
+    $market.classList.add("off");
+  };
   const $toProfiles = document.createElement("button");
   $top.appendChild($toProfiles);
   $toProfiles.textContent = "Profiles";
-  $toProfiles.onclick = async () => {
+  $toProfiles.onclick = () => {
+    $tasks.classList.add("off");
     $profiles.classList.remove("off");
     $action.classList.add("off");
     $market.classList.add("off");
@@ -1961,58 +1975,11 @@ const pageMain = async () => {
   const $toMarket = document.createElement("button");
   $top.appendChild($toMarket);
   $toMarket.textContent = "Market";
-  $toMarket.onclick = async () => {
+  $toMarket.onclick = () => {
+    $tasks.classList.add("off");
     $profiles.classList.add("off");
     $action.classList.add("off");
     $market.classList.remove("off");
-  };
-  // TODO: use pure css to style it. When fold, it's a icon in top bar; when unfole, it's a dialog on desktop or fullpage dialog in mobile.
-  const $tasks = document.createElement("ul");
-  $top.appendChild($tasks);
-  const D_TASK_ID = "id";
-  new EventSource("/get-status").onmessage = async (message) => {
-    // https://stackoverflow.com/questions/24564030/
-    const e = /** @type {GetStatusResponseEvent} */ (JSON.parse(message.data));
-    console.log(e);
-    if (
-      e.kind === "run-action-progress" ||
-      e.kind === "run-action-success" ||
-      e.kind === "run-action-error"
-    ) {
-      /** @type {HTMLLIElement | null} */
-      let el = $tasks.querySelector(`li[data-${D_TASK_ID}="${e.id}"]`);
-      if (!el) {
-        el = document.createElement("li");
-        $tasks.appendChild(el);
-        el.dataset[D_TASK_ID] = e.id;
-      }
-      if (e.kind === "run-action-progress") {
-        el.textContent = JSON.stringify({ id: e.id, progress: e.progress });
-      } else if (e.kind === "run-action-success") {
-        el.textContent = JSON.stringify({ id: e.id, success: true });
-      } else if (e.kind === "run-action-error") {
-        el.textContent = JSON.stringify({ id: e.id, error: e.error });
-      }
-    } else if (
-      e.kind === "install-extension-progress" ||
-      e.kind === "install-extension-success" ||
-      e.kind === "install-extension-error"
-    ) {
-      /** @type {HTMLLIElement | null} */
-      let el = $tasks.querySelector(`li[data-${D_TASK_ID}=${e.id}]`);
-      if (!el) {
-        el = document.createElement("li");
-        $tasks.appendChild(el);
-        el.dataset[D_TASK_ID] = e.id;
-      }
-      if (e.kind === "install-extension-progress") {
-        el.textContent = JSON.stringify({ id: e.id, progress: e.progress });
-      } else if (e.kind === "install-extension-success") {
-        el.textContent = JSON.stringify({ id: e.id, success: true });
-      } else if (e.kind === "install-extension-error") {
-        el.textContent = JSON.stringify({ id: e.id, error: e.error });
-      }
-    }
   };
 
   // main
@@ -2022,6 +1989,8 @@ const pageMain = async () => {
 };
 
 const serverMain = async () => {
+  // 后端保存，前端无状态
+
   // is in main
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
@@ -2044,7 +2013,7 @@ const serverMain = async () => {
   /** @type {Map<string, InstallExtensionController>} */
   const installExtensionControllers = new Map();
 
-  const reqToJson = async (req) => {
+  const readReq = async (req) => {
     return new Promise((resolve) => {
       let body = "";
       req.on("data", (chunk) => {
@@ -2065,6 +2034,26 @@ const serverMain = async () => {
     const t = {};
     return (await Promise.race([p, t])) === t;
   };
+
+  /**
+   * Get next unique id. Format = `1716887172_000123` = unix stamp + underscore + sequence number inside this second.
+   * @returns {string}
+   */
+  const nextId = (() => {
+    let lastT = Math.floor(Date.now() / 1000);
+    let lastV = 0;
+    return () => {
+      let curT = Math.floor(Date.now() / 1000);
+      let curV = 0;
+      if (curT === lastT) {
+        curV = ++lastV;
+      } else {
+        lastV = 0;
+      }
+      lastT = curT;
+      return curT + "_" + (curV + "").padStart(6, "0");
+    };
+  })();
 
   /**
    * Like `chmod -R 777 ./dir` but only apply on files, not dir.
@@ -2130,10 +2119,10 @@ const serverMain = async () => {
 
     if (r.req.url === "/index.js") {
       const buffer = await fsp.readFile(import.meta.filename);
-      const ret = excludeImports(buffer.toString(), /^node:.+$/);
+      const response = excludeImports(buffer.toString(), /^node:.+$/);
       r.setHeader("Content-Type", "text/javascript; charset=utf-8");
       r.writeHead(200);
-      r.end(ret);
+      r.end(response);
       return;
     }
 
@@ -2146,7 +2135,7 @@ const serverMain = async () => {
 
     if (r.req.url === "/install-extension") {
       const request = /** @type {InstallExtensionRequest} */ (
-        await reqToJson(r.req)
+        await readReq(r.req)
       );
       const abortController = new AbortController();
       let finished = 0;
@@ -2239,21 +2228,34 @@ const serverMain = async () => {
         }
       });
 
+      // 不支持cancel，但是保证别的不出错？比如出错了自动删除。因为vscode也不支持cancel
+      // https://stackoverflow.com/a/49771109
+      // https://developer.mozilla.org/zh-CN/docs/Web/API/Server-sent_events/Using_server-sent_events
+
       installExtensionControllers.set(nextId(), {
         progress: () => ({ download: { finished, amount } }),
         wait: wait,
       });
 
-      // 不支持cancel，但是保证别的不出错？比如出错了自动删除。因为vscode也不支持cancel
-      // https://stackoverflow.com/a/49771109
-      // https://developer.mozilla.org/zh-CN/docs/Web/API/Server-sent_events/Using_server-sent_events
-
       r.end();
       return;
     }
 
+    if (r.req.url === "/remove-extension") {
+      const request = /** @type {RemoveExtensionRequest} */ (
+        await readReq(r.req)
+      );
+      const extensionDir = solvePath(
+        PATH_EXTENSIONS,
+        request.id + "_" + request.version
+      );
+      await fsp.rm(extensionDir, { recursive: true, force: true });
+      r.end();
+    }
+
     if (r.req.url === "/list-extensions") {
-      const ret = /** @type {ListExtensionsResponse} */ ([]);
+      /** @type {ListExtensionsResponse} */
+      const response = [];
       for (const entry of await fsp.readdir(PATH_EXTENSIONS)) {
         const extensionIndexJsPath = solvePath(
           PATH_EXTENSIONS,
@@ -2264,7 +2266,7 @@ const serverMain = async () => {
           (await import(extensionIndexJsPath)).default
         );
         assert(entry === extension.id + "_" + extension.version);
-        ret.push({
+        response.push({
           id: extension.id,
           version: extension.version,
           name: extension.name,
@@ -2279,7 +2281,7 @@ const serverMain = async () => {
       }
       r.setHeader("Content-Type", "application/json; charset=utf-8");
       r.writeHead(200);
-      r.end(JSON.stringify(ret));
+      r.end(JSON.stringify(response));
       return;
     }
 
@@ -2288,10 +2290,10 @@ const serverMain = async () => {
       if (relative.endsWith("/index.js")) {
         const extensionIndexJsPath = solvePath(PATH_EXTENSIONS, relative);
         const buffer = await fsp.readFile(extensionIndexJsPath);
-        const ret = excludeImports(buffer.toString(), /^node:.+$/);
+        const response = excludeImports(buffer.toString(), /^node:.+$/);
         r.setHeader("Content-Type", "text/javascript; charset=utf-8");
         r.writeHead(200);
-        r.end(ret);
+        r.end(response);
       } else {
         assert(false, "todo"); // add mime guess and more
       }
@@ -2299,31 +2301,31 @@ const serverMain = async () => {
     }
 
     if (r.req.url === "/run-action") {
-      const req = /** @type {RunActionRequest} */ (await reqToJson(r.req));
+      const request = /** @type {RunActionRequest} */ (await readReq(r.req));
       const extensionIndexJsPath = solvePath(
         PATH_EXTENSIONS,
-        req.extensionId + "_" + req.extensionVersion,
+        request.extensionId + "_" + request.extensionVersion,
         "index.js"
       );
       const extension = /** @type {Extension} */ (
         (await import(extensionIndexJsPath)).default
       );
       const action = extension.actions.find(
-        (action) => action.id === req.actionId
+        (action) => action.id === request.actionId
       );
       assert(action !== undefined, "action not found");
-      const entries = await genEntries(req.entries);
+      const entries = await genEntries(request.entries);
       const amount = entries.length;
       let finished = 0;
       const runningControllers = /** @type {Set<ActionExecuteController>} */ (
         new Set()
       );
       const wait = Promise.all(
-        [...Array(req.parallel)].map((_, i) =>
+        [...Array(request.parallel)].map((_, i) =>
           (async () => {
             for (let entry; (entry = entries.shift()); ) {
               // console.log({ entry, req });
-              const controller = action.execute(req.profile, entry);
+              const controller = action.execute(request.profile, entry);
               runningControllers.add(controller);
               await new Promise((r) => setTimeout(r, 100));
               await controller.wait;
@@ -2333,8 +2335,35 @@ const serverMain = async () => {
           })()
         )
       );
-      wait.catch(() => {}); // https://stackoverflow.com/q/40500490/
+      /**
+       * See https://stackoverflow.com/q/40500490/
+       *
+       * ```js
+       * // create a promise that will reject after 200ms
+       * const p0 = new Promise((r, j) => setTimeout(() => j(1), 200));
+       * // now `p0` have a `catch`, if do not do so, nodejs UnhandledPromiseRejection,
+       * p0.catch((e) => console.log("> p0.catch: ", e));
+       * // the `p0.then` acturally create a new Promise
+       * const p1 = p0.then((e) => console.log("> p1 = p0.then: ", e));
+       * // so if you don't do this to catch `p1`, nodejs UnhandledPromiseRejection,
+       * const p2 = p1.catch((e) => console.log("> p2 = p1.catch = p0.then.catch: ", e));
+       * // the `p2` is `p1.catch`, so `p2.then` and `p2.finally` will both be executed
+       * p2.then((e) => console.log("> p2.then: ", e));
+       * p2.finally((e) => console.log("> p2.finally: ", e));
+       * // avoid nodejs exit
+       * await new Promise((r) => setTimeout(r, 999999));
+       * ```
+       */
+      const _catched = wait.catch(() => {});
+      const beginTime = Math.floor(Date.now() / 1000);
       runActionControllers.set(nextId(), {
+        title: request.title,
+        timing: () => {
+          return {
+            begin: beginTime,
+            expectedEnd: beginTime + 1000,
+          };
+        },
         progress: () => {
           let running = 0;
           for (const controller of runningControllers) {
@@ -2370,16 +2399,18 @@ const serverMain = async () => {
       while (!r.closed) {
         for (const [id, controller] of runActionControllers) {
           if (preventedIds.has(id)) {
-            continue; // 如果在阻止列表里，直接跳过，比如已经退出的 controller
+            continue; // just skip if it's in `preventedIds`, like exited `controller`s
           }
           send({
             kind: "run-action-progress",
             id,
+            title: controller.title,
+            timing: controller.timing(),
             progress: controller.progress(),
           });
           if (!waitingIds.has(id)) {
             waitingIds.add(id);
-            // 如果不在 waitingIds 中，新开 promise 来 wait 这个 controller
+            // if not in `waitingIds`, create a new promise to `wait` this `controller`
             let wait = controller.wait;
             wait = wait.then(() => {
               send({ kind: "run-action-success", id });
@@ -2388,7 +2419,7 @@ const serverMain = async () => {
               send({ kind: "run-action-error", id, error });
             });
             wait = wait.finally(() => {
-              preventedIds.add(id); // 发现 controller 已经退出，所以添加到阻止列表，以后跳过查询. 但是这不会阻止上面的 controller.wait.then 等。所以当新的 /get-status 时，至少会响应一次 run-action-success | run-action-error
+              preventedIds.add(id); // now the `controller` is exited, so we add it to `preventedIds` to skip following query, but this will not interrupt the `wait.then`, `wait.catch` above, so every `/get-status` request will receive at lease once `run-action-success` or `run-action-error`
             });
           }
         }
@@ -2414,8 +2445,8 @@ const serverMain = async () => {
             });
           }
         }
-        const INTERVAL = 1000; // 轮询间隔，不是 SSE 的发送间隔
-        await new Promise((resolve) => setTimeout(resolve, INTERVAL));
+        const LOOP_INTERVAL = 1000; // loop interval, not SSE sending interval
+        await new Promise((resolve) => setTimeout(resolve, LOOP_INTERVAL));
       }
       r.end();
       return;
@@ -2425,6 +2456,7 @@ const serverMain = async () => {
     r.end();
   });
 
+  server.on("listening", () => console.log(server.address()));
   server.listen(9393, "127.0.0.1");
 };
 
