@@ -1474,194 +1474,156 @@ const solvePath = (...parts) => {
 @typedef {
   "linux-x64" | "mac-arm64" | "win-x64"
 } Platform 短期内不谋求增加新平台. 长远来看，应该是 ` "linux-x64" | "linux-arm64" | "mac-x64" | "mac-arm64" | "win-x64" | "win-arm64" `
-@typedef {
-  {
-    platforms: Platform[],
-    kind: "raw" | "zip" | "gzip" | "tar" | "tar-gzip",
-    url: string,
-    path: string,
-  }
-} Asset
-@typedef {
-  {
-    entriesRoot?: HTMLElement,
-    entries?: () => any,
-    profileRoot: HTMLElement,
-    profile: () => any,
-    preview: (input: any) => void,
-  }
-} ActionUiController 之所以叫 controller 是因为类似 https://developer.mozilla.org/en-US/docs/Web/API/AbortController
-@typedef {
-  {
-    progress: () => number,
-    stop: () => void,
-    wait: Promise<void>,
-  }
-} ActionExecuteController
-@typedef {
-  {
-    begin: number,
-    expectedEnd: number,
-  }
-} RunActionTiming all with `seconds` unit
-@typedef {
-  {
+@typedef {{
+  platforms: Platform[],
+  kind: "raw" | "zip" | "gzip" | "tar" | "tar-gzip",
+  url: string,
+  path: string,
+}} Asset
+@typedef {{
+  entriesRoot?: HTMLElement,
+  entries?: () => any,
+  profileRoot: HTMLElement,
+  profile: () => any,
+  preview: (input: any) => void,
+}} ActionUiController 之所以叫 controller 是因为类似 https://developer.mozilla.org/en-US/docs/Web/API/AbortController
+@typedef {{
+  progress: () => number,
+  stop: () => void,
+  wait: Promise<void>,
+}} ActionExecuteController
+@typedef {{
+  begin: number,
+  expectedEnd: number,
+}} RunActionTiming all with `seconds` unit
+@typedef {{
+  finished: number,
+  running: number,
+  amount: number,
+}} RunActionProgress The `running` property may be float.
+@typedef {{
+  title: string,
+  timing: () => RunActionTiming,
+  progress: () => RunActionProgress,
+  stop: () => void,
+  wait: Promise<any>,
+}} RunActionController
+@typedef {{
+  id: string,
+  name: string,
+  description: string,
+  kind: RunActionRequest["entries"]["kind"],
+  ui: (profile: any) => ActionUiController,
+  execute: (profile: any, entry: any) => ActionExecuteController,
+}} Action
+@typedef {{
+  id: string,
+  name: string,
+  description: string,
+  actionId: string,
+  extensionId: string,
+  extensionVersion: string,
+  [key: string]: any,
+}} Profile
+@typedef {{
+  id: string,
+  version: string,
+  name: string,
+  description: string,
+  dependencies: string[],
+  assets: Asset[],
+  actions: Action[],
+  profiles: Profile[],
+}} Extension
+@typedef {{
+  id: string,
+  name: string,
+  version: string,
+  description: string,
+  actions: {
+    id: string,
+    name: string,
+    description: string,
+  }[],
+  profiles: {
+    id: string,
+    name: string,
+    description: string,
+    actionId: string,
+    extensionId: string,
+    extensionVersion: string,
+  }[],
+}[]} ListExtensionsResponse
+@typedef {{
+  url: string,
+}} InstallExtensionRequest
+@typedef {{
+  download: {
     finished: number,
-    running: number,
     amount: number,
-  }
-} RunActionProgress The `running` property may be float.
-@typedef {
-  {
-    title: string,
-    timing: () => RunActionTiming,
-    progress: () => RunActionProgress,
-    stop: () => void,
-    wait: Promise<any>,
-  }
-} RunActionController
-@typedef {
-  {
-    id: string,
-    name: string,
-    description: string,
-    kind: RunActionRequest["entries"]["kind"],
-    ui: (profile: any) => ActionUiController,
-    execute: (profile: any, entry: any) => ActionExecuteController,
-  }
-} Action
-@typedef {
-  {
-    id: string,
-    name: string,
-    description: string,
-    actionId: string,
-    extensionId: string,
-    extensionVersion: string,
-    [key: string]: any,
-  }
-} Profile
-@typedef {
-  {
-    id: string,
-    version: string,
-    name: string,
-    description: string,
-    dependencies: string[],
-    assets: Asset[],
-    actions: Action[],
-    profiles: Profile[],
-  }
-} Extension
-@typedef {
-  {
-    id: string,
-    name: string,
-    version: string,
-    description: string,
-    actions: {
-      id: string,
-      name: string,
-      description: string,
-    }[],
-    profiles: {
-      id: string,
-      name: string,
-      description: string,
-      actionId: string,
-      extensionId: string,
-      extensionVersion: string,
-    }[],
-  }[]
-} ListExtensionsResponse
-@typedef {
-  {
-    url: string,
-  }
-} InstallExtensionRequest
-@typedef {
-  {
-    download: {
-      finished: number,
-      amount: number,
-    },
-  }
-} InstallExtensionProgress
-@typedef {
-  {
-    kind: "run-action-progress",
-    id: string,
-    title: string, // 甚至可以在 client 指定自定义标题？
-    timing: RunActionTiming,
-    progress: RunActionProgress,
-  } | {
-    kind: "run-action-success",
-    id: string,
-  } | {
-    kind: "run-action-error",
-    id: string,
-    error: any,
-  } | {
-    kind: "install-extension-progress",
-    id: string,
-    progress: InstallExtensionProgress,
-  } | {
-    kind: "install-extension-success",
-    id: string,
-  } | {
-    kind: "install-extension-error",
-    id: string,
-    error: any,
-  }
-} GetStatusResponseEvent
-@typedef {
-  {
-    progress: () => InstallExtensionProgress,
-    wait: Promise<any>,
-  }
-} InstallExtensionController
-@typedef {
-  {
-    id: string,
-    version: string,
-  }
-} RemoveExtensionRequest
-@typedef {
-  {
-    kind: "number-sequence",
-    begin: number,
-    end: number,
-  }
-} EntriesNumberSequence 以后可能有用
-@typedef {
-  {
-    kind: "common-files",
-    entries?: {
-      inputFile: string,
-      outputFile: string,
-    }[],
-    inputDir: string,
-    outputDir: string,
-    outputExtension: string,
-  }
-} EntriesCommonFiles 最常用的，包含扫描文件夹等功能
-@typedef {
-  {
-    kind: "plain",
-    entries: any[],
-  }
-} EntriesPlain 直接就是 entries 本身，也许可以适配 yt-dlp 这种凭空出个文件的场景
-@typedef {
-  {
-    title: string,
-    extensionId: string,
-    extensionVersion: string,
-    actionId: string,
-    profile: any,
-    entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence,
-    parallel: number,
-  }
-} RunActionRequest
+  },
+}} InstallExtensionProgress
+@typedef {{
+  kind: "run-action-progress",
+  id: string,
+  title: string, // 甚至可以在 client 指定自定义标题？
+  timing: RunActionTiming,
+  progress: RunActionProgress,
+} | {
+  kind: "run-action-success",
+  id: string,
+} | {
+  kind: "run-action-error",
+  id: string,
+  error: any,
+} | {
+  kind: "install-extension-progress",
+  id: string,
+  progress: InstallExtensionProgress,
+} | {
+  kind: "install-extension-success",
+  id: string,
+} | {
+  kind: "install-extension-error",
+  id: string,
+  error: any,
+}} GetStatusResponseEvent
+@typedef {{
+  progress: () => InstallExtensionProgress,
+  wait: Promise<any>,
+}} InstallExtensionController
+@typedef {{
+  id: string,
+  version: string,
+}} RemoveExtensionRequest
+@typedef {{
+  kind: "number-sequence",
+  begin: number,
+  end: number,
+}} EntriesNumberSequence 以后可能有用
+@typedef {{
+  kind: "common-files",
+  entries?: {
+    inputFile: string,
+    outputFile: string,
+  }[],
+  inputDir: string,
+  outputDir: string,
+  outputExtension: string,
+}} EntriesCommonFiles 最常用的，包含扫描文件夹等功能
+@typedef {{
+  kind: "plain",
+  entries: any[],
+}} EntriesPlain 直接就是 entries 本身，也许可以适配 yt-dlp 这种凭空出个文件的场景
+@typedef {{
+  title: string,
+  extensionId: string,
+  extensionVersion: string,
+  actionId: string,
+  profile: any,
+  entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence,
+  parallel: number,
+}} RunActionRequest
 */
 
 const css = String.raw;
