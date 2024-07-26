@@ -2040,10 +2040,10 @@ const serverMain = async () => {
    * @returns {string}
    */
   const nextId = (() => {
-    let lastT = Math.floor(Date.now() / 1000);
+    let lastT = Math.trunc(Date.now() / 1000);
     let lastV = 0;
     return () => {
-      let curT = Math.floor(Date.now() / 1000);
+      let curT = Math.trunc(Date.now() / 1000);
       let curV = 0;
       if (curT === lastT) {
         curV = ++lastV;
@@ -2355,7 +2355,7 @@ const serverMain = async () => {
        * ```
        */
       const _catched = wait.catch(() => {});
-      const beginTime = Math.floor(Date.now() / 1000);
+      const beginTime = Math.trunc(Date.now() / 1000);
       runActionControllers.set(nextId(), {
         title: request.title,
         timing: () => {
