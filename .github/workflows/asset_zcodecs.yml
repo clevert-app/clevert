@@ -4,107 +4,60 @@ on:
 permissions:
   contents: write
 jobs:
-  linux-x64:
+  prepare:
     runs-on: ubuntu-22.04
     steps:
+      - uses: actions/cache@v4 # the post step for this will upload jpegxl.tar if not hit
+        id: cache
+        with:
+          enableCrossOsArchive: true
+          path: zcodecs.tar
+          key: "asset_zcodecs_8.0.0"
       - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          export LANG=C # https://unix.stackexchange.com/a/269164
-          export DEBIAN_FRONTEND=noninteractive # https://github.com/moby/moby/issues/27988
-          sudo sh -c 'printf "deb [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\ndeb-src [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\n" >> /etc/apt/sources.list'
-          sudo apt update # ensure the environment have latest curl and ca-certificates # apt install -y curl busybox zip
-          sudo apt install -y cmake ninja-build clang-19/llvm-toolchain-jammy-19 lld-19/llvm-toolchain-jammy-19 nasm libgif-dev
-          sudo ln -s -f /usr/lib/llvm-19/bin/lld /usr/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
-          export CC="clang" CXX="clang++" PATH="/usr/lib/llvm-19/bin:$PATH"
-          for step in profile final; do
-          if [ $step = profile ]; then
-            export CFLAGS="-O3 -flto -fprofile-generate"
-          elif [ $step = final ]; then
-            export CFLAGS="-O3 -flto -fprofile-use=$(pwd)/pgo-0.profdata"
-          fi
-          export CXXFLAGS="$CFLAGS"
-          ninja_targets(){ cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" ;} # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
+          mkdir zcodecs
+          cd zcodecs
           # ========== ect
-          mkdir -p ect
+          mkdir ect
           cd ect
-          if [ ! -e README.md ]; then
-            curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 || true # 0.9.5
-            curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng || true
-            curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg || true # 4.1.5
-            mv src/* ./
-            sed -i.bak -e 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
-            sed -i.bak -e 's|message(FATAL_ERROR |#|' -e 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
-            sed -i.bak -e 's|find_package(ZLIB REQUIRED)|#|' libpng/CMakeLists.txt
-            sed -i.bak -e 's|-Ofast|-O3 -ffast-math|' CMakeLists.txt
-            echo "" > pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
-            sed -i.bak -e 's|option(ENABLE_SHARED |option(ENABLE_SHARED "" FALSE) #|' mozjpeg/CMakeLists.txt
-            sed -i.bak -e 's|configure_file(win/${INST_ID}/projectTargets-release.cmake.in|#|' -e 's|win/${CMAKE_PROJECT_NAME}Targets-release.cmake @ONLY)|#|' mozjpeg/cmakescripts/BuildPackages.cmake
-            sed -i.bak -e 's|int main(|extern "C" int cmd_ect_main(|' main.cpp
-          fi
-          rm -rf build
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
-          ect_targets=""
-          ect_targets="$ect_targets $(ninja_targets CXX_EXECUTABLE_LINKER__ect_Release)"
-          ninja -C build $ect_targets
-          cp -r libpng/* build/optipng/libpng # prepare for below other programs
-          cp -r mozjpeg/* build/mozjpeg
+          curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
+          curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng
+          curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg # 4.1.5
+          mv src/* ./
+          sed -i.bak -e 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
+          sed -i.bak -e 's|message(FATAL_ERROR |#|' -e 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
+          sed -i.bak -e 's|find_package(ZLIB REQUIRED)|#|' libpng/CMakeLists.txt
+          sed -i.bak -e 's|-Ofast|-O3 -ffast-math|' CMakeLists.txt
+          echo "" > pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
+          sed -i.bak -e 's|option(ENABLE_SHARED |option(ENABLE_SHARED "" FALSE) #|' mozjpeg/CMakeLists.txt
+          sed -i.bak -e 's|configure_file(win/${INST_ID}/projectTargets-release.cmake.in|#|' -e 's|win/${CMAKE_PROJECT_NAME}Targets-release.cmake @ONLY)|#|' mozjpeg/cmakescripts/BuildPackages.cmake
+          sed -i.bak -e 's|int main(|extern "C" int cmd_ect_main(|' main.cpp
           cd ..
           # ========== webp
-          mkdir -p webp
+          mkdir webp
           cd webp
-          if [ ! -e README.md ]; then
-            curl -L https://github.com/webmproject/libwebp/archive/7bcb36b8846098ea672de376bbb48866243db3bf.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 1.4.0
-            sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
-            sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
-            sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
-            sed -i.bak -e 's|int main(|int cmd_gif2webp_main(|' examples/gif2webp.c
-            sed -i.bak -e 's|int main(|int cmd_img2webp_main(|' examples/img2webp.c
-            sed -i.bak -e 's|int main(|int cmd_webpmux_main(|' examples/webpmux.c
-          fi
-          rm -rf build
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-            -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
-            -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
-            -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
-            -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF
-          webp_targets=""
-          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__webpinfo_Release)"
-          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__cwebp_Release)"
-          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__dwebp_Release)"
-          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__gif2webp_Release)"
-          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__img2webp_Release)"
-          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__webpmux_Release)"
-          ninja -C build $webp_targets
+          curl -L https://github.com/webmproject/libwebp/archive/94de6c7fed030a6de4f576e5dd1cf5c4e854fab2.tar.gz | tar -zx --strip-components 1 # 20240830 > 1.4.0
+          sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
+          sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
+          sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
+          sed -i.bak -e 's|int main(|int cmd_gif2webp_main(|' examples/gif2webp.c
+          sed -i.bak -e 's|int main(|int cmd_img2webp_main(|' examples/img2webp.c
+          sed -i.bak -e 's|int main(|int cmd_webpmux_main(|' examples/webpmux.c
           cd ..
           # ========== jpegxl
-          mkdir -p jpegxl
+          mkdir jpegxl
           cd jpegxl
-          if [ ! -e README.md ]; then
-            curl -L https://github.com/libjxl/libjxl/archive/637806b163fec69869a13465cb7b126cec68ae97.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 0.10.3
-            sed -i.bak -e 's|download_github testdata|#|' deps.sh
-            ./deps.sh
-            sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
-            sed -i.bak -e 's|int main(|int cmd_jxlinfo_main(|' tools/jxlinfo.c
-            sed -i.bak -e 's|int main(|extern "C" int cmd_cjxl_main(|' tools/cjxl_main.cc
-            sed -i.bak -e 's|int main(|extern "C" int cmd_djxl_main(|' tools/djxl_main.cc
-            sed -i.bak -e 's|int main(|extern "C" int cmd_cjpegli_main(|' tools/cjpegli.cc
-            sed -i.bak -e 's|int main(|extern "C" int cmd_djpegli_main(|' tools/djpegli.cc
-          fi
-          rm -rf build
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
-            -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
-            -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
-            -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF \
-            -DCMAKE_CXX_FLAGS="$CXXFLAGS"' -DHWY_DISABLED_TARGETS="(HWY_SSE2|HWY_SSSE3|HWY_SSE4|HWY_AVX3|HWY_AVX3_SPR|HWY_AVX3_ZEN4)" -DHWY_BASELINE_TARGETS=HWY_AVX2 -DHWY_COMPILE_ONLY_STATIC=ON'
-          jpegxl_targets=""
-          jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__jxlinfo_Release)"
-          jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__cjxl_Release)"
-          jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__djxl_Release)"
-          jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__cjpegli_Release)"
-          jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__djpegli_Release)"
-          jpegxl_targets="$(echo $jpegxl_targets | tr " " "\n" | grep -v _nocodec)" # exclude nocodecs stub implements
-          ninja -C build $jpegxl_targets
+          curl -L https://github.com/libjxl/libjxl/archive/637806b163fec69869a13465cb7b126cec68ae97.tar.gz | tar -zx --strip-components 1 # 20240829 > 0.10.3
+          sed -i.bak -e 's|download_github testdata|#|' deps.sh
+          ./deps.sh
+          rm -rf downloads third_party/skcms/profiles/*
+          sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
+          sed -i.bak -e 's|int main(|int cmd_jxlinfo_main(|' tools/jxlinfo.c
+          sed -i.bak -e 's|int main(|extern "C" int cmd_cjxl_main(|' tools/cjxl_main.cc
+          sed -i.bak -e 's|int main(|extern "C" int cmd_djxl_main(|' tools/djxl_main.cc
+          sed -i.bak -e 's|int main(|extern "C" int cmd_cjpegli_main(|' tools/cjpegli.cc
+          sed -i.bak -e 's|int main(|extern "C" int cmd_djpegli_main(|' tools/djpegli.cc
           cd ..
           # ========== multi call
           cat <<EOF > multicall.cc
@@ -153,75 +106,69 @@ jobs:
               return 0;
             }
           EOF
-          clang++ $CXXFLAGS multicall.cc \
-            $(cd ect/build ; realpath $ect_targets) \
-            $(cd webp/build ; realpath $webp_targets) \
-            $(cd jpegxl/build ; realpath $jpegxl_targets) \
-            -o zcodecs
-          # ========== [profiling]
-          if [ $step = final ]; then
-            break # is final step, skip pgo profiling
-          fi
-          if [ ! -e pgo_res_bak ]; then
-            mkdir pgo_res_bak
-            curl \
-              -o pgo_res_bak/4.tar.gz -L https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-musl.tar.gz \
-              -o pgo_res_bak/5.tar.gz -L https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.0.tar.gz \
-              -o pgo_res_bak/2.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png \
-              -o pgo_res_bak/3.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screenmac.png \
-              --parallel # (program + text) + (screenshot) + (photo)
-            gzip -d pgo_res_bak/*.tar.gz
-            cat pgo_res_bak/*.tar > pgo_res_bak/1.bin
-            rm -rf pgo_res_bak/*.tar pgo_res_bak/*.gz
-          fi
-          rm -rf *.profraw *.profdata
-          for i in 1 2; do # small files twice is enough
-            rm -rf pgo_res
-            cp -r pgo_res_bak pgo_res
-            LLVM_PROFILE_FILE="pgo-$i-01.profraw" ./zcodecs ect -2 -zip pgo_res/1.bin pgo_res/2.png # zip compress an easy file + a hard file
-            LLVM_PROFILE_FILE="pgo-$i-02.profraw" ./zcodecs ect -3 -gzip pgo_res/1.bin pgo_res/3.png # gzip same as above
-            LLVM_PROFILE_FILE="pgo-$i-03.profraw" ./zcodecs ect -4 -gzip pgo_res/1.bin.gz # gzip re-compress with higher level, include both compress and decompress
-            LLVM_PROFILE_FILE="pgo-$i-04.profraw" ./zcodecs cwebp -q 75 -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
-            LLVM_PROFILE_FILE="pgo-$i-14.profraw" ./zcodecs cwebp -q 85 -lossless -m 6 pgo_res/2.png -o pgo_res/2.webp # to webp lossless
-            LLVM_PROFILE_FILE="pgo-$i-05.profraw" ./zcodecs cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
-            LLVM_PROFILE_FILE="pgo-$i-06.profraw" ./zcodecs dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
-            LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs img2webp -lossy -sharp_yuv pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
-            LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs webpinfo pgo_res/3.0.webp
-            LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs cjxl pgo_res/2.png pgo_res/2.jxl # to jpegxl
-            LLVM_PROFILE_FILE="pgo-$i-09.profraw" ./zcodecs djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
-            LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs jxlinfo pgo_res/2.jxl
-            LLVM_PROFILE_FILE="pgo-$i-10.profraw" ./zcodecs ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
-            LLVM_PROFILE_FILE="pgo-$i-20.profraw" ./zcodecs ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # high level recompress
-            LLVM_PROFILE_FILE="pgo-$i-11.profraw" ./zcodecs cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
-            LLVM_PROFILE_FILE="pgo-$i-12.profraw" ./zcodecs cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
-            LLVM_PROFILE_FILE="pgo-$i-13.profraw" ./zcodecs djpegli pgo_res/3.jpegli.jpeg pgo_res/3.jpegli.png
-          done
-          llvm-profdata merge -output=pgo-0.profdata *.profraw
-          rm -rf *.profraw
-          done # ^ "for step in profile final"
-          strip zcodecs
-          zip -9 linux-x64.zip zcodecs
-      - name: Verify
-        run: |
-          uname -a
-          ldd --version
-          ldd zcodecs || true
-          ./zcodecs
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          prerelease: true
-          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_7.0.0_' }}${{ github.run_id }}"
-          files: linux-x64.zip
-  mac-arm64:
-    runs-on: macos-14
+          mkdir pgo_res_bak
+          curl \
+            -o pgo_res_bak/4.tar.gz -L https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-musl.tar.gz \
+            -o pgo_res_bak/5.tar.gz -L https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.0.tar.gz \
+            -o pgo_res_bak/2.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png \
+            -o pgo_res_bak/3.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screenmac.png \
+            --parallel # (program + text) + (screenshot) + (photo)
+          gzip -d pgo_res_bak/*.tar.gz
+          cat pgo_res_bak/*.tar > pgo_res_bak/1.bin
+          rm -rf pgo_res_bak/*.tar pgo_res_bak/*.gz
+          cat <<'EOF' > utils.sh
+            ninja_targets(){
+              cat build/build.ninja | grep $1 | sed -e "s|\$||g" -e "s/|/ /g" | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
+            }
+            run_profiling(){
+              rm -rf *.profraw *.profdata
+              for i in 1 2; do # small files twice is enough
+                rm -rf pgo_res
+                cp -r pgo_res_bak pgo_res
+                LLVM_PROFILE_FILE="pgo-$i-01.profraw" ./zcodecs ect -2 -zip pgo_res/1.bin pgo_res/2.png # zip compress an easy file + a hard file
+                LLVM_PROFILE_FILE="pgo-$i-02.profraw" ./zcodecs ect -3 -gzip pgo_res/1.bin pgo_res/3.png # gzip same as above
+                LLVM_PROFILE_FILE="pgo-$i-03.profraw" ./zcodecs ect -4 -gzip pgo_res/1.bin.gz # gzip re-compress with higher level, include both compress and decompress
+                LLVM_PROFILE_FILE="pgo-$i-04.profraw" ./zcodecs cwebp -q 75 -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
+                LLVM_PROFILE_FILE="pgo-$i-14.profraw" ./zcodecs cwebp -q 85 -lossless -m 6 pgo_res/2.png -o pgo_res/2.webp # to webp lossless
+                LLVM_PROFILE_FILE="pgo-$i-05.profraw" ./zcodecs cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
+                LLVM_PROFILE_FILE="pgo-$i-06.profraw" ./zcodecs dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
+                LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs img2webp -lossy -sharp_yuv pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
+                LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs webpinfo pgo_res/3.0.webp
+                LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs cjxl pgo_res/2.png pgo_res/2.jxl # to jpegxl
+                LLVM_PROFILE_FILE="pgo-$i-09.profraw" ./zcodecs djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
+                LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs jxlinfo pgo_res/2.jxl
+                LLVM_PROFILE_FILE="pgo-$i-10.profraw" ./zcodecs ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
+                LLVM_PROFILE_FILE="pgo-$i-20.profraw" ./zcodecs ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # high level recompress
+                LLVM_PROFILE_FILE="pgo-$i-11.profraw" ./zcodecs cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
+                LLVM_PROFILE_FILE="pgo-$i-12.profraw" ./zcodecs cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
+                LLVM_PROFILE_FILE="pgo-$i-13.profraw" ./zcodecs djpegli pgo_res/3.jpegli.jpeg pgo_res/3.jpegli.png
+              done
+              llvm-profdata merge -output=pgo-0.profdata *.profraw
+              rm -rf *.profraw
+            }
+          EOF
+          cd ..
+          tar -cf zcodecs.tar --dereference zcodecs
+  linux-x64:
+    needs: prepare
+    runs-on: ubuntu-22.04
     steps:
+      - uses: actions/cache/restore@v4
+        with:
+          enableCrossOsArchive: true
+          path: zcodecs.tar
+          key: "asset_zcodecs_8.0.0"
       - name: Build
         run: |
-          brew install llvm@17 nasm ninja giflib # needs to set GIF_LIBRARY and GIF_INCLUDE_DIR below
-          export CC="clang" CXX="clang++" PATH="/opt/homebrew/opt/llvm@17/bin:$PATH" CMAKE_LINKER_TYPE=LLD
-          ln -s -f /opt/homebrew/opt/llvm@17/bin/llvm-ar /opt/homebrew/opt/llvm@17/bin/ar
+          tar -xf zcodecs.tar --strip-components 1
+          source utils.sh
+          export LANG=C # https://unix.stackexchange.com/a/269164
+          export DEBIAN_FRONTEND=noninteractive # https://github.com/moby/moby/issues/27988
+          sudo sh -c 'printf "deb [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\ndeb-src [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\n" >> /etc/apt/sources.list'
+          sudo apt update # ensure the environment have latest curl and ca-certificates # apt install -y curl busybox zip
+          sudo apt install -y cmake ninja-build clang-19/llvm-toolchain-jammy-19 lld-19/llvm-toolchain-jammy-19 nasm libgif-dev
+          sudo ln -s -f /usr/lib/llvm-19/bin/lld /usr/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
+          export CC="clang" CXX="clang++" PATH="/usr/lib/llvm-19/bin:$PATH"
           for step in profile final; do
           if [ $step = profile ]; then
             export CFLAGS="-O3 -flto -fprofile-generate"
@@ -229,22 +176,8 @@ jobs:
             export CFLAGS="-O3 -flto -fprofile-use=$(pwd)/pgo-0.profdata"
           fi
           export CXXFLAGS="$CFLAGS"
-          ninja_targets(){ cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" ;} # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
           # ========== ect
-          mkdir -p ect
           cd ect
-          if [ ! -e README.md ]; then
-            curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 || true # 0.9.5
-            curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng || true
-            curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg || true # 4.1.5
-            mv src/* ./
-            sed -i.bak -e 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
-            sed -i.bak -e 's|message(FATAL_ERROR |#|' -e 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
-            sed -i.bak -e 's|find_package(ZLIB REQUIRED)|#|' libpng/CMakeLists.txt
-            sed -i.bak -e 's|-Ofast|-O3 -ffast-math|' CMakeLists.txt
-            echo "" > pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
-            sed -i.bak -e 's|int main(|extern "C" int cmd_ect_main(|' main.cpp
-          fi
           rm -rf build
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
           ect_targets=""
@@ -254,17 +187,101 @@ jobs:
           cp -r mozjpeg/* build/mozjpeg
           cd ..
           # ========== webp
-          mkdir -p webp
           cd webp
-          if [ ! -e README.md ]; then
-            curl -L https://github.com/webmproject/libwebp/archive/7bcb36b8846098ea672de376bbb48866243db3bf.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 1.4.0
-            sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
-            sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
-            sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
-            sed -i.bak -e 's|int main(|int cmd_gif2webp_main(|' examples/gif2webp.c
-            sed -i.bak -e 's|int main(|int cmd_img2webp_main(|' examples/img2webp.c
-            sed -i.bak -e 's|int main(|int cmd_webpmux_main(|' examples/webpmux.c
+          rm -rf build
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
+            -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
+            -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
+            -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF
+          webp_targets=""
+          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__webpinfo_Release)"
+          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__cwebp_Release)"
+          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__dwebp_Release)"
+          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__gif2webp_Release)"
+          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__img2webp_Release)"
+          webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__webpmux_Release)"
+          ninja -C build $webp_targets
+          cd ..
+          # ========== jpegxl
+          cd jpegxl
+          rm -rf build
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
+            -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
+            -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
+            -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF \
+            -DCMAKE_CXX_FLAGS="$CXXFLAGS"' -DHWY_DISABLED_TARGETS="(HWY_SSE2|HWY_SSSE3|HWY_SSE4|HWY_AVX3|HWY_AVX3_SPR|HWY_AVX3_ZEN4)" -DHWY_BASELINE_TARGETS=HWY_AVX2 -DHWY_COMPILE_ONLY_STATIC=ON'
+          jpegxl_targets=""
+          jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__jxlinfo_Release)"
+          jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__cjxl_Release)"
+          jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__djxl_Release)"
+          jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__cjpegli_Release)"
+          jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__djpegli_Release)"
+          jpegxl_targets="$(echo $jpegxl_targets | tr " " "\n" | grep -v _nocodec)" # exclude nocodecs stub implements
+          ninja -C build $jpegxl_targets
+          cd ..
+          # ========== multi call
+          clang++ $CXXFLAGS multicall.cc \
+            $(cd ect/build ; realpath $ect_targets) \
+            $(cd webp/build ; realpath $webp_targets) \
+            $(cd jpegxl/build ; realpath $jpegxl_targets) \
+            -o zcodecs
+          # ========== [profiling]
+          if [ $step = final ]; then
+            break # is final step, skip pgo profiling
           fi
+          run_profiling
+          done # ^ "for step in profile final"
+          strip zcodecs
+          zip -9 linux-x64.zip zcodecs
+      - name: Verify
+        run: |
+          uname -a
+          ldd --version
+          ldd zcodecs || true
+          ./zcodecs
+      - uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
+          tag_name: "${{ 'asset_zcodecs_8.0.0_' }}${{ github.run_id }}"
+          files: linux-x64.zip
+  mac-arm64:
+    needs: prepare
+    runs-on: macos-14
+    steps:
+      - uses: actions/cache/restore@v4
+        with:
+          enableCrossOsArchive: true
+          path: zcodecs.tar
+          key: "asset_zcodecs_8.0.0"
+      - name: Build
+        run: |
+          tar -xf zcodecs.tar --strip-components 1
+          source utils.sh
+          brew install llvm@18 nasm ninja giflib # needs to set GIF_LIBRARY and GIF_INCLUDE_DIR below
+          export CC="clang" CXX="clang++" PATH="/opt/homebrew/opt/llvm@18/bin:$PATH" CMAKE_LINKER_TYPE=LLD
+          ln -s -f /opt/homebrew/opt/llvm@18/bin/llvm-ar /opt/homebrew/opt/llvm@18/bin/ar
+          for step in profile final; do
+          if [ $step = profile ]; then
+            export CFLAGS="-O3 -flto -fprofile-generate"
+          elif [ $step = final ]; then
+            export CFLAGS="-O3 -flto -fprofile-use=$(pwd)/pgo-0.profdata"
+          fi
+          export CXXFLAGS="$CFLAGS"
+          # ========== ect
+          cd ect
+          rm -rf build
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
+          ect_targets=""
+          ect_targets="$ect_targets $(ninja_targets CXX_EXECUTABLE_LINKER__ect_Release)"
+          ninja -C build $ect_targets
+          cp -r libpng/* build/optipng/libpng # prepare for below other programs
+          cp -r mozjpeg/* build/mozjpeg
+          cd ..
+          # ========== webp
+          cd webp
           rm -rf build
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
@@ -282,19 +299,7 @@ jobs:
           ninja -C build $webp_targets
           cd ..
           # ========== jpegxl
-          mkdir -p jpegxl
           cd jpegxl
-          if [ ! -e README.md ]; then
-            curl -L https://github.com/libjxl/libjxl/archive/637806b163fec69869a13465cb7b126cec68ae97.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 0.10.3
-            sed -i.bak -e 's|download_github testdata|#|' deps.sh
-            ./deps.sh
-            sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
-            sed -i.bak -e 's|int main(|int cmd_jxlinfo_main(|' tools/jxlinfo.c
-            sed -i.bak -e 's|int main(|extern "C" int cmd_cjxl_main(|' tools/cjxl_main.cc
-            sed -i.bak -e 's|int main(|extern "C" int cmd_djxl_main(|' tools/djxl_main.cc
-            sed -i.bak -e 's|int main(|extern "C" int cmd_cjpegli_main(|' tools/cjpegli.cc
-            sed -i.bak -e 's|int main(|extern "C" int cmd_djpegli_main(|' tools/djpegli.cc
-          fi
           rm -rf build
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
@@ -313,52 +318,6 @@ jobs:
           ninja -C build $jpegxl_targets
           cd ..
           # ========== multi call
-          cat <<EOF > multicall.cc
-            #include <stddef.h>
-            #include <string.h>
-            #include <stdio.h>
-            #if defined(WIN32) || defined(_WIN32)
-            #define PATH_SEPARATOR '\\\\'
-            #else
-            #define PATH_SEPARATOR '/'
-            #endif
-            extern "C" {
-              int cmd_ect_main(int argc, const char* argv[]);
-              int cmd_webpinfo_main(int argc, const char* argv[]);
-              int cmd_cwebp_main(int argc, const char* argv[]);
-              int cmd_dwebp_main(int argc, const char* argv[]);
-              int cmd_gif2webp_main(int argc, const char* argv[]);
-              int cmd_img2webp_main(int argc, const char* argv[]);
-              int cmd_webpmux_main(int argc, const char* argv[]);
-              int cmd_jxlinfo_main(int argc, const char* argv[]);
-              int cmd_cjxl_main(int argc, const char* argv[]);
-              int cmd_djxl_main(int argc, const char* argv[]);
-              int cmd_cjpegli_main(int argc, const char* argv[]);
-              int cmd_djpegli_main(int argc, const char* argv[]);
-            }
-            int main(int argc, const char *argv[]) {
-              for (int i = 0; argc != 0 && i != 2; i++) {
-                const char *argv0 = strrchr(argv[0], PATH_SEPARATOR);
-                if (argv0 == NULL) argv0 = argv[0]; else argv0++;
-                if (strcmp(argv0, "ect") == 0) return cmd_ect_main(argc, argv);
-                if (strcmp(argv0, "webpinfo") == 0) return cmd_webpinfo_main(argc, argv);
-                if (strcmp(argv0, "cwebp") == 0) return cmd_cwebp_main(argc, argv);
-                if (strcmp(argv0, "dwebp") == 0) return cmd_dwebp_main(argc, argv);
-                if (strcmp(argv0, "gif2webp") == 0) return cmd_gif2webp_main(argc, argv);
-                if (strcmp(argv0, "img2webp") == 0) return cmd_img2webp_main(argc, argv);
-                if (strcmp(argv0, "webpmux") == 0) return cmd_webpmux_main(argc, argv);
-                if (strcmp(argv0, "jxlinfo") == 0) return cmd_jxlinfo_main(argc, argv);
-                if (strcmp(argv0, "cjxl") == 0) return cmd_cjxl_main(argc, argv);
-                if (strcmp(argv0, "djxl") == 0) return cmd_djxl_main(argc, argv);
-                if (strcmp(argv0, "cjpegli") == 0) return cmd_cjpegli_main(argc, argv);
-                if (strcmp(argv0, "djpegli") == 0) return cmd_djpegli_main(argc, argv);
-                argv++;
-                argc--;
-              }
-              puts("applets: ect webpinfo cwebp dwebp gif2webp img2webp webpmux jxlinfo cjxl djxl cjpegli djpegli");
-              return 0;
-            }
-          EOF
           clang++ $CXXFLAGS multicall.cc \
             $(cd ect/build ; realpath $ect_targets) \
             $(cd webp/build ; realpath $webp_targets) \
@@ -368,42 +327,7 @@ jobs:
           if [ $step = final ]; then
             break # is final step, skip pgo profiling
           fi
-          if [ ! -e pgo_res_bak ]; then
-            mkdir pgo_res_bak
-            curl \
-              -o pgo_res_bak/4.tar.gz -L https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-musl.tar.gz \
-              -o pgo_res_bak/5.tar.gz -L https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.0.tar.gz \
-              -o pgo_res_bak/2.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png \
-              -o pgo_res_bak/3.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screenmac.png \
-              --parallel # (program + text) + (screenshot) + (photo)
-            gzip -d pgo_res_bak/*.tar.gz
-            cat pgo_res_bak/*.tar > pgo_res_bak/1.bin
-            rm -rf pgo_res_bak/*.tar pgo_res_bak/*.gz
-          fi
-          rm -rf *.profraw *.profdata
-          for i in 1 2; do # small files twice is enough
-            rm -rf pgo_res
-            cp -r pgo_res_bak pgo_res
-            LLVM_PROFILE_FILE="pgo-$i-01.profraw" ./zcodecs ect -2 -zip pgo_res/1.bin pgo_res/2.png # zip compress an easy file + a hard file
-            LLVM_PROFILE_FILE="pgo-$i-02.profraw" ./zcodecs ect -3 -gzip pgo_res/1.bin pgo_res/3.png # gzip same as above
-            LLVM_PROFILE_FILE="pgo-$i-03.profraw" ./zcodecs ect -4 -gzip pgo_res/1.bin.gz # gzip re-compress with higher level, include both compress and decompress
-            LLVM_PROFILE_FILE="pgo-$i-04.profraw" ./zcodecs cwebp -q 75 -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
-            LLVM_PROFILE_FILE="pgo-$i-14.profraw" ./zcodecs cwebp -q 85 -lossless -m 6 pgo_res/2.png -o pgo_res/2.webp # to webp lossless
-            LLVM_PROFILE_FILE="pgo-$i-05.profraw" ./zcodecs cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
-            LLVM_PROFILE_FILE="pgo-$i-06.profraw" ./zcodecs dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
-            LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs img2webp -lossy -sharp_yuv pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
-            LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs webpinfo pgo_res/3.0.webp
-            LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs cjxl pgo_res/2.png pgo_res/2.jxl # to jpegxl
-            LLVM_PROFILE_FILE="pgo-$i-09.profraw" ./zcodecs djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
-            LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs jxlinfo pgo_res/2.jxl
-            LLVM_PROFILE_FILE="pgo-$i-10.profraw" ./zcodecs ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
-            LLVM_PROFILE_FILE="pgo-$i-20.profraw" ./zcodecs ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # high level recompress
-            LLVM_PROFILE_FILE="pgo-$i-11.profraw" ./zcodecs cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
-            LLVM_PROFILE_FILE="pgo-$i-12.profraw" ./zcodecs cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
-            LLVM_PROFILE_FILE="pgo-$i-13.profraw" ./zcodecs djpegli pgo_res/3.jpegli.jpeg pgo_res/3.jpegli.png
-          done
-          llvm-profdata merge -output=pgo-0.profdata *.profraw
-          rm -rf *.profraw
+          run_profiling
           done # ^ "for step in profile final"
           strip zcodecs
           zip -9 mac-arm64.zip zcodecs
@@ -412,19 +336,26 @@ jobs:
           uname -a
           otool -L zcodecs || true
           ./zcodecs
-      - name: Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_7.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_8.0.0_' }}${{ github.run_id }}"
           files: mac-arm64.zip
   win-x64:
+    needs: prepare
     runs-on: windows-2022
     steps:
+      - uses: actions/cache/restore@v4
+        with:
+          enableCrossOsArchive: true
+          path: zcodecs.tar
+          key: "asset_zcodecs_8.0.0"
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start -e {0}
         run: |
+          tar -xf zcodecs.tar --strip-components 1
+          source utils.sh
           pacman -S --noconfirm zip mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-nasm mingw-w64-clang-x86_64-cmake mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-giflib
           cp /clang64/bin/lld /clang64/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
           export CC="clang" CXX="clang++"
@@ -435,22 +366,8 @@ jobs:
             export CFLAGS="-O3 -flto -fprofile-use=$(cygpath -m $(pwd)/pgo-0.profdata)"
           fi
           export CXXFLAGS="$CFLAGS"
-          ninja_targets(){ cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" ;} # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
           # ========== ect
-          mkdir -p ect
           cd ect
-          if [ ! -e README.md ]; then
-            curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 || true # 0.9.5
-            curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng || true
-            curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg || true # 4.1.5
-            mv src/* ./
-            sed -i.bak -e 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
-            sed -i.bak -e 's|message(FATAL_ERROR |#|' -e 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
-            sed -i.bak -e 's|find_package(ZLIB REQUIRED)|#|' libpng/CMakeLists.txt
-            sed -i.bak -e 's|-Ofast|-O3 -ffast-math|' CMakeLists.txt
-            echo "" > pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
-            sed -i.bak -e 's|int main(|extern "C" int cmd_ect_main(|' main.cpp
-          fi
           rm -rf build
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
           ect_targets=""
@@ -460,17 +377,7 @@ jobs:
           cp -r mozjpeg/* build/mozjpeg
           cd ..
           # ========== webp
-          mkdir -p webp
           cd webp
-          if [ ! -e README.md ]; then
-            curl -L https://github.com/webmproject/libwebp/archive/7bcb36b8846098ea672de376bbb48866243db3bf.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 1.4.0
-            sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
-            sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
-            sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
-            sed -i.bak -e 's|int main(|int cmd_gif2webp_main(|' examples/gif2webp.c
-            sed -i.bak -e 's|int main(|int cmd_img2webp_main(|' examples/img2webp.c
-            sed -i.bak -e 's|int main(|int cmd_webpmux_main(|' examples/webpmux.c
-          fi
           rm -rf build
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
@@ -487,19 +394,7 @@ jobs:
           ninja -C build $webp_targets
           cd ..
           # ========== jpegxl
-          mkdir -p jpegxl
           cd jpegxl
-          if [ ! -e README.md ]; then
-            curl -L https://github.com/libjxl/libjxl/archive/637806b163fec69869a13465cb7b126cec68ae97.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 0.10.3
-            sed -i.bak -e 's|download_github testdata|#|' deps.sh
-            ./deps.sh
-            sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
-            sed -i.bak -e 's|int main(|int cmd_jxlinfo_main(|' tools/jxlinfo.c
-            sed -i.bak -e 's|int main(|extern "C" int cmd_cjxl_main(|' tools/cjxl_main.cc
-            sed -i.bak -e 's|int main(|extern "C" int cmd_djxl_main(|' tools/djxl_main.cc
-            sed -i.bak -e 's|int main(|extern "C" int cmd_cjpegli_main(|' tools/cjpegli.cc
-            sed -i.bak -e 's|int main(|extern "C" int cmd_djpegli_main(|' tools/djpegli.cc
-          fi
           rm -rf build
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
@@ -517,52 +412,6 @@ jobs:
           ninja -C build $jpegxl_targets
           cd ..
           # ========== multi call
-          cat <<EOF > multicall.cc
-            #include <stddef.h>
-            #include <string.h>
-            #include <stdio.h>
-            #if defined(WIN32) || defined(_WIN32)
-            #define PATH_SEPARATOR '\\\\'
-            #else
-            #define PATH_SEPARATOR '/'
-            #endif
-            extern "C" {
-              int cmd_ect_main(int argc, const char* argv[]);
-              int cmd_webpinfo_main(int argc, const char* argv[]);
-              int cmd_cwebp_main(int argc, const char* argv[]);
-              int cmd_dwebp_main(int argc, const char* argv[]);
-              int cmd_gif2webp_main(int argc, const char* argv[]);
-              int cmd_img2webp_main(int argc, const char* argv[]);
-              int cmd_webpmux_main(int argc, const char* argv[]);
-              int cmd_jxlinfo_main(int argc, const char* argv[]);
-              int cmd_cjxl_main(int argc, const char* argv[]);
-              int cmd_djxl_main(int argc, const char* argv[]);
-              int cmd_cjpegli_main(int argc, const char* argv[]);
-              int cmd_djpegli_main(int argc, const char* argv[]);
-            }
-            int main(int argc, const char *argv[]) {
-              for (int i = 0; argc != 0 && i != 2; i++) {
-                const char *argv0 = strrchr(argv[0], PATH_SEPARATOR);
-                if (argv0 == NULL) argv0 = argv[0]; else argv0++;
-                if (strcmp(argv0, "ect") == 0) return cmd_ect_main(argc, argv);
-                if (strcmp(argv0, "webpinfo") == 0) return cmd_webpinfo_main(argc, argv);
-                if (strcmp(argv0, "cwebp") == 0) return cmd_cwebp_main(argc, argv);
-                if (strcmp(argv0, "dwebp") == 0) return cmd_dwebp_main(argc, argv);
-                if (strcmp(argv0, "gif2webp") == 0) return cmd_gif2webp_main(argc, argv);
-                if (strcmp(argv0, "img2webp") == 0) return cmd_img2webp_main(argc, argv);
-                if (strcmp(argv0, "webpmux") == 0) return cmd_webpmux_main(argc, argv);
-                if (strcmp(argv0, "jxlinfo") == 0) return cmd_jxlinfo_main(argc, argv);
-                if (strcmp(argv0, "cjxl") == 0) return cmd_cjxl_main(argc, argv);
-                if (strcmp(argv0, "djxl") == 0) return cmd_djxl_main(argc, argv);
-                if (strcmp(argv0, "cjpegli") == 0) return cmd_cjpegli_main(argc, argv);
-                if (strcmp(argv0, "djpegli") == 0) return cmd_djpegli_main(argc, argv);
-                argv++;
-                argc--;
-              }
-              puts("applets: ect webpinfo cwebp dwebp gif2webp img2webp webpmux jxlinfo cjxl djxl cjpegli djpegli");
-              return 0;
-            }
-          EOF
           clang++ $CXXFLAGS multicall.cc \
             $(cd ect/build ; realpath $ect_targets) \
             $(cd webp/build ; realpath $webp_targets) \
@@ -573,42 +422,7 @@ jobs:
           if [ $step = final ]; then
             break # is final step, skip pgo profiling
           fi
-          if [ ! -e pgo_res_bak ]; then
-            mkdir pgo_res_bak
-            curl \
-              -o pgo_res_bak/4.tar.gz -L https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-musl.tar.gz \
-              -o pgo_res_bak/5.tar.gz -L https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.0.tar.gz \
-              -o pgo_res_bak/2.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png \
-              -o pgo_res_bak/3.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screenmac.png \
-              --parallel # (program + text) + (screenshot) + (photo)
-            gzip -d pgo_res_bak/*.tar.gz
-            cat pgo_res_bak/*.tar > pgo_res_bak/1.bin
-            rm -rf pgo_res_bak/*.tar pgo_res_bak/*.gz
-          fi
-          rm -rf *.profraw *.profdata
-          for i in 1 2; do # small files twice is enough
-            rm -rf pgo_res
-            cp -r pgo_res_bak pgo_res
-            LLVM_PROFILE_FILE="pgo-$i-01.profraw" ./zcodecs ect -2 -zip pgo_res/1.bin pgo_res/2.png # zip compress an easy file + a hard file
-            LLVM_PROFILE_FILE="pgo-$i-02.profraw" ./zcodecs ect -3 -gzip pgo_res/1.bin pgo_res/3.png # gzip same as above
-            LLVM_PROFILE_FILE="pgo-$i-03.profraw" ./zcodecs ect -4 -gzip pgo_res/1.bin.gz # gzip re-compress with higher level, include both compress and decompress
-            LLVM_PROFILE_FILE="pgo-$i-04.profraw" ./zcodecs cwebp -q 75 -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
-            LLVM_PROFILE_FILE="pgo-$i-14.profraw" ./zcodecs cwebp -q 85 -lossless -m 6 pgo_res/2.png -o pgo_res/2.webp # to webp lossless
-            LLVM_PROFILE_FILE="pgo-$i-05.profraw" ./zcodecs cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
-            LLVM_PROFILE_FILE="pgo-$i-06.profraw" ./zcodecs dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
-            LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs img2webp -lossy -sharp_yuv pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
-            LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs webpinfo pgo_res/3.0.webp
-            LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs cjxl pgo_res/2.png pgo_res/2.jxl # to jpegxl
-            LLVM_PROFILE_FILE="pgo-$i-09.profraw" ./zcodecs djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
-            LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs jxlinfo pgo_res/2.jxl
-            LLVM_PROFILE_FILE="pgo-$i-10.profraw" ./zcodecs ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
-            LLVM_PROFILE_FILE="pgo-$i-20.profraw" ./zcodecs ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # high level recompress
-            LLVM_PROFILE_FILE="pgo-$i-11.profraw" ./zcodecs cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
-            LLVM_PROFILE_FILE="pgo-$i-12.profraw" ./zcodecs cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
-            LLVM_PROFILE_FILE="pgo-$i-13.profraw" ./zcodecs djpegli pgo_res/3.jpegli.jpeg pgo_res/3.jpegli.png
-          done
-          llvm-profdata merge -output=pgo-0.profdata *.profraw
-          rm -rf *.profraw
+          run_profiling
           done # ^ "for step in profile final"
           strip zcodecs.exe
           zip -9 win-x64.zip zcodecs.exe
@@ -618,12 +432,11 @@ jobs:
           uname -a
           ldd zcodecs.exe || true
           ./zcodecs.exe
-      - name: Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_7.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_8.0.0_' }}${{ github.run_id }}"
           files: win-x64.zip
 # description: combine many modern codecs, into a single multi-call binary
 # version number: major version plus one on every modify
