@@ -81,6 +81,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 
 ## 扩展灵感
 
+- https://v2ex.com/t/1065469
 - https://v2ex.com/t/1059035#reply52
 - https://v2ex.com/t/984548
 - https://v2ex.com/t/1041478
@@ -92,10 +93,20 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - https://github.com/ghtz08/kuguo-kgm-decoder
 - https://github.com/jifengg/ffmpeg-script
 - https://github.com/RimoChan/unvcode
+- https://github.com/josStorer/RWKV-Runner
 - https://github.com/qpdf/qpdf
 - https://github.com/ArtifexSoftware/mupdf
 - https://github.com/VikParuchuri/marker
 - https://github.com/caj2pdf/caj2pdf
+- https://github.com/HandBrake/HandBrake
+- https://github.com/ArtifexSoftware/mupdf
+- https://v2ex.com/t/1067501#reply5
+
+- https://github.com/zincsearch/zincsearch
+- https://github.com/meilisearch/meilisearch
+- https://github.com/agourlay/zip-password-finder
+- https://github.com/myfreeer/chrome-pak-customizer
+- https://github.com/tjko/jpegoptim
 
 ## 仓库结构
 
@@ -148,6 +159,8 @@ main:[]
 a:[]
 b:[]
 }
+
+https://indiehackertools.net/
 
 <!-- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="background:#009688;stroke:#fff;stroke-width:10px"><path style="filter: drop-shadow(-2px 6px 1px #077);" d="M110 10 70 30l40 80-40-80-20 10 40 80-40-80-20 10 40 80-40-80-30-60 30 60"/></svg> -->
 
