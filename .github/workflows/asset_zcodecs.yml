@@ -1,0 +1,154 @@
+name: asset_zcodecs
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  linux-x64:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Build
+        run: |
+          export LANG=C # https://unix.stackexchange.com/a/269164
+          export DEBIAN_FRONTEND=noninteractive # https://github.com/moby/moby/issues/27988
+          sudo sh -c 'printf "deb [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\ndeb-src [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\n" >> /etc/apt/sources.list'
+          sudo apt update # ensure the environment have latest curl and ca-certificates
+          sudo apt install -y cmake ninja-build clang-19/llvm-toolchain-jammy-19 lld-19/llvm-toolchain-jammy-19 nasm zip libgif-dev
+          export CC="clang" CXX="clang++" PATH="/usr/lib/llvm-19/bin:$PATH"
+          export CFLAGS="-flto" # -flto -fprofile-generate
+          export CXXFLAGS="$CFLAGS"
+          ln --force --symbolic /usr/lib/llvm-19/bin/lld /usr/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
+          rename_function(){ llvm-dis $3 -o - | sed -e "s|name: \"$1\"|name: \"$2\"|" -e "s|@$1(|@$2(|" | llvm-as -o $3.m.o ; mv $3.m.o $3 ;} # rename_function bar cmd_ect_main foo.o # https://stackoverflow.com/q/78911061
+          # ========== ect
+          mkdir ect
+          cd ect
+          curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
+          curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng
+          curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg # 4.1.5
+          mv src/* ./
+          sed -i.bak 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
+          sed -i.bak 's|message(FATAL_ERROR |#|' mozjpeg/CMakeLists.txt
+          sed -i.bak 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
+          sed -i.bak "s|find_package(ZLIB REQUIRED)|#|" libpng/CMakeLists.txt
+          sed -i.bak "s|-Ofast|-O3 -ffast-math|" CMakeLists.txt
+          echo "" > pngusr.h # the ect disabled some libpng features to reduce size, but we need to link libpng into other programs which require full-featured libpng
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
+          cmake --build build
+          rename_function main cmd_ect_main build/CMakeFiles/ect.dir/main.cpp.o
+          cd ..
+          # ========== webp
+          mkdir webp
+          cd webp
+          curl -L https://github.com/webmproject/libwebp/archive/845d5476a866141ba35ac133f856fa62f0b7445f.tar.gz | tar -zx --strip-components 1 # 1.4.0
+          cp -r ../ect/libpng/* ../ect/build/optipng/libpng
+          cp -r ../ect/mozjpeg/* ../ect/build/mozjpeg
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
+            -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
+            -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
+            -DWEBP_USE_THREAD=OFF
+          cmake --build build
+          rename_function main cmd_cwebp_main build/CMakeFiles/cwebp.dir/examples/cwebp.c.o
+          rename_function main cmd_dwebp_main build/CMakeFiles/dwebp.dir/examples/dwebp.c.o
+          rename_function main cmd_gif2webp_main build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o
+          rename_function main cmd_img2webp_main build/CMakeFiles/img2webp.dir/examples/img2webp.c.o
+          rename_function main cmd_webpinfo_main build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o
+          rename_function main cmd_webpmux_main build/CMakeFiles/webpmux.dir/examples/webpmux.c.o
+          cd ..
+          # ========== jpegxl
+          mkdir jpegxl
+          cd jpegxl
+          curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 # 20240824
+          sed -i.bak -e 's|download_github testdata|#|' deps.sh
+          ./deps.sh
+          sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||'  -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
+            -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
+            -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
+            -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF
+          cmake --build build
+          rename_function main cmd_jxlinfo_main build/tools/CMakeFiles/jxlinfo.dir/jxlinfo.c.o
+          rename_function main cmd_cjxl_main build/tools/CMakeFiles/cjxl.dir/cjxl_main.cc.o
+          rename_function main cmd_djxl_main build/tools/CMakeFiles/djxl.dir/djxl_main.cc.o
+          rename_function main cmd_cjpegli_main build/tools/CMakeFiles/cjpegli.dir/cjpegli.cc.o
+          rename_function main cmd_djpegli_main build/tools/CMakeFiles/djpegli.dir/djpegli.cc.o 
+          cd ..
+          # ========== multi call
+          cat <<EOF > multicall.cc
+            #include <stddef.h>
+            #include <string.h>
+            #include <stdio.h>
+            #if defined(WIN32) || defined(_WIN32)
+            #define PATH_SEPARATOR '\\\\'
+            #else
+            #define PATH_SEPARATOR '/'
+            #endif
+            extern "C" {
+              int cmd_ect_main(int argc, const char* argv[]);
+              int cmd_cwebp_main(int argc, const char* argv[]);
+              int cmd_dwebp_main(int argc, const char* argv[]);
+              int cmd_gif2webp_main(int argc, const char* argv[]);
+              int cmd_img2webp_main(int argc, const char* argv[]);
+              int cmd_webpinfo_main(int argc, const char* argv[]);
+              int cmd_webpmux_main(int argc, const char* argv[]);
+              int cmd_jxlinfo_main(int argc, const char* argv[]);
+              int cmd_cjxl_main(int argc, const char* argv[]);
+              int cmd_djxl_main(int argc, const char* argv[]);
+              int cmd_cjpegli_main(int argc, const char* argv[]);
+              int cmd_djpegli_main(int argc, const char* argv[]);
+            }
+            int main(int argc, const char *argv[]) {
+              for (int i = 0; argc != 0 && i != 2; i++) {
+                const char *argv0 = strrchr(argv[0], PATH_SEPARATOR);
+                if (argv0 == NULL) argv0 = argv[0]; else argv0++;
+                if (strcmp(argv0, "ect") == 0) return cmd_ect_main(argc, argv);
+                if (strcmp(argv0, "cwebp") == 0) return cmd_cwebp_main(argc, argv);
+                if (strcmp(argv0, "dwebp") == 0) return cmd_dwebp_main(argc, argv);
+                if (strcmp(argv0, "gif2webp") == 0) return cmd_gif2webp_main(argc, argv);
+                if (strcmp(argv0, "img2webp") == 0) return cmd_img2webp_main(argc, argv);
+                if (strcmp(argv0, "webpinfo") == 0) return cmd_webpinfo_main(argc, argv);
+                if (strcmp(argv0, "webpmux") == 0) return cmd_webpmux_main(argc, argv);
+                if (strcmp(argv0, "jxlinfo") == 0) return cmd_jxlinfo_main(argc, argv);
+                if (strcmp(argv0, "cjxl") == 0) return cmd_cjxl_main(argc, argv);
+                if (strcmp(argv0, "djxl") == 0) return cmd_djxl_main(argc, argv);
+                if (strcmp(argv0, "cjpegli") == 0) return cmd_cjpegli_main(argc, argv);
+                if (strcmp(argv0, "djpegli") == 0) return cmd_djpegli_main(argc, argv);
+                argv++;
+                argc--;
+              }
+              puts("applets: ect cwebp dwebp gif2webp img2webp webpinfo webpmux jxlinfo cjxl djxl cjpegli djpegli");
+              return 1;
+            }
+          EOF
+          # extract from ect/build/build.ninja webp/build/build.ninja jpegxl/build/build.ninja
+          clang++ $CXXFLAGS multicall.cc \
+            ect/build/CMakeFiles/ect.dir/main.cpp.o ect/build/CMakeFiles/ect.dir/gztools.cpp.o ect/build/CMakeFiles/ect.dir/jpegtran.cpp.o ect/build/CMakeFiles/ect.dir/LzFind.c.o ect/build/CMakeFiles/ect.dir/support.cpp.o ect/build/CMakeFiles/ect.dir/zopflipng.cpp.o ect/build/CMakeFiles/ect.dir/mozjpeg/transupp.c.o ect/build/leanify/libleanify.a ect/build/lodepng/liblodepng.a ect/build/miniz/libminiz.a ect/build/optipng/liboptipng.a ect/build/zopfli/libzopfli.a ect/build/mozjpeg/libjpeg.a ect/build/optipng/libpng/libpng16.a ect/build/zlib/libzlib.a \
+            webp/build/CMakeFiles/cwebp.dir/examples/cwebp.c.o webp/build/CMakeFiles/dwebp.dir/examples/dwebp.c.o webp/build/CMakeFiles/gif2webp.dir/examples/gifdec.c.o webp/build/CMakeFiles/gif2webp.dir/examples/gif2webp.c.o webp/build/CMakeFiles/img2webp.dir/examples/img2webp.c.o webp/build/CMakeFiles/webpinfo.dir/examples/webpinfo.c.o webp/build/CMakeFiles/webpmux.dir/examples/webpmux.c.o webp/build/libexampleutil.a webp/build/libimageenc.a webp/build/libimagedec.a webp/build/libimageioutil.a webp/build/libwebp.a webp/build/libwebpmux.a webp/build/libwebpdemux.a webp/build/libwebpdecoder.a webp/build/libextras.a webp/build/libsharpyuv.a -l:libgif.a \
+            jpegxl/build/tools/CMakeFiles/jxlinfo.dir/jxlinfo.c.o jpegxl/build/tools/CMakeFiles/cjxl.dir/cjxl_main.cc.o jpegxl/build/tools/CMakeFiles/djxl.dir/djxl_main.cc.o jpegxl/build/tools/CMakeFiles/cjpegli.dir/cjpegli.cc.o jpegxl/build/tools/CMakeFiles/djpegli.dir/djpegli.cc.o jpegxl/build/lib/libjxl_extras-internal.a jpegxl/build/lib/libjxl_threads.a jpegxl/build/tools/libjxl_tool.a jpegxl/build/lib/libjxl-internal.a  jpegxl/build/third_party/brotli/libbrotlidec.a jpegxl/build/third_party/brotli/libbrotlienc.a jpegxl/build/third_party/brotli/libbrotlicommon.a jpegxl/build/lib/libjxl_cms.a jpegxl/build/lib/libjpegli-static.a jpegxl/build/third_party/highway/libhwy.a \
+            -o zcodecs
+          strip zcodecs
+          zip -9 linux-x64.zip zcodecs
+      - name: Verify
+        run: |
+          uname -a
+          ldd --version
+          ldd zcodecs || true
+          ./zcodecs
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
+          tag_name: "${{ 'asset_zcodecs_2.0.0_' }}${{ github.run_id }}"
+          files: linux-x64.zip
+
+# docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind ubuntu:22.04
+
+# description: combine many modern codecs, into a single multi-call binary
+# version number: major version plus one on every modify
+
+# ./zcodecs cwebp -m 6 -q 75 i2.jpg -o o2.webp.webp
+# cp i2.jpg o2.ect.jpeg ; ./zcodecs ect -9 o2.ect.jpeg
+# ./jpegxl cjpegli i2.jpg o2.jpegli.jpeg -q 55 -p 0
+# ./jpegxl cjxl i2.jpg o2.jxl.jxl -q 75 --lossless_jpeg=0 ; ./jpegxl djxl o2.jxl.jxl o2.jxl.png
