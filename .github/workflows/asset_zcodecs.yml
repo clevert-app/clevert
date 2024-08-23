@@ -17,7 +17,7 @@ jobs:
           export CC="clang" CXX="clang++" PATH="/usr/lib/llvm-19/bin:$PATH"
           export CFLAGS="-flto" # -flto -fprofile-generate
           export CXXFLAGS="$CFLAGS"
-          ln --force --symbolic /usr/lib/llvm-19/bin/lld /usr/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
+          sudo ln --force --symbolic /usr/lib/llvm-19/bin/lld /usr/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
           rename_function(){ llvm-dis $3 -o - | sed -e "s|name: \"$1\"|name: \"$2\"|" -e "s|@$1(|@$2(|" | llvm-as -o $3.m.o ; mv $3.m.o $3 ;} # rename_function bar cmd_ect_main foo.o # https://stackoverflow.com/q/78911061
           # ========== ect
           mkdir ect
@@ -140,7 +140,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_2.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_3.0.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
 
 # docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind ubuntu:22.04
