@@ -28,6 +28,7 @@ jobs:
           sed -i.bak -e 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
           sed -i.bak -e 's|message(FATAL_ERROR |#|' -e 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
           sed -i.bak -e 's|find_package(ZLIB REQUIRED)|#|' libpng/CMakeLists.txt
+          sed -i.bak -e 's|<float.h>|<float.h>\n#include <math.h>\n|' libpng/pngpriv.h # https://github.com/pnggroup/libpng/commit/893b8113f04d408cc6177c6de19c9889a48faa24
           sed -i.bak -e 's|-Ofast|-O3 -ffast-math|' CMakeLists.txt
           echo "" > pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
           sed -i.bak -e 's|option(ENABLE_SHARED |option(ENABLE_SHARED "" FALSE) #|' mozjpeg/CMakeLists.txt
