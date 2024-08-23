@@ -119,7 +119,7 @@ jobs:
           rm -rf pgo_res_bak/*.tar pgo_res_bak/*.gz
           cat <<'EOF' > utils.sh
             ninja_targets(){
-              cat build/build.ninja | grep $1 | sed -e "s|\$||g" -e "s/|/ /g" | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
+              cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
             }
             run_profiling(){
               rm -rf *.profraw *.profdata
