@@ -65,7 +65,7 @@ jobs:
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
             -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
-            -DWEBP_USE_THREAD=OFF
+            -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF
           webp_targets=""
           webp_targets="$webp_targets $(cat build/build.ninja | grep C_EXECUTABLE_LINKER__webpinfo_Release | tr "|" " " | cut -d " " -f 4-)"
           webp_targets="$webp_targets $(cat build/build.ninja | grep C_EXECUTABLE_LINKER__cwebp_Release | tr "|" " " | cut -d " " -f 4-)"
@@ -269,7 +269,7 @@ jobs:
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
             -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
             -DGIF_LIBRARY=/opt/homebrew/opt/giflib/lib/libgif.a -DGIF_INCLUDE_DIR=/opt/homebrew/opt/giflib/include \
-            -DWEBP_USE_THREAD=OFF
+            -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF
           webp_targets=""
           webp_targets="$webp_targets $(cat build/build.ninja | grep C_EXECUTABLE_LINKER__webpinfo_Release | tr "|" " " | cut -d " " -f 4-)"
           webp_targets="$webp_targets $(cat build/build.ninja | grep C_EXECUTABLE_LINKER__cwebp_Release | tr "|" " " | cut -d " " -f 4-)"
@@ -475,7 +475,7 @@ jobs:
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
             -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
-            -DWEBP_USE_THREAD=OFF
+            -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF
           webp_targets=""
           webp_targets="$webp_targets $(cat build/build.ninja | grep C_EXECUTABLE_LINKER__webpinfo_Release | tr "|" " " | cut -d " " -f 4-)"
           webp_targets="$webp_targets $(cat build/build.ninja | grep C_EXECUTABLE_LINKER__cwebp_Release | tr "|" " " | cut -d " " -f 4-)"
@@ -568,7 +568,7 @@ jobs:
             $(cd ect/build ; realpath $ect_targets | tr " " "\n" | grep -E "\.[^\\/]+$") \
             $(cd webp/build ; realpath $webp_targets | tr " " "\n" | grep -E "\.[^\\/]+$") \
             $(cd jpegxl/build ; realpath $jpegxl_targets | tr " " "\n" | grep -E "\.[^\\/]+$") \
-            -lole32 -lshlwapi -municode -static \
+            -lole32 -lshlwapi -static \
             -o zcodecs
           # ========== [profiling]
           if [ $step = final ]; then
