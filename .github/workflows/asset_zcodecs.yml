@@ -27,9 +27,9 @@ jobs:
           mkdir -p ect
           cd ect
           if [ ! -e README.md ]; then
-            curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
-            curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng
-            curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg # 4.1.5
+            curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 || true # 0.9.5
+            curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng || true
+            curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg || true # 4.1.5
             mv src/* ./
             sed -i.bak -e 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
             sed -i.bak -e 's|message(FATAL_ERROR |#|' -e 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
@@ -52,7 +52,7 @@ jobs:
           mkdir -p webp
           cd webp
           if [ ! -e README.md ]; then
-            curl -L https://github.com/webmproject/libwebp/archive/615e58744f6756b60cb758024fce22d439a24fa3.tar.gz | tar -zx --strip-components 1 # 20240823 > 1.4.0
+            curl -L https://github.com/webmproject/libwebp/archive/615e58744f6756b60cb758024fce22d439a24fa3.tar.gz | tar -zx --strip-components 1 || true # 20240823 > 1.4.0
             sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
             sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
             sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
@@ -79,7 +79,7 @@ jobs:
           mkdir -p jpegxl
           cd jpegxl
           if [ ! -e README.md ]; then
-            curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 # 20240824
+            curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 || true # 20240824
             sed -i.bak -e 's|download_github testdata|#|' deps.sh
             ./deps.sh
             sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
@@ -232,9 +232,9 @@ jobs:
           mkdir -p ect
           cd ect
           if [ ! -e README.md ]; then
-            curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
-            curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng
-            curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg # 4.1.5
+            curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 || true # 0.9.5
+            curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng || true
+            curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg || true # 4.1.5
             mv src/* ./
             sed -i.bak -e 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
             sed -i.bak -e 's|message(FATAL_ERROR |#|' -e 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
@@ -255,7 +255,7 @@ jobs:
           mkdir -p webp
           cd webp
           if [ ! -e README.md ]; then
-            curl -L https://github.com/webmproject/libwebp/archive/615e58744f6756b60cb758024fce22d439a24fa3.tar.gz | tar -zx --strip-components 1 # 20240823 > 1.4.0
+            curl -L https://github.com/webmproject/libwebp/archive/615e58744f6756b60cb758024fce22d439a24fa3.tar.gz | tar -zx --strip-components 1 || true # 20240823 > 1.4.0
             sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
             sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
             sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
@@ -283,7 +283,7 @@ jobs:
           mkdir -p jpegxl
           cd jpegxl
           if [ ! -e README.md ]; then
-            curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 # 20240824
+            curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 || true # 20240824
             sed -i.bak -e 's|download_github testdata|#|' deps.sh
             ./deps.sh
             sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
@@ -437,9 +437,9 @@ jobs:
           mkdir -p ect
           cd ect
           if [ ! -e README.md ]; then
-            curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 # 0.9.5
-            curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng
-            curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg # 4.1.5
+            curl -L https://github.com/fhanau/Efficient-Compression-Tool/archive/9aabc23d73899ae55c1de292592fed6eb6217f66.tar.gz | tar -zx --strip-components 1 || true # 0.9.5
+            curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng || true
+            curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg || true # 4.1.5
             mv src/* ./
             sed -i.bak -e 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
             sed -i.bak -e 's|message(FATAL_ERROR |#|' -e 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
@@ -462,7 +462,7 @@ jobs:
           mkdir -p webp
           cd webp
           if [ ! -e README.md ]; then
-            curl -L https://github.com/webmproject/libwebp/archive/615e58744f6756b60cb758024fce22d439a24fa3.tar.gz | tar -zx --strip-components 1 # 20240823 > 1.4.0
+            curl -L https://github.com/webmproject/libwebp/archive/615e58744f6756b60cb758024fce22d439a24fa3.tar.gz | tar -zx --strip-components 1 || true # 20240823 > 1.4.0
             sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
             sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
             sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
@@ -490,7 +490,7 @@ jobs:
           mkdir -p jpegxl
           cd jpegxl
           if [ ! -e README.md ]; then
-            curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 # 20240824
+            curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 || true # 20240824
             sed -i.bak -e 's|download_github testdata|#|' deps.sh
             ./deps.sh
             sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
