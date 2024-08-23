@@ -53,7 +53,7 @@ jobs:
           mkdir -p webp
           cd webp
           if [ ! -e README.md ]; then
-            curl -L https://github.com/webmproject/libwebp/archive/615e58744f6756b60cb758024fce22d439a24fa3.tar.gz | tar -zx --strip-components 1 || true # 20240823 > 1.4.0
+            curl -L https://github.com/webmproject/libwebp/archive/7bcb36b8846098ea672de376bbb48866243db3bf.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 1.4.0
             sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
             sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
             sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
@@ -80,7 +80,7 @@ jobs:
           mkdir -p jpegxl
           cd jpegxl
           if [ ! -e README.md ]; then
-            curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 || true # 20240824
+            curl -L https://github.com/libjxl/libjxl/archive/637806b163fec69869a13465cb7b126cec68ae97.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 0.10.3
             sed -i.bak -e 's|download_github testdata|#|' deps.sh
             ./deps.sh
             sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
@@ -257,7 +257,7 @@ jobs:
           mkdir -p webp
           cd webp
           if [ ! -e README.md ]; then
-            curl -L https://github.com/webmproject/libwebp/archive/615e58744f6756b60cb758024fce22d439a24fa3.tar.gz | tar -zx --strip-components 1 || true # 20240823 > 1.4.0
+            curl -L https://github.com/webmproject/libwebp/archive/7bcb36b8846098ea672de376bbb48866243db3bf.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 1.4.0
             sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
             sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
             sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
@@ -285,7 +285,7 @@ jobs:
           mkdir -p jpegxl
           cd jpegxl
           if [ ! -e README.md ]; then
-            curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 || true # 20240824
+            curl -L https://github.com/libjxl/libjxl/archive/637806b163fec69869a13465cb7b126cec68ae97.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 0.10.3
             sed -i.bak -e 's|download_github testdata|#|' deps.sh
             ./deps.sh
             sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
@@ -463,7 +463,7 @@ jobs:
           mkdir -p webp
           cd webp
           if [ ! -e README.md ]; then
-            curl -L https://github.com/webmproject/libwebp/archive/615e58744f6756b60cb758024fce22d439a24fa3.tar.gz | tar -zx --strip-components 1 || true # 20240823 > 1.4.0
+            curl -L https://github.com/webmproject/libwebp/archive/7bcb36b8846098ea672de376bbb48866243db3bf.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 1.4.0
             sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
             sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
             sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
@@ -476,7 +476,7 @@ jobs:
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
             -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
-            -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF  
+            -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF
           webp_targets=""
           webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__webpinfo_Release)"
           webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__cwebp_Release)"
@@ -490,7 +490,7 @@ jobs:
           mkdir -p jpegxl
           cd jpegxl
           if [ ! -e README.md ]; then
-            curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 || true # 20240824
+            curl -L https://github.com/libjxl/libjxl/archive/637806b163fec69869a13465cb7b126cec68ae97.tar.gz | tar -zx --strip-components 1 || true # 20240829 > 0.10.3
             sed -i.bak -e 's|download_github testdata|#|' deps.sh
             ./deps.sh
             sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
