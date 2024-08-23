@@ -62,12 +62,12 @@ jobs:
           sed -i.bak -e 's|download_github testdata|#|' deps.sh
           ./deps.sh
           sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
-          sed -i.bak -e 's/set(HWY_DISABLED_TARGETS "HWY_SSSE3")/set(HWY_DISABLED_TARGETS "HWY_SSE2|HWY_SSSE3|HWY_AVX3")\nset(HWY_COMPILE_ONLY_STATIC ON)\nset(HWY_BASELINE_TARGETS "HWY_AVX2|HWY_SSE4|EMU128|SCALAR")\n/' CMakeLists.txt
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
             -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
-            -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF
+            -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF \
+            -DCMAKE_CXX_FLAGS="$CXXFLAGS"' -DHWY_DISABLED_TARGETS="(HWY_SSE2|HWY_SSSE3|HWY_SSE4|HWY_AVX3|HWY_AVX3_SPR|HWY_AVX3_ZEN4)" -DHWY_BASELINE_TARGETS=HWY_AVX2 -DHWY_COMPILE_ONLY_STATIC=ON'
           cmake --build build
           rename_function main cmd_jxlinfo_main build/tools/CMakeFiles/jxlinfo.dir/jxlinfo.c.o
           rename_function main cmd_cjxl_main build/tools/CMakeFiles/cjxl.dir/cjxl_main.cc.o
