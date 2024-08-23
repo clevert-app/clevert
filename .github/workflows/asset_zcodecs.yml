@@ -568,7 +568,7 @@ jobs:
             $(cd webp/build ; realpath $webp_targets) \
             $(cd jpegxl/build ; realpath $jpegxl_targets) \
             -lole32 -lshlwapi -static \
-            -o zcodecs
+            -o zcodecs.exe
           # ========== [profiling]
           if [ $step = final ]; then
             break # is final step, skip pgo profiling
@@ -611,7 +611,7 @@ jobs:
           rm -rf *.profraw
           done # ^ "for step in profile final"
           strip zcodecs.exe
-          zip -9 win-x64.zip zcodecs
+          zip -9 win-x64.zip zcodecs.exe
       - name: Verify
         shell: C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start -e {0}
         run: |
