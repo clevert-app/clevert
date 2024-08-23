@@ -568,7 +568,7 @@ jobs:
             $(cd ect/build ; realpath $ect_targets | tr " " "\n" | grep -E "\.[^\\/]+$") \
             $(cd webp/build ; realpath $webp_targets | tr " " "\n" | grep -E "\.[^\\/]+$") \
             $(cd jpegxl/build ; realpath $jpegxl_targets | tr " " "\n" | grep -E "\.[^\\/]+$") \
-            -lole32 -lshlwapi -static \
+            -lole32 -lshlwapi -municode -static \
             -o zcodecs
           # ========== [profiling]
           if [ $step = final ]; then
