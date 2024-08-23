@@ -18,9 +18,9 @@ jobs:
           export CC="clang" CXX="clang++" PATH="/usr/lib/llvm-19/bin:$PATH"
           for step in profile final; do
           if [ $step = profile ]; then
-            export CFLAGS="-O3 -march=x86-64-v3 -flto -fprofile-generate"
+            export CFLAGS="-O3 -flto -fprofile-generate"
           elif [ $step = final ]; then
-            export CFLAGS="-O3 -march=x86-64-v3 -flto -fprofile-use=$(pwd)/pgo-0.profdata"
+            export CFLAGS="-O3 -flto -fprofile-use=$(pwd)/pgo-0.profdata"
           fi
           export CXXFLAGS="$CFLAGS"
           # ========== ect
@@ -181,13 +181,14 @@ jobs:
             LLVM_PROFILE_FILE="pgo-$i-04.profraw" ./zcodecs cwebp -q 75 -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
             LLVM_PROFILE_FILE="pgo-$i-14.profraw" ./zcodecs cwebp -q 85 -lossless -m 6 pgo_res/2.png -o pgo_res/2.webp # to webp lossless
             LLVM_PROFILE_FILE="pgo-$i-05.profraw" ./zcodecs cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
-            LLVM_PROFILE_FILE="pgo-$i-06.profraw" ./zcodecs dwebp -crop 4 4 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
+            LLVM_PROFILE_FILE="pgo-$i-06.profraw" ./zcodecs dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
             LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs img2webp -lossy -sharp_yuv pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
             LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs webpinfo pgo_res/3.0.webp
             LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs cjxl pgo_res/2.png pgo_res/2.jxl # to jpegxl
             LLVM_PROFILE_FILE="pgo-$i-09.profraw" ./zcodecs djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
             LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs jxlinfo pgo_res/2.jxl # to jpegxl
-            LLVM_PROFILE_FILE="pgo-$i-10.profraw" ./zcodecs ect -3 pgo_res/2.jpeg pgo_res/3.png # similar to jpegtran and zopflipng
+            LLVM_PROFILE_FILE="pgo-$i-10.profraw" ./zcodecs ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
+            LLVM_PROFILE_FILE="pgo-$i-20.profraw" ./zcodecs ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # similar to jpegtran and zopflipng
             LLVM_PROFILE_FILE="pgo-$i-11.profraw" ./zcodecs cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
             LLVM_PROFILE_FILE="pgo-$i-12.profraw" ./zcodecs cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
             LLVM_PROFILE_FILE="pgo-$i-13.profraw" ./zcodecs djpegli pgo_res/3.jpegli.jpeg pgo_res/3.jpegli.png
@@ -208,7 +209,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_6.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_7.0.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
 # description: combine many modern codecs, into a single multi-call binary
 # version number: major version plus one on every modify
@@ -216,11 +217,10 @@ jobs:
 
 # docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind zcodecs /bin/bash
 
-# ~/misc/apps/hyperfine -w 1 \
-#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs4_ cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
-#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs6_ cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
-#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs6_lto cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
-#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs6_lto_o3_v3 cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
-#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs6_lto_o3_v3_pgo cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
-#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs6_lto_pgo cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
+# ~/misc/apps/hyperfine -w 1 -r 3 \
+#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs0 cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
+#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs2 cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
+#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs3 cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
+#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs7_lto_o3_v3_pgo cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
+#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs7_lto_pgo cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
 # ;echo finished
