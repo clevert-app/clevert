@@ -211,7 +211,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_8.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_7.0.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
   mac-arm64:
     runs-on: macos-14
@@ -415,7 +415,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_8.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_7.0.0_' }}${{ github.run_id }}"
           files: mac-arm64.zip
   win-x64:
     runs-on: windows-2022
@@ -423,7 +423,7 @@ jobs:
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start -e {0}
         run: |
-          pacman -S --noconfirm zip mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-nasm mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-giflib
+          pacman -S --noconfirm zip mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-nasm mingw-w64-clang-x86_64-cmake mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-giflib
           cp /clang64/bin/lld /clang64/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
           export CC="clang" CXX="clang++"
           for step in profile final; do
@@ -624,7 +624,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_8.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_7.0.0_' }}${{ github.run_id }}"
           files: win-x64.zip
 # description: combine many modern codecs, into a single multi-call binary
 # version number: major version plus one on every modify
