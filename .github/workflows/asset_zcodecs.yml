@@ -16,7 +16,7 @@ jobs:
           sudo apt install -y cmake ninja-build clang-19/llvm-toolchain-jammy-19 lld-19/llvm-toolchain-jammy-19 nasm libgif-dev
           sudo ln --force --symbolic /usr/lib/llvm-19/bin/lld /usr/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
           export CC="clang" CXX="clang++" PATH="/usr/lib/llvm-19/bin:$PATH"
-          export CFLAGS="-march=x86-64-v3 -flto" # -flto -fprofile-generate
+          export CFLAGS="-O3 -march=x86-64-v3 -flto" # -flto -fprofile-generate
           export CXXFLAGS="$CFLAGS"
           rename_function(){ llvm-dis $3 -o - | sed -e "s|name: \"$1\"|name: \"$2\"|" -e "s|@$1(|@$2(|" | llvm-as -o $3.m.o ; mv $3.m.o $3 ;} # rename_function(){ llvm-objcopy --redefine-sym $1=$2 $3 ;} # rename_function bar cmd_ect_main foo.o # https://stackoverflow.com/q/78911061
           # ========== ect
@@ -61,12 +61,13 @@ jobs:
           curl -L https://github.com/libjxl/libjxl/archive/00d85f91151c8399e7bb132055f53b7e31c0faa3.tar.gz | tar -zx --strip-components 1 # 20240824
           sed -i.bak -e 's|download_github testdata|#|' deps.sh
           ./deps.sh
-          sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||'  -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
+          sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' -e 's|set(HWY_DISABLED_TARGETS "HWY_SSSE3")||' CMakeLists.txt
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
             -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
-            -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF
+            -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF \
+            -DHWY_BASELINE_TARGETS=HWY_AVX2 -DHWY_COMPILE_ONLY_STATIC=ON -DHWY_DISABLED_TARGETS="HWY_SSSE3|HWY_SSE4|HWY_AVX3"
           cmake --build build
           rename_function main cmd_jxlinfo_main build/tools/CMakeFiles/jxlinfo.dir/jxlinfo.c.o
           rename_function main cmd_cjxl_main build/tools/CMakeFiles/cjxl.dir/cjxl_main.cc.o
@@ -140,7 +141,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_4.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_5.0.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
 
 # docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind ubuntu:22.04
