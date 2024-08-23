@@ -12,13 +12,13 @@ jobs:
           export LANG=C # https://unix.stackexchange.com/a/269164
           export DEBIAN_FRONTEND=noninteractive # https://github.com/moby/moby/issues/27988
           sudo sh -c 'printf "deb [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\ndeb-src [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\n" >> /etc/apt/sources.list'
-          sudo apt update # ensure the environment have latest curl and ca-certificates
-          sudo apt install -y cmake ninja-build clang-19/llvm-toolchain-jammy-19 lld-19/llvm-toolchain-jammy-19 nasm zip libgif-dev
-          export CC="clang" CXX="clang++" PATH="/usr/lib/llvm-19/bin:$PATH"
-          export CFLAGS="-flto" # -flto -fprofile-generate
-          export CXXFLAGS="$CFLAGS"
+          sudo apt update # ensure the environment have latest curl and ca-certificates # apt install -y curl busybox zip
+          sudo apt install -y cmake ninja-build clang-19/llvm-toolchain-jammy-19 lld-19/llvm-toolchain-jammy-19 nasm libgif-dev
           sudo ln --force --symbolic /usr/lib/llvm-19/bin/lld /usr/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
-          rename_function(){ llvm-dis $3 -o - | sed -e "s|name: \"$1\"|name: \"$2\"|" -e "s|@$1(|@$2(|" | llvm-as -o $3.m.o ; mv $3.m.o $3 ;} # rename_function bar cmd_ect_main foo.o # https://stackoverflow.com/q/78911061
+          export CC="clang" CXX="clang++" PATH="/usr/lib/llvm-19/bin:$PATH"
+          export CFLAGS="-march=x86-64-v3 -flto" # -flto -fprofile-generate
+          export CXXFLAGS="$CFLAGS"
+          rename_function(){ llvm-dis $3 -o - | sed -e "s|name: \"$1\"|name: \"$2\"|" -e "s|@$1(|@$2(|" | llvm-as -o $3.m.o ; mv $3.m.o $3 ;} # rename_function(){ llvm-objcopy --redefine-sym $1=$2 $3 ;} # rename_function bar cmd_ect_main foo.o # https://stackoverflow.com/q/78911061
           # ========== ect
           mkdir ect
           cd ect
@@ -26,22 +26,22 @@ jobs:
           curl -L https://github.com/pnggroup/libpng/archive/f135775ad4e5d4408d2e12ffcc71bb36e6b48551.tar.gz | tar -zx --strip-components 1 -C src/libpng
           curl -L https://github.com/mozilla/mozjpeg/archive/6c9f0897afa1c2738d7222a0a9ab49e8b536a267.tar.gz | tar -zx --strip-components 1 -C src/mozjpeg # 4.1.5
           mv src/* ./
-          sed -i.bak 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
-          sed -i.bak 's|message(FATAL_ERROR |#|' mozjpeg/CMakeLists.txt
-          sed -i.bak 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
-          sed -i.bak "s|find_package(ZLIB REQUIRED)|#|" libpng/CMakeLists.txt
-          sed -i.bak "s|-Ofast|-O3 -ffast-math|" CMakeLists.txt
+          sed -i.bak -e 's|set(PNG_BUILD_ZLIB |#|' optipng/CMakeLists.txt
+          sed -i.bak -e 's|message(FATAL_ERROR |#|' mozjpeg/CMakeLists.txt
+          sed -i.bak -e 's|option(PNG_SUPPORTED |option(PNG_SUPPORTED "" FALSE) #|' mozjpeg/CMakeLists.txt
+          sed -i.bak -e 's|find_package(ZLIB REQUIRED)|#|' libpng/CMakeLists.txt
+          sed -i.bak -e 's|-Ofast|-O3 -ffast-math|' CMakeLists.txt
           echo "" > pngusr.h # the ect disabled some libpng features to reduce size, but we need to link libpng into other programs which require full-featured libpng
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
           cmake --build build
           rename_function main cmd_ect_main build/CMakeFiles/ect.dir/main.cpp.o
+          cp -r libpng/* build/optipng/libpng # prepare for below other programs
+          cp -r mozjpeg/* build/mozjpeg
           cd ..
           # ========== webp
           mkdir webp
           cd webp
           curl -L https://github.com/webmproject/libwebp/archive/845d5476a866141ba35ac133f856fa62f0b7445f.tar.gz | tar -zx --strip-components 1 # 1.4.0
-          cp -r ../ect/libpng/* ../ect/build/optipng/libpng
-          cp -r ../ect/mozjpeg/* ../ect/build/mozjpeg
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
@@ -117,7 +117,7 @@ jobs:
                 argv++;
                 argc--;
               }
-              puts("applets: ect cwebp dwebp gif2webp img2webp webpinfo webpmux jxlinfo cjxl djxl cjpegli djpegli");
+              puts("appletspngquant: ect cwebp dwebp gif2webp img2webp webpinfo webpmux jxlinfo cjxl djxl cjpegli djpegli");
               return 0;
             }
           EOF
@@ -147,8 +147,17 @@ jobs:
 
 # description: combine many modern codecs, into a single multi-call binary
 # version number: major version plus one on every modify
-
+# why not include gifski? it's size is huge, replaced by other formats, and it process videos acturally. but we may include pngquant.
 # ./zcodecs cwebp -m 6 -q 75 i2.jpg -o o2.webp.webp
 # cp i2.jpg o2.ect.jpeg ; ./zcodecs ect -9 o2.ect.jpeg
 # ./jpegxl cjpegli i2.jpg o2.jpegli.jpeg -q 55 -p 0
 # ./jpegxl cjxl i2.jpg o2.jxl.jxl -q 75 --lossless_jpeg=0 ; ./jpegxl djxl o2.jxl.jxl o2.jxl.png
+
+# curl \
+#   -o _sample_bak/2.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png \
+#   -o _sample_bak/3.png -L https://user-images.githubusercontent.com/35271042/118224532-3842c400-b438-11eb-923d-a5f66fa6785a.png \
+#   -o _sample_bak/4.png -L https://raw.githubusercontent.com/microsoft/.github/105835e2f9324920c7b08d93364c70b4a6f4d4eb/images/open-at-microsoft.png \
+#   -o _sample_bak/5.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screenmac.png \
+#   -o _sample_bak/7.tar.gz -L https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-musl.tar.gz \
+#   -o _sample_bak/8.tar.gz -L https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.0.tar.gz \
+#   --parallel
