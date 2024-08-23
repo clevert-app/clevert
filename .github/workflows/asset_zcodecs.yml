@@ -62,7 +62,7 @@ jobs:
           sed -i.bak -e 's|download_github testdata|#|' deps.sh
           ./deps.sh
           sed -i.bak -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static")||' -e 's|string(APPEND CMAKE_EXE_LINKER_FLAGS " -static-libgcc -static-libstdc++")||' -e 's|CMAKE_USE_PTHREADS_INIT|0|' CMakeLists.txt
-          sed -i.bak -e 's|set(HWY_DISABLED_TARGETS "HWY_SSSE3")|set(HWY_DISABLED_TARGETS "HWY_SSE2|HWY_SSSE3|HWY_AVX3")\nset(HWY_COMPILE_ONLY_STATIC ON)\n|set(HWY_BASELINE_TARGETS "HWY_AVX2|HWY_SSE4|EMU128|SCALAR")\n' CMakeLists.txt
+          sed -i.bak -e 's/set(HWY_DISABLED_TARGETS "HWY_SSSE3")/set(HWY_DISABLED_TARGETS "HWY_SSE2|HWY_SSSE3|HWY_AVX3")\nset(HWY_COMPILE_ONLY_STATIC ON)\nset(HWY_BASELINE_TARGETS "HWY_AVX2|HWY_SSE4|EMU128|SCALAR")\n/' CMakeLists.txt
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
