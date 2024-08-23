@@ -357,7 +357,7 @@ jobs:
         run: |
           tar -xf zcodecs.tar --strip-components 1
           source utils.sh
-          pacman -S --noconfirm zip mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-nasm mingw-w64-clang-x86_64-cmake mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-giflib
+          pacman -S --needed --noconfirm zip mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-nasm mingw-w64-clang-x86_64-cmake mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-giflib
           cp /clang64/bin/lld /clang64/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
           export CC="clang" CXX="clang++"
           for step in profile final; do
