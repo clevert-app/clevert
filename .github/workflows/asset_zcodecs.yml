@@ -118,7 +118,7 @@ jobs:
                 argc--;
               }
               puts("applets: ect cwebp dwebp gif2webp img2webp webpinfo webpmux jxlinfo cjxl djxl cjpegli djpegli");
-              return 1;
+              return 0;
             }
           EOF
           # extract from ect/build/build.ninja webp/build/build.ninja jpegxl/build/build.ninja
@@ -140,7 +140,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_3.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_4.0.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
 
 # docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind ubuntu:22.04
