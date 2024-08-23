@@ -430,7 +430,7 @@ jobs:
           if [ $step = profile ]; then
             export CFLAGS="-O3 -flto -fprofile-generate"
           elif [ $step = final ]; then
-            export CFLAGS="-O3 -flto -fprofile-use=$(pwd)/pgo-0.profdata"
+            export CFLAGS="-O3 -flto -fprofile-use=$(cygpath -m $(pwd)/pgo-0.profdata)"
           fi
           export CXXFLAGS="$CFLAGS"
           # ========== ect
