@@ -863,20 +863,20 @@ const streamWrite = (stream, chunk) => {
 /**
 @typedef {
   "linux-x64" | "mac-arm64" | "win-x64"
-} Platform 短期内不谋求增加新平台. 长远来看，应该是 ` "linux-x64" | "linux-arm64" | "mac-x64" | "mac-arm64" | "win-x64" | "win-arm64" `
+} Platform We don't want new platforms currently. In the future, it should be ` "linux-x64" | "linux-arm64" | "mac-x64" | "mac-arm64" | "win-x64" | "win-arm64" `.
 @typedef {{
   platforms: Platform[],
-  kind: "raw" | "zip" | "gzip" | "tar" | "tar-gzip",
+  kind: "raw" | "zip" | "gzip" | "xz" | "tar" | "tar-gzip" | "tar-xz",
   url: string,
   path: string,
-}} Asset
+}} Asset For "raw", "gzip" and "xz", the `.path` is the file path; for others, the `.path` is the directory path.
 @typedef {{
   entriesRoot?: HTMLElement,
   entries?: () => any,
   profileRoot: HTMLElement,
   profile: () => any,
   preview: (input: any) => void,
-}} ActionUiController 之所以叫 controller 是因为类似 https://developer.mozilla.org/en-US/docs/Web/API/AbortController
+}} ActionUiController Named "controller" because it looks like [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController) .
 @typedef {{
   progress: () => number,
   stop: () => void,
@@ -885,7 +885,7 @@ const streamWrite = (stream, chunk) => {
 @typedef {{
   begin: number,
   expectedEnd: number,
-}} RunActionTiming all with `seconds` unit
+}} RunActionTiming All with `seconds` unit.
 @typedef {{
   finished: number,
   running: number,
@@ -1566,9 +1566,9 @@ const serverMain = async () => {
       const request = /** @type {InstallExtensionRequest} */ (
         await readReq(r.req)
       );
-      const abortController = new AbortController();
       let finished = 0;
       let amount = 0;
+      const abortController = new AbortController();
       let tempStreams = /** @type {Set<fs.WriteStream>} */ (new Set());
       let tempPaths = /** @type {Set<string>} */ (new Set());
 
@@ -1587,6 +1587,7 @@ const serverMain = async () => {
         const indexJsTempPath = solvePath(PATH_CACHE, nextId() + ".js");
         tempPaths.add(indexJsTempPath);
         const indexJsTempStream = fs.createWriteStream(indexJsTempPath);
+        tempStreams.add(indexJsTempStream);
         for await (const chunk of indexJsResponse.body) {
           finished += chunk.length;
           await streamWrite(indexJsTempStream, chunk);
@@ -1608,36 +1609,45 @@ const serverMain = async () => {
           if (!asset.platforms.includes(CURRENT_PLATFORM)) {
             continue;
           }
-          const tempExtName = false
-            ? assert(false)
-            : asset.kind === "raw"
-            ? "raw"
-            : asset.kind === "zip"
-            ? "zip"
-            : assert(false, "unsupported asset kind");
-          const tempPath = solvePath(PATH_CACHE, nextId() + "." + tempExtName);
-          tempPaths.add(tempPath);
           const assetResponse = await fetch(asset.url, {
             redirect: "follow",
             signal: abortController.signal,
           });
-          const tempStream = fs.createWriteStream(tempPath);
           if (!assetResponse.body) {
             throw new Error("response.body is null, url = " + asset.url);
           }
           amount += parseInt(
             assetResponse.headers.get("Content-Length") || "0"
           );
+          const assetExtName = false
+            ? assert(false)
+            : asset.kind === "raw"
+            ? "raw"
+            : asset.kind === "zip"
+            ? "zip"
+            : assert(false, "unsupported asset kind");
+          const assetTempPath = solvePath(
+            PATH_CACHE,
+            nextId() + "." + assetExtName
+          );
+          tempPaths.add(assetTempPath);
+          const assetTempStream = fs.createWriteStream(assetTempPath);
+          tempStreams.add(assetTempStream);
           for await (const chunk of assetResponse.body) {
             finished += chunk.length;
-            await streamWrite(tempStream, chunk);
+            await streamWrite(assetTempStream, chunk);
           }
-          await new Promise((resolve) => tempStream.end(resolve));
+          await new Promise((resolve) => assetTempStream.end(resolve));
           if (asset.kind === "zip") {
-            const zip = new StreamZip.async({ file: tempPath });
+            const zip = new StreamZip.async({ file: assetTempPath });
             await zip.extract(null, solvePath(extensionDir, asset.path));
             await zip.close();
-            await fsp.rm(tempPath);
+            await fsp.rm(assetTempPath);
+          } else if (asset.kind === "raw") {
+            await fsp.rename(
+              assetTempPath,
+              solvePath(extensionDir, asset.path)
+            );
           } else {
             assert(false, "unsupported asset kind");
           }

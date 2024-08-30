@@ -54,7 +54,6 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [x] 修复 jpegxl macos 有问题，没静态链接。
 - [x] 可能 (不可能，不支持嵌套虚拟化，已使用 warpbuild 替代) 可以在 mac 上跑虚拟机 linux/win arm64 ？ https://docs.orbstack.dev/machines/ https://docs.orbstack.dev/quick-start
 - [x] jpegxl: 链接自己的 jpegli 而不是传统 libjpeg-turbo (暂时不考虑了)，linux 下使用系统的 zlib 动态链接
-- [ ] ect 的 zip 和 gzip 优化需要先解压再压缩。ect 似乎不支持 unicode 文件名？这些都是可以考虑的，让扩展去做的补救措施。
 - [x] 不要尝试给 ect 增加不写入旧文件的逻辑。很麻烦很麻烦的。在扩展里面用复制文件的方法来替代。
 - [x] ect 开启 PGO 优化
 - [x] 下载包再解压的模式，不做流式解压了
@@ -64,8 +63,9 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [x] zcodecs 合并 ect, webp, jpegxl
 - [x] 完善 action 执行逻辑
 - [x] 执行进度和扩展安装进度展示
-- [ ] CSS 初步
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
+- [ ] 多弄一个扩展，展示用，一共至少要两个吧
+- [ ] CSS 初步
 - [ ] 关于扩展建议 out extension 的设计
 - [ ] 用户保存的 profile，最近使用的 profile，extension-profile 三种进入入口
 - [ ] 用户保存 profile 的设计，或者是 json with comments 保存到总 config 中？
@@ -73,6 +73,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [ ] 前端的状态改善
 - [ ] UI 美化完善
 - [ ] 扩展商店改进
+- [ ] ect 的 zip 和 gzip 优化需要先解压再压缩。ect 似乎不支持 unicode 文件名？这些都是可以考虑的，让扩展去做的补救措施。
 - [ ] 支持 7z，zstd，xz 等，用扩展形式
 - [ ] 一个扩展的多个版本共存
 - [ ] 更多扩展
