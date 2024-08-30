@@ -945,6 +945,7 @@ const streamWrite = (stream, chunk) => {
   }[],
 }[]} ListExtensionsResponse
 @typedef {{
+  title: string,
   url: string,
 }} InstallExtensionRequest
 @typedef {{
@@ -969,6 +970,7 @@ const streamWrite = (stream, chunk) => {
 } | {
   kind: "install-extension-progress",
   id: string,
+  title: string,
   progress: InstallExtensionProgress,
 } | {
   kind: "install-extension-success",
@@ -979,6 +981,7 @@ const streamWrite = (stream, chunk) => {
   error: any,
 }} GetStatusResponseEvent
 @typedef {{
+  title: string,
   progress: () => InstallExtensionProgress,
   wait: Promise<any>,
 }} InstallExtensionController
@@ -1092,42 +1095,63 @@ const pageMain = async () => {
   $tasks.classList.add("off");
   new EventSource("/get-status").onmessage = async (message) => {
     const e = /** @type {GetStatusResponseEvent} */ (JSON.parse(message.data));
-    console.log(e);
+    /** @type {HTMLElement | null} */
+    let $task = $tasks.querySelector(`section[data-id="${e.id}"]`);
+    if (!$task) {
+      $task = document.createElement("section");
+      $tasks.insertBefore($task, $tasks.firstChild);
+      $task.dataset.id = e.id;
+      const $title = document.createElement("h6");
+      $task.appendChild($title);
+      const $tips = document.createElement("span");
+      $task.appendChild($tips);
+      const $operations = document.createElement("div");
+      $task.appendChild($operations);
+      if (e.kind === "run-action-progress") {
+        // TODO: more operations like pause, stop, pin
+      } else if (e.kind === "install-extension-progress") {
+        // TODO: more operations like pause, stop
+      } else {
+        assert(false, "unexpected kind: " + e.kind);
+      }
+    }
+    const [$title, $tips, $operations] = $task.children;
     if (
       e.kind === "run-action-progress" ||
       e.kind === "run-action-success" ||
       e.kind === "run-action-error"
     ) {
-      /** @type {HTMLElement | null} */
-      let $task = $tasks.querySelector(`section[data-id=${e.id}]`);
-      if (!$task) {
-        assert(e.kind === "run-action-progress");
-        $task = document.createElement("section");
-        $tasks.insertBefore($task, $tasks.firstChild);
-        $task.dataset.id = e.id;
-        $task.appendChild(document.createElement("h6"));
-        $task.appendChild(document.createElement("span"));
-        $task.appendChild(document.createElement("div"));
-      }
-      const [$title, $tips, $operations] = $task.children;
+      // const [$pause, $stop, $pin] = $operations.children;
       if (e.kind === "run-action-progress") {
         $title.textContent = e.title;
         $tips.textContent =
           `${e.timing.expectedEnd - Math.trunc(Date.now() / 1000)}s - ` +
           `${e.progress.finished}/${e.progress.amount}`;
-        $operations.textContent = ""; // TODO
       } else if (e.kind === "run-action-success") {
-        $tips.textContent = e.kind; // TODO
+        $tips.textContent = "Success";
       } else if (e.kind === "run-action-error") {
-        $tips.textContent = e.kind; // TODO
+        $tips.textContent = "Error: " + e.error;
+      } else {
+        const /** @type {never} */ _ = e; // exhaustiveness
       }
     } else if (
       e.kind === "install-extension-progress" ||
       e.kind === "install-extension-success" ||
       e.kind === "install-extension-error"
     ) {
-      // TODO
-      // r$profiles()
+      if (e.kind === "install-extension-progress") {
+        $title.textContent = e.title;
+        $tips.textContent = `${e.progress.download.finished}/${e.progress.download.amount} Bytes`;
+      } else if (e.kind === "install-extension-success") {
+        $tips.textContent = "Success";
+        r$profiles();
+      } else if (e.kind === "install-extension-error") {
+        $tips.textContent = "Error: " + e.error;
+      } else {
+        const /** @type {never} */ _ = e; // exhaustiveness
+      }
+    } else {
+      const /** @type {never} */ _ = e; // exhaustiveness
     }
   };
 
@@ -1357,9 +1381,11 @@ const pageMain = async () => {
     $install.textContent = "install";
     $install.onclick = async () => {
       assert($url.value.trim() !== "");
-      const request = /** @type {InstallExtensionRequest} */ ({
+      /** @type {InstallExtensionRequest} */
+      const request = {
+        title: "Install extension from " + $url.value,
         url: $url.value,
-      });
+      };
       await fetch("/install-extension", {
         method: "POST",
         body: JSON.stringify(request),
@@ -1651,6 +1677,7 @@ const serverMain = async () => {
       // https://developer.mozilla.org/zh-CN/docs/Web/API/Server-sent_events/Using_server-sent_events
 
       installExtensionControllers.set(nextId(), {
+        title: request.title,
         progress: () => ({ download: { finished, amount } }),
         wait: wait,
       });
@@ -1848,6 +1875,7 @@ const serverMain = async () => {
           send({
             kind: "install-extension-progress",
             id,
+            title: controller.title,
             progress: controller.progress(),
           });
           if (!waitingIds.has(id)) {
@@ -2032,5 +2060,6 @@ console.log(import.meta.url);
 
 // mkdir -p node_modules/electron ; dl_prefix="https://registry.npmmirror.com/electron/30.0.2/files" ; curl -o node_modules/electron/electron.d.ts -L $dl_prefix/electron.d.ts -o node_modules/electron/package.json -L $dl_prefix/package.json
 // http://127.0.0.1:9439/extensions/zcodecs/index.js
+// /home/kkocdko/misc/code/clevert/temp/_test_res/i
 
 // 暂时先用内置 mirror 列表，以后可以考虑国内放一个或多个固定地址来存 mirror 的列表

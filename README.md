@@ -57,12 +57,14 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [ ] ect 的 zip 和 gzip 优化需要先解压再压缩。ect 似乎不支持 unicode 文件名？这些都是可以考虑的，让扩展去做的补救措施。
 - [x] 不要尝试给 ect 增加不写入旧文件的逻辑。很麻烦很麻烦的。在扩展里面用复制文件的方法来替代。
 - [x] ect 开启 PGO 优化
+- [x] 下载包再解压的模式，不做流式解压了
 - [x] 先不要纠结编译 assets 了
 - [x] 实现一个代码量最少的，用于 bootstrap 的 node unzip
 - [x] 完善扩展安装逻辑
+- [x] zcodecs 合并 ect, webp, jpegxl
 - [x] 完善 action 执行逻辑
+- [x] 执行进度和扩展安装进度展示
 - [ ] CSS 初步
-- [ ] 执行进度和扩展安装进度展示
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 关于扩展建议 out extension 的设计
 - [ ] 用户保存的 profile，最近使用的 profile，extension-profile 三种进入入口
@@ -71,7 +73,6 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [ ] 前端的状态改善
 - [ ] UI 美化完善
 - [ ] 扩展商店改进
-- [ ] 下载包再解压的模式，不做流式解压了
 - [ ] 支持 7z，zstd，xz 等，用扩展形式
 - [ ] 一个扩展的多个版本共存
 - [ ] 更多扩展
