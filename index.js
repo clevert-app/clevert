@@ -890,22 +890,6 @@ const streamWrite = (stream, chunk) => {
   wait: Promise<void>;
 }} ActionExecuteController
 @typedef {{
-  begin: number;
-  expectedEnd: number;
-}} RunActionTiming All with `seconds` unit.
-@typedef {{
-  finished: number;
-  running: number;
-  amount: number;
-}} RunActionProgress The `running` property may be float.
-@typedef {{
-  title: string;
-  timing: () => RunActionTiming;
-  progress: () => RunActionProgress;
-  stop: () => void;
-  wait: Promise<any>;
-}} RunActionController
-@typedef {{
   id: string;
   name: string;
   description: string;
@@ -952,15 +936,68 @@ const streamWrite = (stream, chunk) => {
   }[];
 }[]} ListExtensionsResponse
 @typedef {{
+  kind: "number-sequence";
+  begin: number;
+  end: number;
+}} EntriesNumberSequence May be useful later.
+@typedef {{
+  kind: "common-files";
+  entries?: {
+    inputFile: string,
+    outputFile: string;
+  }[];
+  inputDir: string;
+  outputDir: string;
+  outputExtension: string;
+}} EntriesCommonFiles The most common.
+@typedef {{
+  kind: "plain";
+  entries: any[];
+}} EntriesPlain Just `entries` itself, may useful for `yt-dlp` and other scenario that a file comes from nowhere.
+@typedef {{
+  begin: number;
+  expectedEnd: number;
+}} RunActionTiming All with `seconds` unit.
+@typedef {{
+  finished: number;
+  running: number;
+  amount: number;
+}} RunActionProgress The `running` property may be float.
+@typedef {{
   title: string;
-  url: string;
-}} InstallExtensionRequest
+  timing: () => RunActionTiming;
+  progress: () => RunActionProgress;
+  stop: () => void;
+  wait: Promise<any>;
+}} RunActionController
+@typedef {{
+  title: string;
+  extensionId: string;
+  extensionVersion: string;
+  actionId: string;
+  profile: any;
+  entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence;
+  parallel: number;
+}} RunActionRequest
 @typedef {{
   download: {
     finished: number;
     amount: number;
   };
 }} InstallExtensionProgress
+@typedef {{
+  title: string;
+  progress: () => InstallExtensionProgress;
+  wait: Promise<any>;
+}} InstallExtensionController
+@typedef {{
+  title: string;
+  url: string;
+}} InstallExtensionRequest
+@typedef {{
+  id: string;
+  version: string;
+}} RemoveExtensionRequest
 @typedef {{
   kind: "run-action-progress";
   id: string;
@@ -987,43 +1024,6 @@ const streamWrite = (stream, chunk) => {
   id: string;
   error: any;
 }} GetStatusResponseEvent
-@typedef {{
-  title: string;
-  progress: () => InstallExtensionProgress;
-  wait: Promise<any>;
-}} InstallExtensionController
-@typedef {{
-  id: string;
-  version: string;
-}} RemoveExtensionRequest
-@typedef {{
-  kind: "number-sequence";
-  begin: number;
-  end: number;
-}} EntriesNumberSequence May be useful later.
-@typedef {{
-  kind: "common-files";
-  entries?: {
-    inputFile: string,
-    outputFile: string;
-  }[];
-  inputDir: string;
-  outputDir: string;
-  outputExtension: string;
-}} EntriesCommonFiles The most common.
-@typedef {{
-  kind: "plain";
-  entries: any[];
-}} EntriesPlain Just `entries` itself, may useful for `yt-dlp` and other scenario that a file comes from nowhere.
-@typedef {{
-  title: string;
-  extensionId: string;
-  extensionVersion: string;
-  actionId: string;
-  profile: any;
-  entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence;
-  parallel: number;
-}} RunActionRequest
 */
 
 const css = String.raw;
