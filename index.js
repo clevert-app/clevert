@@ -1064,8 +1064,8 @@ const pageMain = async () => {
   $tasks.id = "tasks";
   $tasks.classList.add("off");
   new EventSource("/get-status").onmessage = async (message) => {
-    // https://stackoverflow.com/q/24564030/
     const e = /** @type {GetStatusResponseEvent} */ (JSON.parse(message.data));
+    console.log(e)
     if (
       e.kind === "run-action-progress" ||
       e.kind === "run-action-success" ||
@@ -1074,9 +1074,10 @@ const pageMain = async () => {
       /** @type {HTMLElement | null} */
       let $task = $tasks.querySelector(`section[data-id=${e.id}]`);
       if (!$task) {
-        assert(e.kind === "run-action-progress"); // 显然
+        assert(e.kind === "run-action-progress");
         $task = document.createElement("section");
-        $tasks.appendChild($task);
+        $tasks.insertBefore($task, $tasks.firstChild);
+        $task.dataset.id = e.id;
         $task.appendChild(document.createElement("h6"));
         $task.appendChild(document.createElement("span"));
         $task.appendChild(document.createElement("div"));
@@ -1115,14 +1116,27 @@ const pageMain = async () => {
   $query.classList.add("query");
   const $queryInput = document.createElement("input");
   $query.appendChild($queryInput);
+  $queryInput.oninput = debounce(() => r$choices(), 700);
   const $queryReset = document.createElement("button");
   $query.appendChild($queryReset);
-  const $queryBar = document.createElement("div");
+  $queryReset.textContent = "×";
+  $queryReset.title = "Reset";
+  $queryReset.onclick = () => {
+    $queryInput.value = "";
+    for (const el of $queryBar.children) {
+      el.classList.remove("checked");
+    }
+    r$choices();
+  };
+  const $queryBar = document.createElement("div"); // to contains some conditions like "extension:zcodecs" "file:png"
   $query.appendChild($queryBar);
   // $queryConditionExtensions
-  const $queryConditionExtensions = document.createElement("button");
+  const $queryConditionExtensions = document.createElement("button"); // only show extensions, do not show profiles
   $queryBar.appendChild($queryConditionExtensions);
+  $queryConditionExtensions.textContent = "all-extensions";
+  $queryConditionExtensions.title = "Show all extensions";
   $queryConditionExtensions.onclick = () => {
+    $queryInput.value = "";
     if (!$queryConditionExtensions.classList.contains("checked")) {
       // because this condition is exclusive
       for (const el of $queryBar.children) {
@@ -1148,6 +1162,7 @@ const pageMain = async () => {
         const $version = document.createElement("sub");
         $choice.appendChild($version);
         $version.textContent = extension.version;
+        $version.title = "Extension version";
         const $description = document.createElement("span");
         $choice.appendChild($description);
         $description.textContent = extension.description;
@@ -1165,7 +1180,7 @@ const pageMain = async () => {
             method: "POST",
             body: JSON.stringify(request),
           });
-          // TODO: refresh choices
+          r$choices();
         };
       }
     } else {
@@ -1179,6 +1194,8 @@ const pageMain = async () => {
           $name.title = profile.id;
           const $version = document.createElement("sub");
           $choice.appendChild($version);
+          $version.textContent = profile.extensionVersion;
+          $version.title = "Extension version";
           const $description = document.createElement("span");
           $choice.appendChild($description);
           $description.textContent = profile.description;
@@ -1624,6 +1641,7 @@ const serverMain = async () => {
       );
       await fsp.rm(extensionDir, { recursive: true, force: true });
       r.end();
+      return;
     }
 
     if (r.req.url === "/list-extensions") {
