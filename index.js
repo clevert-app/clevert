@@ -1824,6 +1824,7 @@ const serverMain = async () => {
             progress: controller.progress(),
           });
           if (!waitingIds.has(id)) {
+            waitingIds.add(id);
             let wait = controller.wait;
             wait = wait.then(() => {
               send({ kind: "install-extension-success", id });
