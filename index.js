@@ -1116,40 +1116,25 @@ const pageMain = async () => {
       }
     }
     const [$title, $tips, $operations] = $task.children;
-    if (
-      e.kind === "run-action-progress" ||
-      e.kind === "run-action-success" ||
-      e.kind === "run-action-error"
-    ) {
+    if (e.kind === "run-action-progress") {
       // const [$pause, $stop, $pin] = $operations.children;
-      if (e.kind === "run-action-progress") {
-        $title.textContent = e.title;
-        $tips.textContent =
-          `${e.timing.expectedEnd - Math.trunc(Date.now() / 1000)}s - ` +
-          `${e.progress.finished}/${e.progress.amount}`;
-      } else if (e.kind === "run-action-success") {
-        $tips.textContent = "Success";
-      } else if (e.kind === "run-action-error") {
-        $tips.textContent = "Error: " + e.error;
-      } else {
-        const /** @type {never} */ _ = e; // exhaustiveness
-      }
-    } else if (
-      e.kind === "install-extension-progress" ||
-      e.kind === "install-extension-success" ||
-      e.kind === "install-extension-error"
-    ) {
-      if (e.kind === "install-extension-progress") {
-        $title.textContent = e.title;
-        $tips.textContent = `${e.progress.download.finished}/${e.progress.download.amount} Bytes`;
-      } else if (e.kind === "install-extension-success") {
-        $tips.textContent = "Success";
-        r$profiles();
-      } else if (e.kind === "install-extension-error") {
-        $tips.textContent = "Error: " + e.error;
-      } else {
-        const /** @type {never} */ _ = e; // exhaustiveness
-      }
+      $title.textContent = e.title;
+      $tips.textContent =
+        `${e.timing.expectedEnd - Math.trunc(Date.now() / 1000)}s - ` +
+        `${e.progress.finished}/${e.progress.amount}`;
+    } else if (e.kind === "run-action-success") {
+      $tips.textContent = "Success";
+    } else if (e.kind === "run-action-error") {
+      $tips.textContent = "Error: " + e.error;
+    } else if (e.kind === "install-extension-progress") {
+      // const [$stop, $pin] = $operations.children;
+      $title.textContent = e.title;
+      $tips.textContent = `${e.progress.download.finished}/${e.progress.download.amount} Bytes`;
+    } else if (e.kind === "install-extension-success") {
+      $tips.textContent = "Success";
+      r$profiles();
+    } else if (e.kind === "install-extension-error") {
+      $tips.textContent = "Error: " + e.error;
     } else {
       const /** @type {never} */ _ = e; // exhaustiveness
     }
