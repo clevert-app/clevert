@@ -5,7 +5,7 @@ permissions:
   contents: write
 jobs:
   prepare:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/cache@v4 # the post step for this will upload jpegxl.tar if not hit
         id: cache
@@ -167,14 +167,17 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive # https://github.com/moby/moby/issues/27988
           sudo sh -c 'printf "deb [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\ndeb-src [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\n" >> /etc/apt/sources.list'
           sudo apt update # ensure the environment have latest curl and ca-certificates # apt install -y curl busybox zip
-          sudo apt install -y cmake ninja-build clang-19/llvm-toolchain-jammy-19 lld-19/llvm-toolchain-jammy-19 nasm libgif-dev
+          sudo apt install -y g++-14 cmake ninja-build nasm libgif-dev
           sudo ln -s -f /usr/lib/llvm-19/bin/lld /usr/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
           export CC="clang" CXX="clang++" PATH="/usr/lib/llvm-19/bin:$PATH"
+          # -fno-slp-vectorize
+          # export CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto -fprofile-dir=$(pwd)/pgo -fprofile-generate"
+          # export CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto -Wno-error=coverage-mismatch -fprofile-dir=$(pwd)/pgo -fprofile-use"
           for step in profile final; do
           if [ $step = profile ]; then
-            export CFLAGS="-O3 -flto -fprofile-generate"
+            export CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto -fprofile-generate"
           elif [ $step = final ]; then
-            export CFLAGS="-O3 -flto -fprofile-use=$(pwd)/pgo-0.profdata"
+            export CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto -fprofile-use=$(pwd)/pgo-0.profdata"
           fi
           export CXXFLAGS="$CFLAGS"
           # ========== ect
@@ -445,8 +448,31 @@ jobs:
 
 # docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind zcodecs /bin/bash
 
-# ~/misc/apps/hyperfine -w 1 -r 3 \
-#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs2 cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
-#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs7_lto_o3_v3_pgo cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
-#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs7_lto_pgo cwebp -m 6 -q 85 -lossless pgo_res/2.png -o pgo_res/2.webp" \
+# ~/misc/apps/hyperfine -r 2 \
+#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./ect_ghtm2/ect_v3 -9 pgo_res/2.png" \
+#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs9_12 ect -9 pgo_res/2.png" \
+#   "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res ; ./zcodecs9_13 ect -9 pgo_res/2.png" \
 # ;echo finished
+
+# llvm clang has an regression bug on x86
+# -O3 -fomit-frame-pointer -march=x86-64-v3
+# no_flags="-mno-aes -mno-avx -mno-avx2 -mno-f16c -mno-fma4 -mno-mmx -mno-popcnt -mno-rdrnd -mno-ssse3"
+# no_flags="-mno-avx -mno-f16c -mno-fma4 -mno-mmx -mno-popcnt -mno-rdrnd -mno-ssse3“
+
+awk "BEGIN {printf 1 + 2}"
+
+docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind ubuntu:24.04 /bin/bash
+sed -i 's@//.*archive.ubuntu.com@//mirrors.ustc.edu.cn@g' /etc/apt/sources.list.d/ubuntu.sources
+sed -i 's/security.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/ubuntu.sources
+apt update
+apt install -y zip zstd curl g++-14 cmake ninja-build nasm libgif-dev
+mkdir old_deps # link to old libgcc, libstdc++ and glibc
+cd old_deps
+curl \
+  -o d1.deb -L http://archive.ubuntu.com/ubuntu/pool/main/g/gcc-12/libgcc-12-dev_12.3.0-1ubuntu1~22.04_amd64.deb \
+  -o d2.deb -L http://archive.ubuntu.com/ubuntu/pool/main/g/gcc-12/libgcc-s1_12.3.0-1ubuntu1~22.04_amd64.deb \
+  -o d3.deb -L http://archive.ubuntu.com/ubuntu/pool/main/g/gcc-12/libstdc++-12-dev_12.2.0-17ubuntu1_amd64.deb \
+  -o d4.deb -L http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6-dev_2.35-0ubuntu3.8_amd64.deb \
+  --parallel
+for deb in *.deb; do ar -p $deb data.tar.zst | tar -x --zstd; done
+cd ..
