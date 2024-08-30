@@ -12,7 +12,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_9.0.0"
+          key: "asset_zcodecs_10.0.0"
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
@@ -38,7 +38,7 @@ jobs:
           # ========== webp
           mkdir webp
           cd webp
-          curl -L https://github.com/webmproject/libwebp/archive/94de6c7fed030a6de4f576e5dd1cf5c4e854fab2.tar.gz | tar -zx --strip-components 1 # 20240830 > 1.4.0
+          curl -L https://github.com/webmproject/libwebp/archive/2e81017c7a345f687223086cbc177a8459a18b52.tar.gz | tar -zx --strip-components 1 # 20240901 > 1.4.0
           sed -i.bak -e 's|int main(|int cmd_webpinfo_main(|' examples/webpinfo.c
           sed -i.bak -e 's|int main(|int cmd_cwebp_main(|' examples/cwebp.c
           sed -i.bak -e 's|int main(|int cmd_dwebp_main(|' examples/dwebp.c
@@ -49,7 +49,7 @@ jobs:
           # ========== jpegxl
           mkdir jpegxl
           cd jpegxl
-          curl -L https://github.com/libjxl/libjxl/archive/637806b163fec69869a13465cb7b126cec68ae97.tar.gz | tar -zx --strip-components 1 # 20240829 > 0.10.3
+          curl -L https://github.com/libjxl/libjxl/archive/f28befab0b0ef113ffdca3786757737bce01d4c7.tar.gz | tar -zx --strip-components 1 # 20240901 > 0.10.3
           sed -i.bak -e 's|download_github testdata|#|' deps.sh
           ./deps.sh
           rm -rf downloads third_party/skcms/profiles/*
@@ -133,19 +133,22 @@ jobs:
                 profile $i-01 ect -2 -zip pgo_res/1.bin pgo_res/2.png # zip compress an easy file + a hard file
                 profile $i-02 ect -3 -gzip pgo_res/1.bin pgo_res/3.png # gzip same as above
                 profile $i-03 ect -4 -gzip pgo_res/1.bin.gz # gzip re-compress with higher level, include both compress and decompress
-                profile $i-04 cwebp -q 75 -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
-                profile $i-05 cwebp -q 85 -lossless -m 6 pgo_res/2.png -o pgo_res/2.webp # to webp lossless
+                profile $i-04 cwebp -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
+                profile $i-05 cwebp -lossless -sharp_yuv -m 6 pgo_res/2.png -o pgo_res/2.webp
                 profile $i-06 cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
                 profile $i-07 dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
-                profile $i-08 img2webp -lossy -sharp_yuv pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
+                profile $i-08 img2webp -lossy -sharp_yuv -m 6 pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
                 profile $i-09 webpinfo pgo_res/3.0.webp
-                profile $i-10 cjxl pgo_res/2.png pgo_res/2.jxl # to jpegxl
+                profile $i-10 cjxl -e 10 pgo_res/2.png pgo_res/2.jxl # to jpegxl
+                profile $i-18 cjxl pgo_res/3.png pgo_res/3.jxl
+                profile $i-19 cjxl -e 8 pgo_res/3.2.png pgo_res/3.2.jxl
                 profile $i-11 djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
                 profile $i-12 jxlinfo pgo_res/2.jxl
                 profile $i-13 ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
                 profile $i-14 ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # high level recompress
                 profile $i-15 cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
                 profile $i-16 cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
+                profile $i-20 cjpegli -q 75 pgo_res/3.2.png pgo_res/3.2.jpegli.jpeg
                 profile $i-17 djpegli pgo_res/3.jpegli.jpeg pgo_res/3.jpegli.png
               done
               if [ $1 = llvm ]; then
@@ -164,7 +167,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_9.0.0"
+          key: "asset_zcodecs_10.0.0"
       - name: Build
         shell: docker run -i --network host --privileged --mount type=bind,source=/,destination=/bind gcc:14-bookworm bash -e /bind{0} # github actions "running-jobs-in-a-container" feature is sucks, cause "uses" failed
         run: |
@@ -250,7 +253,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_9.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_10.0.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
   mac-arm64:
     needs: prepare
@@ -260,7 +263,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_9.0.0"
+          key: "asset_zcodecs_10.0.0"
       - name: Build
         run: |
           tar -xf zcodecs.tar --strip-components 1
@@ -344,7 +347,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_9.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_10.0.0_' }}${{ github.run_id }}"
           files: mac-arm64.zip
   win-x64:
     needs: prepare
@@ -354,7 +357,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_9.0.0"
+          key: "asset_zcodecs_10.0.0"
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
         run: |
@@ -437,27 +440,19 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_9.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_10.0.0_' }}${{ github.run_id }}"
           files: win-x64.zip
 # description: combine many modern codecs, into a single multi-call binary
 # version number: major version plus one on every modify
 # why not include gifski? it's size is huge, replaced by other formats, and it process videos acturally. but we may include pngquant later?
 
-# docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind zcodecs /bin/bash
-
 # ~/misc/apps/hyperfine -r 3 -s "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res" \
-#   "./ect_ghtm2/ect_v3 -9 pgo_res/2.png" \
-#   "./zcodecs8 ect -9 pgo_res/2.png" \
-#   "./zcodecs9 ect -9 pgo_res/2.png" \
-# ;echo finished
+#   "./zcodecs8  cwebp -m 6 pgo_res/2.png -o pgo_res/3.png.webp" \
+#   "./zcodecs9  cwebp -m 6 pgo_res/2.png -o pgo_res/3.png.webp" \
+#   "./zcodecs0  cwebp -m 6 pgo_res/2.png -o pgo_res/3.png.webp" \
+#   "./zcodecs1  cwebp -m 6 pgo_res/2.png -o pgo_res/3.png.webp" \
+#   "./zcodecs95 cwebp -m 6 pgo_res/2.png -o pgo_res/3.png.webp" \
+# ;echo finished # 0=lto-v3, 1=none
 
-# llvm clang has an regression bug on x86
-# -O3 -fomit-frame-pointer -march=x86-64-v3
-# no_flags="-mno-aes -mno-avx -mno-avx2 -mno-f16c -mno-fma4 -mno-mmx -mno-popcnt -mno-rdrnd -mno-ssse3"
-# no_flags="-mno-avx -mno-f16c -mno-fma4 -mno-mmx -mno-popcnt -mno-rdrnd -mno-ssse3“
-
-# awk "BEGIN {printf 1 + 2}"
-
-# docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind ubuntu:24.04 /bin/bash
-# sed -i 's@//.*archive.ubuntu.com@//mirrors.ustc.edu.cn@g' /etc/apt/sources.list.d/ubuntu.sources
-# sed -i 's/security.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/ubuntu.sources
+# docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,destination=/bind zcodecs /bin/bash
+# llvm clang has an regression bug on x86 # -O3 -fomit-frame-pointer -march=x86-64-v3 # no_flags="-mno-aes -mno-avx -mno-avx2 -mno-f16c -mno-fma4 -mno-mmx -mno-popcnt -mno-rdrnd -mno-ssse3" # no_flags="-mno-avx -mno-f16c -mno-fma4 -mno-mmx -mno-popcnt -mno-rdrnd -mno-ssse3“
