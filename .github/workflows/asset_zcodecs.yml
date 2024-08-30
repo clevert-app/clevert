@@ -12,7 +12,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_10.0.0"
+          key: "asset_zcodecs_11.0.0"
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
@@ -113,10 +113,11 @@ jobs:
             -o pgo_res_bak/5.tar.gz -L https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.0.tar.gz \
             -o pgo_res_bak/2.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png \
             -o pgo_res_bak/3.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screenmac.png \
-            --parallel # (program + text) + (screenshot) + (photo)
+            --parallel
           gzip -d pgo_res_bak/*.tar.gz
-          cat pgo_res_bak/*.tar > pgo_res_bak/1.bin
+          cat pgo_res_bak/*.tar pgo_res_bak/2.png > pgo_res_bak/1.bin
           rm -rf pgo_res_bak/*.tar pgo_res_bak/*.gz
+          gzip -k pgo_res_bak/1.bin
           cat <<'EOF' > utils.sh
             ninja_targets(){
               cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
@@ -131,22 +132,21 @@ jobs:
               for i in 1 2; do # small files twice is enough
                 rm -rf pgo_res
                 cp -r pgo_res_bak pgo_res
-                profile ect -2 -zip pgo_res/1.bin pgo_res/2.png # zip compress an easy file + a hard file
-                profile ect -3 -gzip pgo_res/1.bin pgo_res/3.png # gzip same as above
+                profile ect -2 -zip pgo_res/1.bin # zip compress an easy file + a hard file
                 profile ect -4 -gzip pgo_res/1.bin.gz # gzip re-compress with higher level, include both compress and decompress
                 profile cwebp -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
                 profile cwebp -lossless -sharp_yuv -m 6 pgo_res/2.png -o pgo_res/2.webp
-                profile cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
+                profile cwebp -crop 100 100 2144 1544 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
                 profile dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
                 profile img2webp -lossy -sharp_yuv -m 6 pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
                 profile webpinfo pgo_res/3.0.webp
-                profile cjxl -e 10 pgo_res/2.png pgo_res/2.jxl # to jpegxl
-                profile cjxl pgo_res/3.png pgo_res/3.jxl
-                profile cjxl -e 8 pgo_res/3.2.png pgo_res/3.2.jxl
+                profile cjxl -q 68 -e 10 pgo_res/2.png pgo_res/2.jxl # to jpegxl
+                profile cjxl -q 85 pgo_res/3.png pgo_res/3.jxl
+                profile cjxl -q 100 -e 8 pgo_res/3.2.png pgo_res/3.2.jxl # mathematically lossless
                 profile djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
                 profile jxlinfo pgo_res/2.jxl
                 profile ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
-                profile ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # high level recompress
+                profile ect -9 pgo_res/2.png pgo_res/3.2.png # high level recompress
                 profile cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
                 profile cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
                 profile cjpegli -q 75 pgo_res/3.2.png pgo_res/3.2.jpegli.jpeg
@@ -168,7 +168,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_10.0.0"
+          key: "asset_zcodecs_11.0.0"
       - name: Build
         shell: docker run -i --network host --privileged --mount type=bind,source=/,destination=/bind gcc:14-bookworm bash -e /bind{0} # github actions "running-jobs-in-a-container" feature is sucks, cause "uses" failed
         run: |
@@ -254,7 +254,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_10.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_11.0.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
   mac-arm64:
     needs: prepare
@@ -264,7 +264,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_10.0.0"
+          key: "asset_zcodecs_11.0.0"
       - name: Build
         run: |
           tar -xf zcodecs.tar --strip-components 1
@@ -348,7 +348,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_10.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_11.0.0_' }}${{ github.run_id }}"
           files: mac-arm64.zip
   win-x64:
     needs: prepare
@@ -358,7 +358,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_10.0.0"
+          key: "asset_zcodecs_11.0.0"
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
         run: |
@@ -441,7 +441,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_10.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_11.0.0_' }}${{ github.run_id }}"
           files: win-x64.zip
 # description: combine many modern codecs, into a single multi-call binary
 # version number: major version plus one on every modify
