@@ -109,12 +109,13 @@ jobs:
           EOF
           mkdir pgo_res_bak
           curl \
-            -o pgo_res_bak/4.tar.gz -L https://github.com/BurntSushi/ripgrep/releases/download/14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-musl.tar.gz \
-            -o pgo_res_bak/5.tar.gz -L https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.0.tar.gz \
+            -o pgo_res_bak/4.tar.gz -L https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz \
+            -o pgo_res_bak/5.tar.gz -L https://github.com/NixOS/patchelf/archive/refs/tags/0.18.0.tar.gz \
             -o pgo_res_bak/2.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png \
-            -o pgo_res_bak/3.png -L https://raw.githubusercontent.com/utmapp/UTM/1e0e6b20621e9cfb63b71fb983995bb59bf34ea1/screenmac.png \
+            -o pgo_res_bak/3.jpg -L https://raw.githubusercontent.com/WongKinYiu/yolov7/a207844b1ce82d204ab36d87d496728d3d2348e7/figure/yolov7_city.jpg \
             --parallel
           gzip -d pgo_res_bak/*.tar.gz
+          truncate --size=1234KiB 5.tar
           cat pgo_res_bak/*.tar pgo_res_bak/2.png > pgo_res_bak/1.bin
           rm -rf pgo_res_bak/*.tar pgo_res_bak/*.gz
           gzip -k pgo_res_bak/1.bin
@@ -127,7 +128,7 @@ jobs:
               rm -rf *.profraw *.profdata pgo
               profile(){ pgo_i=$(awk "BEGIN {print $pgo_i + 1}") ; ./zcodecs $* ;} # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=47618#c5
               if [ $1 = llvm ]; then
-                profile(){ pgo_i=$(awk "BEGIN {print $pgo_i + 1}") ; export LLVM_PROFILE_FILE="pgo-$pgo_i.profraw"; ./zcodecs $* ;}
+                profile(){ pgo_i=$(awk "BEGIN {print $pgo_i + 1}") ; export LLVM_PROFILE_FILE="pgo-$(printf %03d $pgo_i).profraw"; ./zcodecs $* ;}
               fi
               for i in 1 2; do # small files twice is enough
                 rm -rf pgo_res
@@ -446,6 +447,8 @@ jobs:
 # description: combine many modern codecs, into a single multi-call binary
 # version number: major version plus one on every modify
 # why not include gifski? it's size is huge, replaced by other formats, and it process videos acturally. but we may include pngquant later?
+# * 更小的 PGO 样本
+# * 使用 BOLT https://github.com/llvm/llvm-project/blob/main/bolt/README.md
 
 # ~/misc/apps/hyperfine -r 3 -s "rm -rf pgo_res ; cp -r pgo_res_bak pgo_res" \
 #   "./zcodecs8  cwebp -m 6 pgo_res/2.png -o pgo_res/3.png.webp" \
