@@ -122,34 +122,35 @@ jobs:
               cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
             }
             run_profiling(){
+              pgo_i=1
               rm -rf *.profraw *.profdata pgo
-              profile(){ shift ; ./zcodecs $* ;} # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=47618#c5
+              profile(){ pgo_i=$(awk "BEGIN {print $pgo_i + 1}") ; ./zcodecs $* ;} # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=47618#c5
               if [ $1 = llvm ]; then
-                profile(){ export LLVM_PROFILE_FILE="pgo-$1.profraw"; shift ; ./zcodecs $* ;}
+                profile(){ pgo_i=$(awk "BEGIN {print $pgo_i + 1}") ; export LLVM_PROFILE_FILE="pgo-$pgo_i.profraw"; ./zcodecs $* ;}
               fi
               for i in 1 2; do # small files twice is enough
                 rm -rf pgo_res
                 cp -r pgo_res_bak pgo_res
-                profile $i-01 ect -2 -zip pgo_res/1.bin pgo_res/2.png # zip compress an easy file + a hard file
-                profile $i-02 ect -3 -gzip pgo_res/1.bin pgo_res/3.png # gzip same as above
-                profile $i-03 ect -4 -gzip pgo_res/1.bin.gz # gzip re-compress with higher level, include both compress and decompress
-                profile $i-04 cwebp -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
-                profile $i-05 cwebp -lossless -sharp_yuv -m 6 pgo_res/2.png -o pgo_res/2.webp
-                profile $i-06 cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
-                profile $i-07 dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
-                profile $i-08 img2webp -lossy -sharp_yuv -m 6 pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
-                profile $i-09 webpinfo pgo_res/3.0.webp
-                profile $i-10 cjxl -e 10 pgo_res/2.png pgo_res/2.jxl # to jpegxl
-                profile $i-18 cjxl pgo_res/3.png pgo_res/3.jxl
-                profile $i-19 cjxl -e 8 pgo_res/3.2.png pgo_res/3.2.jxl
-                profile $i-11 djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
-                profile $i-12 jxlinfo pgo_res/2.jxl
-                profile $i-13 ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
-                profile $i-14 ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # high level recompress
-                profile $i-15 cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
-                profile $i-16 cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
-                profile $i-20 cjpegli -q 75 pgo_res/3.2.png pgo_res/3.2.jpegli.jpeg
-                profile $i-17 djpegli pgo_res/3.jpegli.jpeg pgo_res/3.jpegli.png
+                profile ect -2 -zip pgo_res/1.bin pgo_res/2.png # zip compress an easy file + a hard file
+                profile ect -3 -gzip pgo_res/1.bin pgo_res/3.png # gzip same as above
+                profile ect -4 -gzip pgo_res/1.bin.gz # gzip re-compress with higher level, include both compress and decompress
+                profile cwebp -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
+                profile cwebp -lossless -sharp_yuv -m 6 pgo_res/2.png -o pgo_res/2.webp
+                profile cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
+                profile dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
+                profile img2webp -lossy -sharp_yuv -m 6 pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
+                profile webpinfo pgo_res/3.0.webp
+                profile cjxl -e 10 pgo_res/2.png pgo_res/2.jxl # to jpegxl
+                profile cjxl pgo_res/3.png pgo_res/3.jxl
+                profile cjxl -e 8 pgo_res/3.2.png pgo_res/3.2.jxl
+                profile djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
+                profile jxlinfo pgo_res/2.jxl
+                profile ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
+                profile ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # high level recompress
+                profile cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
+                profile cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
+                profile cjpegli -q 75 pgo_res/3.2.png pgo_res/3.2.jpegli.jpeg
+                profile djpegli pgo_res/3.jpegli.jpeg pgo_res/3.jpegli.png
               done
               if [ $1 = llvm ]; then
                 llvm-profdata merge -output=pgo-0.profdata *.profraw
