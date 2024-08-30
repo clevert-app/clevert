@@ -856,166 +856,173 @@ const streamWrite = (stream, chunk) => {
   });
 };
 
-// /** @type {1} */ (process.exit());
+// https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
+// https://www.ghproxy.cc/https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
+// https://hub.whtrys.space/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
+// https://cf.ghproxy.cc/https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
+// https://sciproxy.com/github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
+// https://mirror.ghproxy.com/https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
+// https://ghproxy.net/https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
+// https://kkgithub.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
 
-// TODO: 逗号换成分号
+// /** @type {1} */ (process.exit());
 
 /**
 @typedef {
   "linux-x64" | "mac-arm64" | "win-x64"
 } Platform We don't want new platforms currently. In the future, it should be ` "linux-x64" | "linux-arm64" | "mac-x64" | "mac-arm64" | "win-x64" | "win-arm64" `.
 @typedef {{
-  platforms: Platform[],
-  kind: "raw" | "zip" | "gzip" | "xz" | "tar" | "tar-gzip" | "tar-xz",
-  url: string,
-  path: string,
+  platforms: Platform[];
+  kind: "raw" | "zip" | "gzip" | "xz" | "tar" | "tar-gzip" | "tar-xz";
+  url: string;
+  path: string;
 }} Asset For "raw", "gzip" and "xz", the `.path` is the file path; for others, the `.path` is the directory path.
 @typedef {{
-  entriesRoot?: HTMLElement,
-  entries?: () => any,
-  profileRoot: HTMLElement,
-  profile: () => any,
-  preview: (input: any) => void,
+  entriesRoot?: HTMLElement;
+  entries?: () => any;
+  profileRoot: HTMLElement;
+  profile: () => any;
+  preview: (input: any) => void;
 }} ActionUiController Named "controller" because it looks like [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController) .
 @typedef {{
-  progress: () => number,
-  stop: () => void,
-  wait: Promise<void>,
+  progress: () => number;
+  stop: () => void;
+  wait: Promise<void>;
 }} ActionExecuteController
 @typedef {{
-  begin: number,
-  expectedEnd: number,
+  begin: number;
+  expectedEnd: number;
 }} RunActionTiming All with `seconds` unit.
 @typedef {{
-  finished: number,
-  running: number,
-  amount: number,
+  finished: number;
+  running: number;
+  amount: number;
 }} RunActionProgress The `running` property may be float.
 @typedef {{
-  title: string,
-  timing: () => RunActionTiming,
-  progress: () => RunActionProgress,
-  stop: () => void,
-  wait: Promise<any>,
+  title: string;
+  timing: () => RunActionTiming;
+  progress: () => RunActionProgress;
+  stop: () => void;
+  wait: Promise<any>;
 }} RunActionController
 @typedef {{
-  id: string,
-  name: string,
-  description: string,
-  kind: RunActionRequest["entries"]["kind"],
-  ui: (profile: any) => ActionUiController,
-  execute: (profile: any, entry: any) => ActionExecuteController,
+  id: string;
+  name: string;
+  description: string;
+  kind: RunActionRequest["entries"]["kind"];
+  ui: (profile: any) => ActionUiController;
+  execute: (profile: any, entry: any) => ActionExecuteController;
 }} Action
 @typedef {{
-  id: string,
-  name: string,
-  description: string,
-  actionId: string,
-  extensionId: string,
-  extensionVersion: string,
-  [key: string]: any,
+  id: string;
+  name: string;
+  description: string;
+  actionId: string;
+  extensionId: string;
+  extensionVersion: string;
+  [key: string]: any;
 }} Profile
 @typedef {{
-  id: string,
-  version: string,
-  name: string,
-  description: string,
-  dependencies: string[],
-  assets: Asset[],
-  actions: Action[],
-  profiles: Profile[],
+  id: string;
+  version: string;
+  name: string;
+  description: string;
+  dependencies: string[];
+  assets: Asset[];
+  actions: Action[];
+  profiles: Profile[];
 }} Extension
 @typedef {{
-  id: string,
-  name: string,
-  version: string,
-  description: string,
+  id: string;
+  name: string;
+  version: string;
+  description: string;
   actions: {
-    id: string,
-    name: string,
-    description: string,
-  }[],
+    id: string;
+    name: string;
+    description: string;
+  }[];
   profiles: {
-    id: string,
-    name: string,
-    description: string,
-    actionId: string,
-    extensionId: string,
-    extensionVersion: string,
-  }[],
+    id: string;
+    name: string;
+    description: string;
+    actionId: string;
+    extensionId: string;
+    extensionVersion: string;
+  }[];
 }[]} ListExtensionsResponse
 @typedef {{
-  title: string,
-  url: string,
+  title: string;
+  url: string;
 }} InstallExtensionRequest
 @typedef {{
   download: {
-    finished: number,
-    amount: number,
-  },
+    finished: number;
+    amount: number;
+  };
 }} InstallExtensionProgress
 @typedef {{
-  kind: "run-action-progress",
-  id: string,
-  title: string, // 甚至可以在 client 指定自定义标题？
-  timing: RunActionTiming,
-  progress: RunActionProgress,
+  kind: "run-action-progress";
+  id: string;
+  title: string;
+  timing: RunActionTiming;
+  progress: RunActionProgress;
 } | {
-  kind: "run-action-success",
-  id: string,
+  kind: "run-action-success";
+  id: string;
 } | {
-  kind: "run-action-error",
-  id: string,
-  error: any,
+  kind: "run-action-error";
+  id: string;
+  error: any;
 } | {
-  kind: "install-extension-progress",
-  id: string,
-  title: string,
-  progress: InstallExtensionProgress,
+  kind: "install-extension-progress";
+  id: string;
+  title: string;
+  progress: InstallExtensionProgress;
 } | {
-  kind: "install-extension-success",
-  id: string,
+  kind: "install-extension-success";
+  id: string;
 } | {
-  kind: "install-extension-error",
-  id: string,
-  error: any,
+  kind: "install-extension-error";
+  id: string;
+  error: any;
 }} GetStatusResponseEvent
 @typedef {{
-  title: string,
-  progress: () => InstallExtensionProgress,
-  wait: Promise<any>,
+  title: string;
+  progress: () => InstallExtensionProgress;
+  wait: Promise<any>;
 }} InstallExtensionController
 @typedef {{
-  id: string,
-  version: string,
+  id: string;
+  version: string;
 }} RemoveExtensionRequest
 @typedef {{
-  kind: "number-sequence",
-  begin: number,
-  end: number,
-}} EntriesNumberSequence 以后可能有用
+  kind: "number-sequence";
+  begin: number;
+  end: number;
+}} EntriesNumberSequence May be useful later.
 @typedef {{
-  kind: "common-files",
+  kind: "common-files";
   entries?: {
     inputFile: string,
-    outputFile: string,
-  }[],
-  inputDir: string,
-  outputDir: string,
-  outputExtension: string,
-}} EntriesCommonFiles 最常用的，包含扫描文件夹等功能
+    outputFile: string;
+  }[];
+  inputDir: string;
+  outputDir: string;
+  outputExtension: string;
+}} EntriesCommonFiles The most common.
 @typedef {{
-  kind: "plain",
-  entries: any[],
-}} EntriesPlain 直接就是 entries 本身，也许可以适配 yt-dlp 这种凭空出个文件的场景
+  kind: "plain";
+  entries: any[];
+}} EntriesPlain Just `entries` itself, may useful for `yt-dlp` and other scenario that a file comes from nowhere.
 @typedef {{
-  title: string,
-  extensionId: string,
-  extensionVersion: string,
-  actionId: string,
-  profile: any,
-  entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence,
-  parallel: number,
+  title: string;
+  extensionId: string;
+  extensionVersion: string;
+  actionId: string;
+  profile: any;
+  entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence;
+  parallel: number;
 }} RunActionRequest
 */
 
