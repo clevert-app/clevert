@@ -7,12 +7,12 @@ jobs:
   prepare:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/cache@v4 # the post step for this will upload jpegxl.tar if not hit
+      - uses: actions/cache@v4 # the post step for this will upload tar if not hit
         id: cache
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_11.0.0"
+          key: "asset_zcodecs_12.0.0"
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
@@ -145,7 +145,7 @@ jobs:
                 profile cjxl -q 100 -e 8 pgo_res/3.2.png pgo_res/3.2.jxl # mathematically lossless
                 profile djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
                 profile jxlinfo pgo_res/2.jxl
-                profile ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
+                profile ect -3 pgo_res/2.jpeg pgo_res/2.png # similar to jpegtran and zopflipng
                 profile ect -9 pgo_res/2.png pgo_res/3.2.png # high level recompress
                 profile cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
                 profile cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
@@ -168,7 +168,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_11.0.0"
+          key: "asset_zcodecs_12.0.0"
       - name: Build
         shell: docker run -i --network host --privileged --mount type=bind,source=/,destination=/bind gcc:14-bookworm bash -e /bind{0} # github actions "running-jobs-in-a-container" feature is sucks, cause "uses" failed
         run: |
@@ -254,7 +254,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_11.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_12.0.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
   mac-arm64:
     needs: prepare
@@ -264,7 +264,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_11.0.0"
+          key: "asset_zcodecs_12.0.0"
       - name: Build
         run: |
           tar -xf zcodecs.tar --strip-components 1
@@ -348,7 +348,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_11.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_12.0.0_' }}${{ github.run_id }}"
           files: mac-arm64.zip
   win-x64:
     needs: prepare
@@ -358,7 +358,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_11.0.0"
+          key: "asset_zcodecs_12.0.0"
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start -e {0}
         run: |
@@ -441,7 +441,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_11.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_12.0.0_' }}${{ github.run_id }}"
           files: win-x64.zip
 # description: combine many modern codecs, into a single multi-call binary
 # version number: major version plus one on every modify
