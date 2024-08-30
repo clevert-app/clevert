@@ -12,7 +12,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_8.0.0"
+          key: "asset_zcodecs_9.0.0"
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
@@ -122,29 +122,35 @@ jobs:
               cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
             }
             run_profiling(){
-              rm -rf *.profraw *.profdata
+              rm -rf *.profraw *.profdata pgo
+              profile(){ shift ; ./zcodecs $* ;} # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=47618#c5
+              if [ $1 = llvm ]; then
+                profile(){ export LLVM_PROFILE_FILE="pgo-$1.profraw"; shift ; ./zcodecs $* ;}
+              fi
               for i in 1 2; do # small files twice is enough
                 rm -rf pgo_res
                 cp -r pgo_res_bak pgo_res
-                LLVM_PROFILE_FILE="pgo-$i-01.profraw" ./zcodecs ect -2 -zip pgo_res/1.bin pgo_res/2.png # zip compress an easy file + a hard file
-                LLVM_PROFILE_FILE="pgo-$i-02.profraw" ./zcodecs ect -3 -gzip pgo_res/1.bin pgo_res/3.png # gzip same as above
-                LLVM_PROFILE_FILE="pgo-$i-03.profraw" ./zcodecs ect -4 -gzip pgo_res/1.bin.gz # gzip re-compress with higher level, include both compress and decompress
-                LLVM_PROFILE_FILE="pgo-$i-04.profraw" ./zcodecs cwebp -q 75 -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
-                LLVM_PROFILE_FILE="pgo-$i-14.profraw" ./zcodecs cwebp -q 85 -lossless -m 6 pgo_res/2.png -o pgo_res/2.webp # to webp lossless
-                LLVM_PROFILE_FILE="pgo-$i-05.profraw" ./zcodecs cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
-                LLVM_PROFILE_FILE="pgo-$i-06.profraw" ./zcodecs dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
-                LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs img2webp -lossy -sharp_yuv pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
-                LLVM_PROFILE_FILE="pgo-$i-07.profraw" ./zcodecs webpinfo pgo_res/3.0.webp
-                LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs cjxl pgo_res/2.png pgo_res/2.jxl # to jpegxl
-                LLVM_PROFILE_FILE="pgo-$i-09.profraw" ./zcodecs djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
-                LLVM_PROFILE_FILE="pgo-$i-08.profraw" ./zcodecs jxlinfo pgo_res/2.jxl
-                LLVM_PROFILE_FILE="pgo-$i-10.profraw" ./zcodecs ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
-                LLVM_PROFILE_FILE="pgo-$i-20.profraw" ./zcodecs ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # high level recompress
-                LLVM_PROFILE_FILE="pgo-$i-11.profraw" ./zcodecs cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
-                LLVM_PROFILE_FILE="pgo-$i-12.profraw" ./zcodecs cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
-                LLVM_PROFILE_FILE="pgo-$i-13.profraw" ./zcodecs djpegli pgo_res/3.jpegli.jpeg pgo_res/3.jpegli.png
+                profile $i-01 ect -2 -zip pgo_res/1.bin pgo_res/2.png # zip compress an easy file + a hard file
+                profile $i-02 ect -3 -gzip pgo_res/1.bin pgo_res/3.png # gzip same as above
+                profile $i-03 ect -4 -gzip pgo_res/1.bin.gz # gzip re-compress with higher level, include both compress and decompress
+                profile $i-04 cwebp -q 75 -lossless pgo_res/3.png -o pgo_res/3.webp # to webp lossless
+                profile $i-05 cwebp -q 85 -lossless -m 6 pgo_res/2.png -o pgo_res/2.webp # to webp lossless
+                profile $i-06 cwebp -crop 0 0 2144 1544 -m 6 pgo_res/3.png -o pgo_res/3.1.webp # to webp lossy
+                profile $i-07 dwebp -crop 300 300 2144 1544 pgo_res/3.webp -o pgo_res/3.2.png # webp decode and crop 2
+                profile $i-08 img2webp -lossy -sharp_yuv pgo_res/2.png pgo_res/3.1.webp pgo_res/3.2.png -o pgo_res/3.0.webp # to webp animated
+                profile $i-09 webpinfo pgo_res/3.0.webp
+                profile $i-10 cjxl pgo_res/2.png pgo_res/2.jxl # to jpegxl
+                profile $i-11 djxl pgo_res/2.jxl pgo_res/2.jpeg # to normal jpeg
+                profile $i-12 jxlinfo pgo_res/2.jxl
+                profile $i-13 ect -3 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.png # similar to jpegtran and zopflipng
+                profile $i-14 ect -9 pgo_res/2.jpeg pgo_res/2.png pgo_res/3.2.png # high level recompress
+                profile $i-15 cjpegli -q 85 pgo_res/3.png pgo_res/3.jpegli.jpeg
+                profile $i-16 cjpegli -q 60 pgo_res/2.png pgo_res/2.jpegli.jpeg
+                profile $i-17 djpegli pgo_res/3.jpegli.jpeg pgo_res/3.jpegli.png
               done
-              llvm-profdata merge -output=pgo-0.profdata *.profraw
+              if [ $1 = llvm ]; then
+                llvm-profdata merge -output=pgo-0.profdata *.profraw
+              fi
               rm -rf *.profraw
             }
           EOF
@@ -152,39 +158,38 @@ jobs:
           tar -cf zcodecs.tar --dereference zcodecs
   linux-x64:
     needs: prepare
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    container:
+      image: gcc:14-bookworm
     steps:
       - uses: actions/cache/restore@v4
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_8.0.0"
+          key: "asset_zcodecs_9.0.0"
       - name: Build
         run: |
           tar -xf zcodecs.tar --strip-components 1
           source utils.sh
           export LANG=C # https://unix.stackexchange.com/a/269164
           export DEBIAN_FRONTEND=noninteractive # https://github.com/moby/moby/issues/27988
-          sudo sh -c 'printf "deb [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\ndeb-src [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main\n" >> /etc/apt/sources.list'
-          sudo apt update # ensure the environment have latest curl and ca-certificates # apt install -y curl busybox zip
-          sudo apt install -y g++-14 cmake ninja-build nasm libgif-dev
-          sudo ln -s -f /usr/lib/llvm-19/bin/lld /usr/bin/ld # use lld to avoid https://stackoverflow.com/a/409470 # the CMAKE_LINKER_TYPE is good, however it requires new cmake v3.29
-          export CC="clang" CXX="clang++" PATH="/usr/lib/llvm-19/bin:$PATH"
-          # -fno-slp-vectorize
-          # export CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto -fprofile-dir=$(pwd)/pgo -fprofile-generate"
-          # export CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto -Wno-error=coverage-mismatch -fprofile-dir=$(pwd)/pgo -fprofile-use"
+          apt update
+          apt install -y zip zstd busybox curl cmake ninja-build nasm libgif-dev
           for step in profile final; do
+          export CC="gcc" CXX="g++" CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto -fprofile-update=atomic -fprofile-dir=$(pwd)/pgo"
           if [ $step = profile ]; then
-            export CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto -fprofile-generate"
+            export CFLAGS="$CFLAGS -fprofile-generate"
           elif [ $step = final ]; then
-            export CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto -fprofile-use=$(pwd)/pgo-0.profdata"
+            export CFLAGS="$CFLAGS -fprofile-use"
           fi
           export CXXFLAGS="$CFLAGS"
           # ========== ect
           cd ect
           rm -rf build
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
-          ect_targets=""
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DECT_MULTITHREADING=OFF \
+            -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS"
+          ect_targets="" # ect use it's custom zlib, so link to system zlib is impossible
           ect_targets="$ect_targets $(ninja_targets CXX_EXECUTABLE_LINKER__ect_Release)"
           ninja -C build $ect_targets
           cp -r libpng/* build/optipng/libpng # prepare for below other programs
@@ -197,7 +202,8 @@ jobs:
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
             -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
-            -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF
+            -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF \
+            -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS"
           webp_targets=""
           webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__webpinfo_Release)"
           webp_targets="$webp_targets $(ninja_targets C_EXECUTABLE_LINKER__cwebp_Release)"
@@ -215,7 +221,7 @@ jobs:
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
             -DJPEG_LIBRARY=$(realpath ../ect/build/mozjpeg/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath ../ect/build/mozjpeg) \
             -DBUILD_TESTING=OFF -DJPEGXL_STATIC=ON -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_AVX512=OFF \
-            -DCMAKE_CXX_FLAGS="$CXXFLAGS"' -DHWY_DISABLED_TARGETS="(HWY_SSE2|HWY_SSSE3|HWY_SSE4|HWY_AVX3|HWY_AVX3_SPR|HWY_AVX3_ZEN4)" -DHWY_BASELINE_TARGETS=HWY_AVX2 -DHWY_COMPILE_ONLY_STATIC=ON'
+            -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS"' -DHWY_DISABLED_TARGETS="(HWY_SSE2|HWY_SSSE3|HWY_SSE4|HWY_AVX3|HWY_AVX3_SPR|HWY_AVX3_ZEN4)" -DHWY_BASELINE_TARGETS=HWY_AVX2 -DHWY_COMPILE_ONLY_STATIC=ON'
           jpegxl_targets=""
           jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__jxlinfo_Release)"
           jpegxl_targets="$jpegxl_targets $(ninja_targets CXX_EXECUTABLE_LINKER__cjxl_Release)"
@@ -226,21 +232,20 @@ jobs:
           ninja -C build $jpegxl_targets
           cd ..
           # ========== multi call
-          clang++ $CXXFLAGS multicall.cc \
+          g++ $CXXFLAGS multicall.cc \
             $(cd ect/build ; realpath $ect_targets) \
             $(cd webp/build ; realpath $webp_targets) \
             $(cd jpegxl/build ; realpath $jpegxl_targets) \
             -o zcodecs
           # ========== [profiling]
+          break
           if [ $step = final ]; then
             break # is final step, skip pgo profiling
           fi
-          run_profiling
+          run_profiling gcc
           done # ^ "for step in profile final"
           strip zcodecs
           zip -9 linux-x64.zip zcodecs
-      - name: Verify
-        run: |
           uname -a
           ldd --version
           ldd zcodecs || true
@@ -249,7 +254,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_8.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_9.0.0_' }}${{ github.run_id }}"
           files: linux-x64.zip
   mac-arm64:
     needs: prepare
@@ -259,7 +264,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_8.0.0"
+          key: "asset_zcodecs_9.0.0"
       - name: Build
         run: |
           tar -xf zcodecs.tar --strip-components 1
@@ -331,12 +336,10 @@ jobs:
           if [ $step = final ]; then
             break # is final step, skip pgo profiling
           fi
-          run_profiling
+          run_profiling llvm
           done # ^ "for step in profile final"
           strip zcodecs
           zip -9 mac-arm64.zip zcodecs
-      - name: Verify
-        run: |
           uname -a
           otool -L zcodecs || true
           ./zcodecs
@@ -344,7 +347,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_8.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_9.0.0_' }}${{ github.run_id }}"
           files: mac-arm64.zip
   win-x64:
     needs: prepare
@@ -354,7 +357,7 @@ jobs:
         with:
           enableCrossOsArchive: true
           path: zcodecs.tar
-          key: "asset_zcodecs_8.0.0"
+          key: "asset_zcodecs_9.0.0"
       - name: Build
         shell: C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start -e {0}
         run: |
@@ -426,13 +429,10 @@ jobs:
           if [ $step = final ]; then
             break # is final step, skip pgo profiling
           fi
-          run_profiling
+          run_profiling llvm
           done # ^ "for step in profile final"
           strip zcodecs.exe
           zip -9 win-x64.zip zcodecs.exe
-      - name: Verify
-        shell: C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start -e {0}
-        run: |
           uname -a
           ldd zcodecs.exe || true
           ./zcodecs.exe
@@ -440,7 +440,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_zcodecs_8.0.0_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_zcodecs_9.0.0_' }}${{ github.run_id }}"
           files: win-x64.zip
 # description: combine many modern codecs, into a single multi-call binary
 # version number: major version plus one on every modify
@@ -459,20 +459,8 @@ jobs:
 # no_flags="-mno-aes -mno-avx -mno-avx2 -mno-f16c -mno-fma4 -mno-mmx -mno-popcnt -mno-rdrnd -mno-ssse3"
 # no_flags="-mno-avx -mno-f16c -mno-fma4 -mno-mmx -mno-popcnt -mno-rdrnd -mno-ssse3“
 
-awk "BEGIN {printf 1 + 2}"
+# awk "BEGIN {printf 1 + 2}"
 
-docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind ubuntu:24.04 /bin/bash
-sed -i 's@//.*archive.ubuntu.com@//mirrors.ustc.edu.cn@g' /etc/apt/sources.list.d/ubuntu.sources
-sed -i 's/security.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/ubuntu.sources
-apt update
-apt install -y zip zstd curl g++-14 cmake ninja-build nasm libgif-dev
-mkdir old_deps # link to old libgcc, libstdc++ and glibc
-cd old_deps
-curl \
-  -o d1.deb -L http://archive.ubuntu.com/ubuntu/pool/main/g/gcc-12/libgcc-12-dev_12.3.0-1ubuntu1~22.04_amd64.deb \
-  -o d2.deb -L http://archive.ubuntu.com/ubuntu/pool/main/g/gcc-12/libgcc-s1_12.3.0-1ubuntu1~22.04_amd64.deb \
-  -o d3.deb -L http://archive.ubuntu.com/ubuntu/pool/main/g/gcc-12/libstdc++-12-dev_12.2.0-17ubuntu1_amd64.deb \
-  -o d4.deb -L http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6-dev_2.35-0ubuntu3.8_amd64.deb \
-  --parallel
-for deb in *.deb; do ar -p $deb data.tar.zst | tar -x --zstd; done
-cd ..
+# docker run -it --rm --net host --mount type=bind,source=$(pwd)/bind,target=/bind ubuntu:24.04 /bin/bash
+# sed -i 's@//.*archive.ubuntu.com@//mirrors.ustc.edu.cn@g' /etc/apt/sources.list.d/ubuntu.sources
+# sed -i 's/security.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/ubuntu.sources
