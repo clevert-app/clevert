@@ -456,7 +456,10 @@ const StreamZip = (() => {
     async close() {
       const zip = await this[propZip];
       return new Promise((resolve, reject) => {
-        zip.close((err) => { if (err) reject(err); else /** @type {any} */ (resolve)(); });
+        zip.close((err) => {
+          if (err) reject(err);
+          else /** @type {any} */ (resolve)();
+        });
       });
     }
   };
@@ -693,14 +696,7 @@ const StreamZip = (() => {
   }
   const parseZipTime = function (timebytes, datebytes) {
     const timebits = toBits(timebytes, 16), datebits = toBits(datebytes, 16);
-    const mt = {
-      h: parseInt(timebits.slice(0, 5).join(""), 2),
-      m: parseInt(timebits.slice(5, 11).join(""), 2),
-      s: parseInt(timebits.slice(11, 16).join(""), 2) * 2,
-      Y: parseInt(datebits.slice(0, 7).join(""), 2) + 1980,
-      M: parseInt(datebits.slice(7, 11).join(""), 2),
-      D: parseInt(datebits.slice(11, 16).join(""), 2),
-    };
+    const mt = { h: parseInt(timebits.slice(0, 5).join(""), 2), m: parseInt(timebits.slice(5, 11).join(""), 2), s: parseInt(timebits.slice(11, 16).join(""), 2) * 2, Y: parseInt(datebits.slice(0, 7).join(""), 2) + 1980, M: parseInt(datebits.slice(7, 11).join(""), 2), D: parseInt(datebits.slice(11, 16).join(""), 2) };
     const dt_str = [mt.Y, mt.M, mt.D].join("-") + " " + [mt.h, mt.m, mt.s].join(":") + " GMT+0";
     return new Date(dt_str).getTime();
   };
@@ -1084,36 +1080,25 @@ const pageMain = async () => {
         $task.appendChild(document.createElement("h6"));
         $task.appendChild(document.createElement("span"));
         $task.appendChild(document.createElement("div"));
-        $task.appendChild(document.createElement("progress"));
       }
-      // todo : 预计完成时间计算
-      const [$title, $tips, $ops, $bar] = $task.children;
+      const [$title, $tips, $operations] = $task.children;
       if (e.kind === "run-action-progress") {
         $title.textContent = e.title;
+        $tips.textContent =
+          `${e.timing.expectedEnd - Math.trunc(Date.now() / 1000)}s - ` +
+          `${e.progress.finished}/${e.progress.amount}`;
+        $operations.textContent = ""; // TODO
       } else if (e.kind === "run-action-success") {
-        $task.textContent = JSON.stringify({ id: e.id, success: true });
+        $tips.textContent = e.kind; // TODO
       } else if (e.kind === "run-action-error") {
-        $task.textContent = JSON.stringify({ id: e.id, error: e.error });
+        $tips.textContent = e.kind; // TODO
       }
     } else if (
       e.kind === "install-extension-progress" ||
       e.kind === "install-extension-success" ||
       e.kind === "install-extension-error"
     ) {
-      // /** @type {HTMLLIElement | null} */
-      // let el = $tasks.querySelector(`li[data-${D_TASK_ID}=${e.id}]`);
-      // if (!el) {
-      //   el = document.createElement("li");
-      //   $tasks.appendChild(el);
-      //   el.dataset[D_TASK_ID] = e.id;
-      // }
-      // if (e.kind === "install-extension-progress") {
-      //   el.textContent = JSON.stringify({ id: e.id, progress: e.progress });
-      // } else if (e.kind === "install-extension-success") {
-      //   el.textContent = JSON.stringify({ id: e.id, success: true });
-      // } else if (e.kind === "install-extension-error") {
-      //   el.textContent = JSON.stringify({ id: e.id, error: e.error });
-      // }
+      // TODO
     }
   };
 
@@ -1122,41 +1107,100 @@ const pageMain = async () => {
   document.body.appendChild($profiles);
   $profiles.id = "profiles";
   $profiles.classList.add("off");
-  // TODO: add filter to filter the profiles
+  /** @type {ListExtensionsResponse} */
+  let extensionsList = [];
+  // $query
+  const $query = document.createElement("div");
+  $profiles.appendChild($query);
+  $query.classList.add("query");
+  const $queryInput = document.createElement("input");
+  $query.appendChild($queryInput);
+  const $queryReset = document.createElement("button");
+  $query.appendChild($queryReset);
+  const $queryBar = document.createElement("div");
+  $query.appendChild($queryBar);
+  // $queryConditionExtensions
+  const $queryConditionExtensions = document.createElement("button");
+  $queryBar.appendChild($queryConditionExtensions);
+  $queryConditionExtensions.onclick = () => {
+    if (!$queryConditionExtensions.classList.contains("checked")) {
+      // because this condition is exclusive
+      for (const el of $queryBar.children) {
+        el.classList.remove("checked");
+      }
+    }
+    $queryConditionExtensions.classList.toggle("checked");
+    r$choices();
+  };
+  // $choices
   const $choices = document.createElement("ul");
   $profiles.appendChild($choices);
-  /** @type {ListExtensionsResponse[0]["profiles"]} */
-  const profiles = [];
-  /** @param {{ (profile: typeof profiles[0]): boolean }} filter */
-  const r$choices = async (filter) => {
+  const r$choices = () => {
     $choices.replaceChildren();
-    for (const profile of profiles) {
-      if (!filter(profile)) {
-        continue;
+    if ($queryConditionExtensions.classList.contains("checked")) {
+      for (const extension of extensionsList) {
+        const $choice = document.createElement("figure");
+        $choices.appendChild($choice);
+        const $name = document.createElement("b");
+        $choice.appendChild($name);
+        $name.textContent = extension.name;
+        $name.title = extension.id;
+        const $version = document.createElement("sub");
+        $choice.appendChild($version);
+        $version.textContent = extension.version;
+        const $description = document.createElement("span");
+        $choice.appendChild($description);
+        $description.textContent = extension.description;
+        const $remove = document.createElement("button");
+        $choice.appendChild($remove);
+        $remove.textContent = "×";
+        $remove.title = "Remove";
+        $remove.onclick = async () => {
+          /** @type {RemoveExtensionRequest} */
+          const request = {
+            id: extension.id,
+            version: extension.version,
+          };
+          await fetch("/remove-extension", {
+            method: "POST",
+            body: JSON.stringify(request),
+          });
+          // TODO: refresh choices
+        };
       }
-      const $profile = document.createElement("li");
-      $choices.appendChild($profile);
-      $profile.textContent = profile.name;
-      $profile.onclick = async () => {
-        r$action(profile.extensionId, profile.extensionVersion, profile.id);
-        $profiles.classList.add("off");
-        $action.classList.remove("off");
-      };
+    } else {
+      for (const extension of extensionsList) {
+        for (const profile of extension.profiles) {
+          const $choice = document.createElement("figure");
+          $choices.appendChild($choice);
+          const $name = document.createElement("b");
+          $choice.appendChild($name);
+          $name.textContent = profile.name;
+          $name.title = profile.id;
+          const $version = document.createElement("sub");
+          $choice.appendChild($version);
+          const $description = document.createElement("span");
+          $choice.appendChild($description);
+          $description.textContent = profile.description;
+          const $remove = document.createElement("button");
+          $choice.appendChild($remove);
+          $remove.textContent = "×";
+          $remove.title = "Remove";
+          $choice.onclick = async () => {
+            r$action(profile.extensionId, profile.extensionVersion, profile.id);
+            $profiles.classList.add("off");
+            $action.classList.remove("off");
+          };
+        }
+      }
     }
   };
   const r$profiles = async () => {
     const response = await fetch("/list-extensions")
       .then((r) => r.json())
       .then((a) => /** @type {ListExtensionsResponse} */ (a));
-    profiles.length = 0; // empty the array
-    // TODO: add user defined profiles
-    // extension built-in profiles
-    for (const extension of response) {
-      for (const profile of extension.profiles) {
-        profiles.push(profile);
-      }
-    }
-    r$choices(() => true);
+    extensionsList = response;
+    r$choices();
   };
   r$profiles(); // 每次安装 extension 结束后调用一次这个
 
@@ -1887,25 +1931,7 @@ const orders = dirProvider({
   }),
 });
 
-*/
-
-// ./.vscode/extensions.json
-// {
-//   "recommendations": ["esbenp.prettier-vscode", "runem.lit-plugin"]
-//   // es6-string-html
-// }
-
-// ./.vscode/settings.json
-// {
-//   "editor.tokenColorCustomizations": {
-//     "textMateRules": [
-//       {
-//         "scope": "invalid",
-//         "settings": { "foreground": "#56ddc2" }
-//       }
-//     ]
-//   }
-// }
+*
 
 /*
 //> a.mjs
@@ -1947,24 +1973,18 @@ console.log(import.meta.url);
 */
 
 // type Boxify<T> = { [K in keyof T]: Box<T> };
-// http://127.0.0.1:8080/extensions/jpegxl/index.js
 // let c = {};
 
 // https://www.typescriptlang.org/docs/handbook/jsdoc-supported-types.html
 // https://apple.stackexchange.com/q/420494/ # macos arm64 vm
 // https://github.com/orgs/community/discussions/69211#discussioncomment-7941899 # macos arm64 ci free
-// https://registry.npmmirror.com/binary.html?path=electron/v30.0.1/
+// https://registry.npmmirror.com/binary.html?path=electron/
 // https://registry.npmmirror.com/-/binary/electron/v30.0.1/electron-v30.0.1-linux-x64.zip
 // /home/kkocdko/misc/res/electron-v30.0.1-linux-x64/electron
 
 // core -> extension -> action -> profile
-// (以后做)  profile = extension + action + profile
 
 // mkdir -p node_modules/electron ; dl_prefix="https://registry.npmmirror.com/electron/30.0.2/files" ; curl -o node_modules/electron/electron.d.ts -L $dl_prefix/electron.d.ts -o node_modules/electron/package.json -L $dl_prefix/package.json
-// http://127.0.0.1:8080/extensions/jpegxl/index.js
-
-// optimized, download from mirrors, keep-alive
-
-// 在应用打开的时候就做一次 mirror 查找？
+// http://127.0.0.1:9439/extensions/zcodecs/index.js
 
 // 暂时先用内置 mirror 列表，以后可以考虑国内放一个或多个固定地址来存 mirror 的列表

@@ -5,7 +5,7 @@ import path from "node:path";
 // excluded: import util from "node:util"; // 可以这种形式为前端禁用 // 这些砍 import 的魔法，在加载扩展的时候做
 
 const C = globalThis.process && {
-  exe: path.join(import.meta.dirname, "jpegxl"), // 这个不太好用依赖注入搞?因为 import.meta.url 只在当前文件中才能拿到正确的
+  exe: path.join(import.meta.dirname, "zcodecs"), // 这个不太好用依赖注入搞?因为 import.meta.url 只在当前文件中才能拿到正确的
 };
 
 // 暂时还没有需要 hook 或者依赖注入的地方
@@ -16,10 +16,10 @@ const C = globalThis.process && {
 
 // 设计成导出一整个的形式，单个单个导出没法做 type check
 export default /** @type {Extension} */ ({
-  id: "jpegxl", // 保证唯一，让商店去保证
+  id: "zcodecs", // 保证唯一，让商店去保证
   version: "0.1.0", // 必须遵循 https://semver.org
-  name: "jpegxl name", // 以后可以做 i18n
-  description: "jpegxl description",
+  name: "zcodecs name", // 以后可以做 i18n
+  description: "zcodecs description",
   dependencies: [], // 可以填写其他的 extension 的 id (这个功能需要扩展商店)（注意考虑 semver？）
   assets: [
     {
@@ -28,7 +28,7 @@ export default /** @type {Extension} */ ({
       kind: "zip", // 比如可以做 tar --strip-components 这样的
       path: "./", // 从扩展文件夹路径开始算
       // url 就直接填 github，然后让核心去做镜像加速
-      url: "https://github.com/clevert-app/clevert/releases/download/asset_jpegxl_98299fe_9630498903/linux-x64.zip",
+      url: "https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip",
     },
   ],
   // action 和 profile 某种程度上是有重合的，比如可以造一个全能action，然后根据profile做不同动作。但是这是不好的实践。
@@ -155,7 +155,7 @@ export default /** @type {Extension} */ ({
       description: "cjpegli default profile description",
       id: "cjpegli",
       actionId: "cjpegli",
-      extensionId: "jpegxl",
+      extensionId: "zcodecs",
       extensionVersion: "0.1.0",
       quality: 75,
       // 用户：我上次output dir 到这，这次还想要到这，存profile 里，所以 entries 选项放在profile 里而不是固定在 action里
