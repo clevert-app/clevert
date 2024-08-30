@@ -829,6 +829,33 @@ const solvePath = (...parts) => {
   return path.join(...parts); // path.join will convert '\\' to '/' also, like path.resolve
 };
 
+/**
+ * Writing to stream, returns promise, auto care about the backpressure. Use [this](https://nodejs.org/api/stream.html#streamreadabletowebstreamreadable-options) when stable.
+ *
+ * @param {stream.Writable} stream
+ * @param {any} chunk
+ * @returns {Promise<void>}
+ */
+const streamWrite = (stream, chunk) => {
+  return new Promise((resolve, reject) => {
+    let resolveCount = 0;
+    const resolveOnce = () => {
+      resolveCount++;
+      if (resolveCount === 2) {
+        resolve();
+      }
+    };
+    const lowPressure = stream.write(chunk, (error) =>
+      error ? reject(error) : resolveOnce()
+    );
+    if (lowPressure) {
+      resolveOnce();
+    } else {
+      stream.once("drain", resolveOnce);
+    }
+  });
+};
+
 // /** @type {1} */ (process.exit());
 
 // TODO: 逗号换成分号
@@ -1065,7 +1092,7 @@ const pageMain = async () => {
   $tasks.classList.add("off");
   new EventSource("/get-status").onmessage = async (message) => {
     const e = /** @type {GetStatusResponseEvent} */ (JSON.parse(message.data));
-    console.log(e)
+    console.log(e);
     if (
       e.kind === "run-action-progress" ||
       e.kind === "run-action-success" ||
@@ -1100,6 +1127,7 @@ const pageMain = async () => {
       e.kind === "install-extension-error"
     ) {
       // TODO
+      // r$profiles()
     }
   };
 
@@ -1180,7 +1208,7 @@ const pageMain = async () => {
             method: "POST",
             body: JSON.stringify(request),
           });
-          r$choices();
+          r$profiles();
         };
       }
     } else {
@@ -1550,7 +1578,7 @@ const serverMain = async () => {
         const indexJsTempStream = fs.createWriteStream(indexJsTempPath);
         for await (const chunk of indexJsResponse.body) {
           finished += chunk.length;
-          indexJsTempStream.write(chunk); // TODO: see docs about backpressure
+          await streamWrite(indexJsTempStream, chunk);
         }
         await new Promise((resolve) => indexJsTempStream.end(resolve)); // use .end() instead of .close() https://github.com/nodejs/node/issues/2006
         const extension = /** @type {Extension} */ (
@@ -1591,7 +1619,7 @@ const serverMain = async () => {
           );
           for await (const chunk of assetResponse.body) {
             finished += chunk.length;
-            tempStream.write(chunk);
+            await streamWrite(tempStream, chunk);
           }
           await new Promise((resolve) => tempStream.end(resolve));
           if (asset.kind === "zip") {
@@ -1801,8 +1829,7 @@ const serverMain = async () => {
           });
           if (!waitingIds.has(id)) {
             waitingIds.add(id);
-            // if not in `waitingIds`, create a new promise to `wait` this `controller`
-            let wait = controller.wait;
+            let wait = controller.wait; // if not in `waitingIds`, create new promises to `wait` this `controller`
             wait = wait.then(() => {
               send({ kind: "run-action-success", id });
             });
