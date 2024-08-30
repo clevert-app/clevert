@@ -196,8 +196,6 @@ jobs:
           # ========== webp
           cd webp
           rm -rf build
-          # webp with "-march=x86-64-v3" cause performance regression, disable it temporarily
-          CFLAGS=$(echo $CFLAGS | sed -e 's| -march=x86-64-v3 | |') CXXFLAGS=$CFLAGS \
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
@@ -385,8 +383,6 @@ jobs:
           # ========== webp
           cd webp
           rm -rf build
-          # webp with "-march=x86-64-v3" cause performance regression, disable it temporarily
-          CFLAGS=$(echo $CFLAGS | sed -e 's| -march=x86-64-v3 | |') CXXFLAGS=$CFLAGS \
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
             -DZLIB_LIBRARY=$(realpath ../ect/build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath ../ect/zlib) \
             -DPNG_LIBRARY=$(realpath ../ect/build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath ../ect/build/optipng/libpng) \
