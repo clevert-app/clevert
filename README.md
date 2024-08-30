@@ -107,6 +107,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - https://github.com/agourlay/zip-password-finder
 - https://github.com/myfreeer/chrome-pak-customizer
 - https://github.com/tjko/jpegoptim
+- https://github.com/T8RIN/ImageToolbox
 
 ## 仓库结构
 
