@@ -87,6 +87,38 @@ const Zip = (() => {
 })();
 
 /**
+ * From [node-machine-id](https://github.com/automation-stack/node-machine-id/tree/f580f9f20668582e9087d92cea2511c972f2e6aa). MIT License.
+ *
+ * We plan to add vip/subscription verification in the future while keeping this project open source. So the verification is just a "gentleman’s agreement" for normal users. Developers can still skip it, like the `shapez.io` game.
+ */
+// prettier-ignore
+const machineId = () => {
+  function isWindowsProcessMixedOrNativeArchitecture() {
+    // detect if the node binary is the same arch as the Windows OS. // or if this is 32 bit node on 64 bit windows.
+    if (process.platform !== "win32") return "";
+    if (process.arch === "ia32" && process.env.hasOwnProperty("PROCESSOR_ARCHITEW6432")) return "mixed";
+    return "native";
+  }
+  function expose(result) {
+    switch (process.platform) {
+      case "darwin":  return result.split("IOPlatformUUID")[1].split("\n")[0].replace(/\=|\s+|\"/gi, "").toLowerCase();
+      case "win32":   return result.toString().split("REG_SZ")[1].replace(/\r+|\n+|\s+/gi, "").toLowerCase();
+      case "linux":   return result.toString().replace(/\r+|\n+|\s+/gi, "").toLowerCase();
+      default: throw new Error(`Unsupported platform: ${process.platform}`);
+    }
+  }
+  let win32RegBinPath = { native: "%windir%\\System32", mixed: "%windir%\\sysnative\\cmd.exe /c %windir%\\System32" };
+  let guid = {
+    darwin: "ioreg -rd1 -c IOPlatformExpertDevice",
+    win32: `${ win32RegBinPath[isWindowsProcessMixedOrNativeArchitecture()] }\\REG.exe ` + "QUERY HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography " + "/v MachineGuid",
+    linux: "( cat /var/lib/dbus/machine-id /etc/machine-id 2> /dev/null || hostname ) | head -n 1 || :",
+  };
+  return /** @type {Promise<string>} */(new Promise((resolve,reject)=>import("child_process").then(m=>
+    m.exec(guid[process.platform], {}, (err,stdout, stderr) => err ? reject(err) : resolve(expose(stdout.toString()))))
+  ));
+};
+
+/**
  * Assert the value is true, or throw an error. Like "node:assert", but cross platform.
  * @param {any} value
  * @param {any} [info]
