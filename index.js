@@ -10,115 +10,6 @@ import stream from "node:stream";
 // import module from "node:module";
 
 /**
- * From [node-stream-zip](https://github.com/antelle/node-stream-zip/tree/7c5d50393418b261668b0dd4c8d9ccaa9ac913ce). MIT License. Gen this embed script by commands: `cat a.js | sed -E 's|.+?require\(.+?\);||g' | esbuild --minify-whitespace --line-limit=320 --legal-comments=eof` .
- *
- * Because of [this](https://github.com/microsoft/TypeScript/issues/19573) , we need some `/ * @ type {any} * /`.
- **/
-// prettier-ignore
-const Zip = (() => {
-  if(!globalThis.process)return null;
-  const consts={LOCHDR:30,LOCSIG:67324752,LOCVER:4,LOCFLG:6,LOCHOW:8,LOCTIM:10,LOCCRC:14,LOCSIZ:18,LOCLEN:22,LOCNAM:26,LOCEXT:28,EXTSIG:134695760,EXTHDR:16,EXTCRC:4,EXTSIZ:8,EXTLEN:12,CENHDR:46,CENSIG:33639248,CENVEM:4,CENVER:6,CENFLG:8,CENHOW:10,CENTIM:12,CENCRC:16,CENSIZ:20,CENLEN:24,CENNAM:28,CENEXT:30,CENCOM:32,CENDSK:34,
-  CENATT:36,CENATX:38,CENOFF:42,ENDHDR:22,ENDSIG:101010256,ENDSIGFIRST:80,ENDSUB:8,ENDTOT:10,ENDSIZ:12,ENDOFF:16,ENDCOM:20,MAXFILECOMMENT:65535,ENDL64HDR:20,ENDL64SIG:117853008,ENDL64SIGFIRST:80,ENDL64OFS:8,END64HDR:56,END64SIG:101075792,END64SIGFIRST:80,END64SUB:24,END64TOT:32,END64SIZ:40,END64OFF:48,STORED:0,SHRUNK:1,REDUCED1:2,
-  REDUCED2:3,REDUCED3:4,REDUCED4:5,IMPLODED:6,DEFLATED:8,ENHANCED_DEFLATED:9,PKWARE:10,BZIP2:12,LZMA:14,IBM_TERSE:18,IBM_LZ77:19,FLG_ENC:0,FLG_COMP1:1,FLG_COMP2:2,FLG_DESC:4,FLG_ENH:8,FLG_STR:16,FLG_LNG:1024,FLG_MSK:4096,FLG_ENTRY_ENC:1,EF_ID:0,EF_SIZE:2,ID_ZIP64:1,ID_AVINFO:7,ID_PFS:8,ID_OS2:9,ID_NTFS:10,ID_OPENVMS:12,ID_UNIX:13,
-  ID_FORK:14,ID_PATCH:15,ID_X509_PKCS7:20,ID_X509_CERTID_F:21,ID_X509_CERTID_C:22,ID_STRONGENC:23,ID_RECORD_MGT:24,ID_X509_PKCS7_RL:25,ID_IBM1:101,ID_IBM2:102,ID_POSZIP:18064,EF_ZIP64_OR_32:4294967295,EF_ZIP64_OR_16:65535};const/** @type {any} */StreamZip=function(config){let fd,fileSize,chunkSize,op,/** @type {any} */centralDirectory,closed;const ready=false,/** @type {any} */
-  that=this,/** @type {any} */entries=config.storeEntries!==false?{}:null,fileName=config.file,textDecoder=config.nameEncoding?new TextDecoder(config.nameEncoding):null;open();function open(){if(config.fd){fd=config.fd;readFile()}else{fs.open(fileName,"r",(err,f)=>{if(err)return that.emit("error",err);fd=f;readFile()})}}function readFile(){
-  fs.fstat(fd,(err,stat)=>{if(err)return that.emit("error",err);fileSize=stat.size;chunkSize=config.chunkSize||Math.round(fileSize/1e3);chunkSize=Math.max(Math.min(chunkSize,Math.min(128*1024,fileSize)),Math.min(1024,fileSize));readCentralDirectory()})}function readUntilFoundCallback(err,bytesRead){if(err||!bytesRead)return that.
-  emit("error",err||new Error("Archive read error"));let pos=op.lastPos,bufferPosition=pos-op.win.position;const buffer=op.win.buffer,minPos=op.minPos;while(--pos>=minPos&&--bufferPosition>=0){if(buffer.length-bufferPosition>=4&&buffer[bufferPosition]===op.firstByte){if(buffer.readUInt32LE(bufferPosition)===op.sig){op.lastBufferPosition=
-  bufferPosition;op.lastBytesRead=bytesRead;op.complete();return}}}if(pos===minPos)return that.emit("error",new Error("Bad archive"));op.lastPos=pos+1;op.chunkSize*=2;if(pos<=minPos)return that.emit("error",new Error("Bad archive"));const expandLength=Math.min(op.chunkSize,pos-minPos);op.win.expandLeft(expandLength,readUntilFoundCallback)}
-  function readCentralDirectory(){const totalReadLength=Math.min(consts.ENDHDR+consts.MAXFILECOMMENT,fileSize);op={win:new FileWindowBuffer(fd),totalReadLength,minPos:fileSize-totalReadLength,lastPos:fileSize,chunkSize:Math.min(1024,chunkSize),firstByte:consts.ENDSIGFIRST,sig:consts.ENDSIG,complete:readCentralDirectoryComplete};
-  op.win.read(fileSize-op.chunkSize,op.chunkSize,readUntilFoundCallback)}function readCentralDirectoryComplete(){const buffer=op.win.buffer,pos=op.lastBufferPosition;try{centralDirectory=new CentralDirectoryHeader;centralDirectory.read(buffer.slice(pos,pos+consts.ENDHDR));centralDirectory.headerOffset=op.win.position+pos;
-  if(centralDirectory.commentLength){that.comment=buffer.slice(pos+consts.ENDHDR,pos+consts.ENDHDR+centralDirectory.commentLength).toString()}else{that.comment=null}that.entriesCount=centralDirectory.volumeEntries;that.centralDirectory=centralDirectory;if(centralDirectory.volumeEntries===consts.EF_ZIP64_OR_16&&centralDirectory.
-  totalEntries===consts.EF_ZIP64_OR_16||centralDirectory.size===consts.EF_ZIP64_OR_32||centralDirectory.offset===consts.EF_ZIP64_OR_32){readZip64CentralDirectoryLocator()}else{op={};readEntries()}}catch(err){that.emit("error",err)}}function readZip64CentralDirectoryLocator(){const length=consts.ENDL64HDR;if(op.lastBufferPosition>
-  length){op.lastBufferPosition-=length;readZip64CentralDirectoryLocatorComplete()}else{op={win:op.win,totalReadLength:length,minPos:op.win.position-length,lastPos:op.win.position,chunkSize:op.chunkSize,firstByte:consts.ENDL64SIGFIRST,sig:consts.ENDL64SIG,complete:readZip64CentralDirectoryLocatorComplete};op.win.read(op.
-  lastPos-op.chunkSize,op.chunkSize,readUntilFoundCallback)}}function readZip64CentralDirectoryLocatorComplete(){const buffer=op.win.buffer,locHeader=new CentralDirectoryLoc64Header;locHeader.read(buffer.slice(op.lastBufferPosition,op.lastBufferPosition+consts.ENDL64HDR));const readLength=fileSize-locHeader.headerOffset;
-  op={win:op.win,totalReadLength:readLength,minPos:locHeader.headerOffset,lastPos:op.lastPos,chunkSize:op.chunkSize,firstByte:consts.END64SIGFIRST,sig:consts.END64SIG,complete:readZip64CentralDirectoryComplete};op.win.read(fileSize-op.chunkSize,op.chunkSize,readUntilFoundCallback)}function readZip64CentralDirectoryComplete(){
-  const buffer=op.win.buffer;const zip64cd=new CentralDirectoryZip64Header;zip64cd.read(buffer.slice(op.lastBufferPosition,op.lastBufferPosition+consts.END64HDR));that.centralDirectory.volumeEntries=zip64cd.volumeEntries;that.centralDirectory.totalEntries=zip64cd.totalEntries;that.centralDirectory.size=zip64cd.size;that.
-  centralDirectory.offset=zip64cd.offset;that.entriesCount=zip64cd.volumeEntries;op={};readEntries()}function readEntries(){op={win:new FileWindowBuffer(fd),pos:centralDirectory.offset,chunkSize,entriesLeft:centralDirectory.volumeEntries};op.win.read(op.pos,Math.min(chunkSize,fileSize-op.pos),readEntriesCallback)}function readEntriesCallback(err,bytesRead){
-  if(err||!bytesRead)return that.emit("error",err||new Error("Entrie    s read error"));let bufferPos=op.pos-op.win.position;let entry=op.entry;const buffer=op.win.buffer;const bufferLength=buffer.length;try{while(op.entriesLeft>0){if(!entry){entry=new ZipEntry;entry.readHeader(buffer,bufferPos);entry.headerOffset=op.win.
-  position+bufferPos;op.entry=entry;op.pos+=consts.CENHDR;bufferPos+=consts.CENHDR}const entryHeaderSize=entry.fnameLen+entry.extraLen+entry.comLen;const advanceBytes=entryHeaderSize+(op.entriesLeft>1?consts.CENHDR:0);if(bufferLength-bufferPos<advanceBytes){op.win.moveRight(chunkSize,readEntriesCallback,bufferPos);op.move=
-  true;return}entry.read(buffer,bufferPos,textDecoder);if(!config.skipEntryNameValidation)entry.validateName();if(entries)entries[entry.name]=entry;that.emit("ent    ry",entry);op.entry=entry=null;op.entriesLeft--;op.pos+=entryHeaderSize;bufferPos+=entryHeaderSize}that.emit("ready")}catch(err2){that.emit("error",err2)}}function checkEntriesExist(){
-  if(!entries)throw new Error("storeEntries disabled")}Object.defineProperty(this,"ready",{get(){return ready}});this.entry=function(name){checkEntriesExist();return entries[name]};this.entries=function(){checkEntriesExist();return entries};this.stream=function(entry,callback){return this.openEntry(entry,(err,entry2)=>{if(err)
-  return callback(err);const offset=dataOffset(entry2);let/** @type {any} */entryStream=new EntryDataReaderStream(fd,offset,entry2.compressedSize);if(entry2.method===consts.STORED){}else if(entry2.method===consts.DEFLATED){entryStream=entryStream.pipe(zlib.createInflateRaw())}else{return callback(new Error("Unknown compression method: "+
-  entry2.method))}if(canVerifyCrc(entry2))entryStream=entryStream.pipe(new EntryVerifyStream(entryStream,entry2.crc,entry2.size));callback(null,entryStream)},false)};this.entryDataSync=function(entry){let err=null;this.openEntry(entry,(e,en)=>{err=e;entry=en},true);if(err)throw err;let data=Buffer.alloc(entry.compressedSize);
-  new FsRead(fd,data,0,entry.compressedSize,dataOffset(entry),e=>{err=e}).read(true);if(err)throw err;if(entry.method===consts.STORED){}else if(entry.method===consts.DEFLATED||entry.method===consts.ENHANCED_DEFLATED){data=zlib.inflateRawSync(data)}else{throw new Error("Unknown compression method: "+entry.method)}if(data.
-  length!==entry.size)throw new Error("Invalid size");if(canVerifyCrc(entry)){const verify=new CrcVerify(entry.crc,entry.size);verify.data(data)}return data};this.openEntry=function(entry,callback,sync){if(typeof entry==="string"){checkEntriesExist();entry=entries[entry];if(!entry)return callback(new Error("Entry not fou\
-  nd"))}if(!entry.isFile)return callback(new Error("Entry is not file"));if(!fd)return callback(new Error("Archive closed"));const buffer=Buffer.alloc(consts.LOCHDR);new FsRead(fd,buffer,0,buffer.length,entry.offset,err=>{if(err)return callback(err);let readEx;try{entry.readDataHeader(buffer);if(entry.encrypted)readEx=new Error(
-  "Entry encrypted")}catch(ex){readEx=ex}callback(readEx,entry)}).read(sync)};function dataOffset(entry){return entry.offset+consts.LOCHDR+entry.fnameLen+entry.extraLen}function canVerifyCrc(entry){return(entry.flags&8)!==8}function extract(entry,outPath,callback){that.stream(entry,(err,stm)=>{if(err){callback(err)}else{
-  let fsStm,errThrown;stm.on("error",err2=>{errThrown=err2;if(fsStm){stm.unpipe(fsStm);fsStm.close(()=>{callback(err2)})}});fs.open(outPath,"w",(err2,fdFile)=>{if(err2)return callback(err2);if(errThrown){fs.close(fd,()=>{callback(errThrown)});return}fsStm=fs.createWriteStream(outPath,{fd:fdFile});fsStm.on("finish",()=>{that.
-  emit("extract",entry,outPath);if(!errThrown)callback()});stm.pipe(fsStm)})}})}function createDirectories(baseDir,dirs,callback){if(!dirs.length)return callback();let dir=dirs.shift();dir=path.join(baseDir,path.join(...dir));fs.mkdir(dir,{recursive:true},err=>{if(err&&err.code!=="EEXIST")return callback(err);createDirectories(
-  baseDir,dirs,callback)})}function extractFiles(baseDir,baseRelPath,files,callback,extractedCount){if(!files.length)return callback(null,extractedCount);const file=files.shift();const targetPath=path.join(baseDir,file.name.replace(baseRelPath,""));extract(file,targetPath,err=>{if(err)return callback(err,extractedCount);
-  extractFiles(baseDir,baseRelPath,files,callback,extractedCount+1)})}this.extract=function(entry,outPath,callback){let entryName=entry||"";if(typeof entry==="string"){entry=this.entry(entry);if(entry){entryName=entry.name}else{if(entryName.length&&entryName[entryName.length-1]!=="/")entryName+="/"}}if(!entry||entry.isDirectory){
-  const files=[],dirs=[],allDirs={};for(const e in entries){if(Object.prototype.hasOwnProperty.call(entries,e)&&e.lastIndexOf(entryName,0)===0){let relPath=e.replace(entryName,"");const childEntry=entries[e];if(childEntry.isFile){files.push(childEntry);relPath=path.dirname(relPath)}if(relPath&&!allDirs[relPath]&&relPath!==
-  "."){allDirs[relPath]=true;let parts=relPath.split("/").filter(f=>f);if(parts.length)dirs.push(parts);while(parts.length>1){parts=parts.slice(0,parts.length-1);const partsPath=parts.join("/");if(allDirs[partsPath]||partsPath===".")break;allDirs[partsPath]=true;dirs.push(parts)}}}}dirs.sort((x,y)=>x.length-y.length);if(dirs.
-  length){createDirectories(outPath,dirs,err=>{if(err)callback(err);else extractFiles(outPath,entryName,files,callback,0)})}else{extractFiles(outPath,entryName,files,callback,0)}}else{fs.stat(outPath,(err,stat)=>{if(stat&&stat.isDirectory()){extract(entry,path.join(outPath,path.basename(entry.name)),callback)}else{extract(
-  entry,outPath,callback)}})}};this.close=function(callback){if(closed||!fd){closed=true;if(callback)callback()}else{closed=true;fs.close(fd,err=>{fd=null;if(callback)callback(err)})}};const originalEmit=events.EventEmitter.prototype.emit;this.emit=function(...args){if(!closed)return originalEmit.call(this,...args)}};StreamZip.
-  debugLog=(...args)=>{if(StreamZip.debug)console.log(...args)};const inherits=function(ctor,superCtor){ctor.super_=superCtor;ctor.prototype=Object.create(superCtor.prototype,{constructor:{value:ctor,enumerable:false,writable:true,configurable:true}})};inherits(StreamZip,events.EventEmitter);const propZip=Symbol("zip");StreamZip.
-  async=class StreamZipAsync extends events.EventEmitter{constructor(config){super();const zip=new StreamZip(config);zip.on("entry",entry=>this.emit("entry",entry));zip.on("extract",(entry,outPath)=>this.emit("extract",entry,outPath));this[propZip]=new Promise((resolve,reject)=>{zip.on("ready",()=>{zip.removeListener("er\
-  ror",reject);resolve(zip)});zip.on("error",reject)})}get entriesCount(){return this[propZip].then(zip=>zip.entriesCount)}get comment(){return this[propZip].then(zip=>zip.comment)}async entry(name){const zip=await this[propZip];return zip.entry(name)}async entries(){const zip=await this[propZip];return zip.entries()}async stream(entry){
-  const zip=await this[propZip];return new Promise((resolve,reject)=>{zip.stream(entry,(err,stm)=>{if(err)reject(err);else resolve(stm)})})}async entryData(entry){const stm=await this.stream(entry);return new Promise((resolve,reject)=>{const data=[];stm.on("data",chunk=>data.push(chunk));stm.on("end",()=>{resolve(Buffer.
-  concat(data))});stm.on("error",err=>{stm.removeAllListeners("end");reject(err)})})}async extract(entry,outPath){const zip=await this[propZip];return new Promise((resolve,reject)=>{zip.extract(entry,outPath,(err,res)=>{if(err)reject(err);else resolve(res)})})}async close(){const zip=await this[propZip];return new Promise(
-  (resolve,reject)=>{zip.close(err=>{if(err)reject(err);else/** @type {any} */(resolve)()})})}};class CentralDirectoryHeader{read(data){if(data.length!==consts.ENDHDR||data.readUInt32LE(0)!==consts.ENDSIG)throw new Error("Invalid central directory");this.volumeEntries=data.readUInt16LE(consts.ENDSUB);this.totalEntries=data.readUInt16LE(consts.
-  ENDTOT);this.size=data.readUInt32LE(consts.ENDSIZ);this.offset=data.readUInt32LE(consts.ENDOFF);this.commentLength=data.readUInt16LE(consts.ENDCOM)}}class CentralDirectoryLoc64Header{read(data){if(data.length!==consts.ENDL64HDR||data.readUInt32LE(0)!==consts.ENDL64SIG)throw new Error("Invalid zip64 central directory lo\
-  cator");this.headerOffset=readUInt64LE(data,consts.ENDSUB)}}class CentralDirectoryZip64Header{read(data){if(data.length!==consts.END64HDR||data.readUInt32LE(0)!==consts.END64SIG)throw new Error("Invalid central directory");this.volumeEntries=readUInt64LE(data,consts.END64SUB);this.totalEntries=readUInt64LE(data,consts.
-  END64TOT);this.size=readUInt64LE(data,consts.END64SIZ);this.offset=readUInt64LE(data,consts.END64OFF)}}class ZipEntry{readHeader(data,offset){if(data.length<offset+consts.CENHDR||data.readUInt32LE(offset)!==consts.CENSIG)throw new Error("Invalid entry header");this.verMade=data.readUInt16LE(offset+consts.CENVEM);this.version=
-  data.readUInt16LE(offset+consts.CENVER);this.flags=data.readUInt16LE(offset+consts.CENFLG);this.method=data.readUInt16LE(offset+consts.CENHOW);const timebytes=data.readUInt16LE(offset+consts.CENTIM);const datebytes=data.readUInt16LE(offset+consts.CENTIM+2);this.time=parseZipTime(timebytes,datebytes);this.crc=data.readUInt32LE(
-  offset+consts.CENCRC);this.compressedSize=data.readUInt32LE(offset+consts.CENSIZ);this.size=data.readUInt32LE(offset+consts.CENLEN);this.fnameLen=data.readUInt16LE(offset+consts.CENNAM);this.extraLen=data.readUInt16LE(offset+consts.CENEXT);this.comLen=data.readUInt16LE(offset+consts.CENCOM);this.diskStart=data.readUInt16LE(
-  offset+consts.CENDSK);this.inattr=data.readUInt16LE(offset+consts.CENATT);this.attr=data.readUInt32LE(offset+consts.CENATX);this.offset=data.readUInt32LE(offset+consts.CENOFF)}readDataHeader(data){if(data.readUInt32LE(0)!==consts.LOCSIG)throw new Error("Invalid local header");this.version=data.readUInt16LE(consts.LOCVER);
-  this.flags=data.readUInt16LE(consts.LOCFLG);this.method=data.readUInt16LE(consts.LOCHOW);const timebytes=data.readUInt16LE(consts.LOCTIM);const datebytes=data.readUInt16LE(consts.LOCTIM+2);this.time=parseZipTime(timebytes,datebytes);this.crc=data.readUInt32LE(consts.LOCCRC)||this.crc;const compressedSize=data.readUInt32LE(
-  consts.LOCSIZ);if(compressedSize&&compressedSize!==consts.EF_ZIP64_OR_32)this.compressedSize=compressedSize;const size=data.readUInt32LE(consts.LOCLEN);if(size&&size!==consts.EF_ZIP64_OR_32)this.size=size;this.fnameLen=data.readUInt16LE(consts.LOCNAM);this.extraLen=data.readUInt16LE(consts.LOCEXT)}read(data,offset,textDecoder){
-  const nameData=data.slice(offset,offset+=this.fnameLen);this.name=textDecoder?textDecoder.decode(new Uint8Array(nameData)):nameData.toString("utf8");const lastChar=data[offset-1];this.isDirectory=lastChar===47||lastChar===92;if(this.extraLen){this.readExtra(data,offset);offset+=this.extraLen}this.comment=this.comLen?data.
-  slice(offset,offset+this.comLen).toString():null}validateName(){if(/\\|^\w+:|^\/|(^|\/)\.\.(\/|$)/.test(this.name))throw new Error("Malicious entry: "+this.name)}readExtra(data,offset){let signature,size;const maxPos=offset+this.extraLen;while(offset<maxPos){signature=data.readUInt16LE(offset);offset+=2;size=data.readUInt16LE(
-  offset);offset+=2;if(consts.ID_ZIP64===signature)this.parseZip64Extra(data,offset,size);offset+=size}}parseZip64Extra(data,offset,length){if(length>=8&&this.size===consts.EF_ZIP64_OR_32){this.size=readUInt64LE(data,offset);offset+=8;length-=8}if(length>=8&&this.compressedSize===consts.EF_ZIP64_OR_32){this.compressedSize=
-  readUInt64LE(data,offset);offset+=8;length-=8}if(length>=8&&this.offset===consts.EF_ZIP64_OR_32){this.offset=readUInt64LE(data,offset);offset+=8;length-=8}if(length>=4&&this.diskStart===consts.EF_ZIP64_OR_16)this.diskStart=data.readUInt32LE(offset)}get encrypted(){return(this.flags&consts.FLG_ENTRY_ENC)===consts.FLG_ENTRY_ENC}get isFile(){
-  return!this.isDirectory}}class FsRead{constructor(fd,buffer,offset,length,position,callback){this.fd=fd;this.buffer=buffer;this.offset=offset;this.length=length;this.position=position;this.callback=callback;this.bytesRead=0;this.waiting=false}read(sync){StreamZip.debugLog("read",this.position,this.bytesRead,this.length,
-  this.offset);this.waiting=true;let err;if(sync){let bytesRead=0;try{bytesRead=fs.readSync(this.fd,this.buffer,this.offset+this.bytesRead,this.length-this.bytesRead,this.position+this.bytesRead)}catch(e){err=e}this.readCallback(sync,err,err?bytesRead:null)}else{fs.read(this.fd,this.buffer,this.offset+this.bytesRead,this.
-  length-this.bytesRead,this.position+this.bytesRead,this.readCallback.bind(this,sync))}}readCallback(sync,err,bytesRead){if(typeof bytesRead==="number")this.bytesRead+=bytesRead;if(err||!bytesRead||this.bytesRead===this.length){this.waiting=false;return this.callback(err,this.bytesRead)}else{this.read(sync)}}}class FileWindowBuffer{constructor(fd){
-  this.position=0;this.buffer=Buffer.alloc(0);this.fd=fd;this.fsOp=null}checkOp(){if(this.fsOp&&/** @type {any} */(this.fsOp).waiting)throw new Error("Operation in progress")}read(pos,length,callback){this.checkOp();if(this.buffer.length<length)this.buffer=Buffer.alloc(length);this.position=pos;this.fsOp=new FsRead(this.fd,this.buffer,0,length,
-  this.position,callback).read()}expandLeft(length,callback){this.checkOp();this.buffer=Buffer.concat([Buffer.alloc(length),this.buffer]);this.position-=length;if(this.position<0)this.position=0;this.fsOp=new FsRead(this.fd,this.buffer,0,length,this.position,callback).read()}expandRight(length,callback){this.checkOp();const offset=this.
-  buffer.length;this.buffer=Buffer.concat([this.buffer,Buffer.alloc(length)]);this.fsOp=new FsRead(this.fd,this.buffer,offset,length,this.position+offset,callback).read()}moveRight(length,callback,shift){this.checkOp();if(shift)this.buffer.copy(this.buffer,0,shift);else shift=0;this.position+=shift;this.fsOp=new FsRead(this.
-  fd,this.buffer,this.buffer.length-shift,shift,this.position+this.buffer.length-shift,callback).read()}}class EntryDataReaderStream extends stream.Readable{constructor(fd,offset,length){super();this.fd=fd;this.offset=offset;this.length=length;this.pos=0;this.readCallback=this.readCallback.bind(this)}_read(n){const buffer=Buffer.
-  alloc(Math.min(n,this.length-this.pos));if(buffer.length){fs.read(this.fd,buffer,0,buffer.length,this.offset+this.pos,this.readCallback)}else{this.push(null)}}readCallback(err,bytesRead,buffer){this.pos+=bytesRead;if(err){this.emit("error",err);this.push(null)}else if(!bytesRead){this.push(null)}else{if(bytesRead!==buffer.
-  length)buffer=buffer.slice(0,bytesRead);this.push(buffer)}}}class EntryVerifyStream extends stream.Transform{constructor(baseStm,crc,size){super();this.verify=new CrcVerify(crc,size);baseStm.on("error",e=>{this.emit("error",e)})}_transform(data,encoding,callback){let err;try{this.verify.data(data)}catch(e){err=e}callback(
-  err,data)}}class CrcVerify{constructor(crc,size){this.crc=crc;this.size=size;this.state={crc:~0,size:0}}data(data){const crcTable=CrcVerify.getCrcTable();let crc=this.state.crc,off=0,len=data.length;while(--len>=0)crc=crcTable[(crc^data[off++])&255]^crc>>>8;this.state.crc=crc;this.state.size+=data.length;if(this.state.
-  size>=this.size){const buf=Buffer.alloc(4);buf.writeInt32LE(~this.state.crc&4294967295,0);crc=buf.readUInt32LE(0);if(crc!==this.crc)throw new Error("Invalid CRC");if(this.state.size!==this.size)throw new Error("Invalid size")}}static getCrcTable(){let crcTable=/** @type {any} */(CrcVerify).crcTable;if(!crcTable){/** @type {any} */(CrcVerify).crcTable=crcTable=
-  [];const b=Buffer.alloc(4);for(let n=0;n<256;n++){let c=n;for(let k=8;--k>=0;){if((c&1)!==0)c=3988292384^c>>>1;else c=c>>>1}if(c<0){b.writeInt32LE(c,0);c=b.readUInt32LE(0)}crcTable[n]=c}}return crcTable}}const parseZipTime=function(timebytes,datebytes){const timebits=toBits(timebytes,16),datebits=toBits(datebytes,16);const mt={
-  h:parseInt(timebits.slice(0,5).join(""),2),m:parseInt(timebits.slice(5,11).join(""),2),s:parseInt(timebits.slice(11,16).join(""),2)*2,Y:parseInt(datebits.slice(0,7).join(""),2)+1980,M:parseInt(datebits.slice(7,11).join(""),2),D:parseInt(datebits.slice(11,16).join(""),2)};const dt_str=[mt.Y,mt.M,mt.D].join("-")+" "+[mt.
-  h,mt.m,mt.s].join(":")+" GMT+0";return new Date(dt_str).getTime()};const toBits=function(dec,size){let b=(dec>>>0).toString(2);while(b.length<size)b="0"+b;return b.split("")};const readUInt64LE=(buffer,offset)=>buffer.readUInt32LE(offset+4)*4294967296+buffer.readUInt32LE(offset);return StreamZip.async;
-})();
-
-/**
- * From [node-machine-id](https://github.com/automation-stack/node-machine-id/tree/f580f9f20668582e9087d92cea2511c972f2e6aa). MIT License.
- *
- * We plan to add vip/subscription verification in the future while keeping this project open source. So the verification is just a "gentleman’s agreement" for normal users. Developers can still skip it, like the `shapez.io` game.
- */
-// prettier-ignore
-const machineId = () => {
-  function isWindowsProcessMixedOrNativeArchitecture() {
-    // detect if the node binary is the same arch as the Windows OS. // or if this is 32 bit node on 64 bit windows.
-    if (process.platform !== "win32") return "";
-    if (process.arch === "ia32" && process.env.hasOwnProperty("PROCESSOR_ARCHITEW6432")) return "mixed";
-    return "native";
-  }
-  function expose(result) {
-    switch (process.platform) {
-      case "darwin":  return result.split("IOPlatformUUID")[1].split("\n")[0].replace(/\=|\s+|\"/gi, "").toLowerCase();
-      case "win32":   return result.toString().split("REG_SZ")[1].replace(/\r+|\n+|\s+/gi, "").toLowerCase();
-      case "linux":   return result.toString().replace(/\r+|\n+|\s+/gi, "").toLowerCase();
-      default: throw new Error(`Unsupported platform: ${process.platform}`);
-    }
-  }
-  let win32RegBinPath = { native: "%windir%\\System32", mixed: "%windir%\\sysnative\\cmd.exe /c %windir%\\System32" };
-  let guid = {
-    darwin: "ioreg -rd1 -c IOPlatformExpertDevice",
-    win32: `${ win32RegBinPath[isWindowsProcessMixedOrNativeArchitecture()] }\\REG.exe ` + "QUERY HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography " + "/v MachineGuid",
-    linux: "( cat /var/lib/dbus/machine-id /etc/machine-id 2> /dev/null || hostname ) | head -n 1 || :",
-  };
-  return /** @type {Promise<string>} */(new Promise((resolve,reject)=>import("child_process").then(m=>
-    m.exec(guid[process.platform], {}, (err,stdout, stderr) => err ? reject(err) : resolve(expose(stdout.toString()))))
-  ));
-};
-
-/**
  * Assert the value is true, or throw an error. Like "node:assert", but cross platform.
  * @param {any} value
  * @param {any} [info]
@@ -146,133 +37,8 @@ const debounce = (f, delay) => {
   };
 };
 
-/**
- * Exclude the static `import` declaration matches `regexp`.
- *
- * Will be `// excluded: import xxx form ...`.
- * @param {string} sourceCode
- * @param {RegExp} regexp
- * @returns {string}
- */
-const excludeImports = (sourceCode, regexp) => {
-  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import
-  // we dont support the "string name import" in reference just match quotas, and ensure the "import" keyword in line beginning, and ensure imports in the head of file
-  let ret = "";
-  let position = 0;
-  while (true) {
-    if (sourceCode.startsWith("import", position)) {
-      let start = position;
-      let end = start;
-      while (true) {
-        if (sourceCode[start] === "'") {
-          start++;
-          end = sourceCode.indexOf("'", start);
-          break;
-        }
-        if (sourceCode[start] === '"') {
-          start++;
-          end = sourceCode.indexOf('"', start);
-          break;
-        }
-        start++;
-      }
-      const moduleName = sourceCode.slice(start, end);
-      const rangeEnd = end + "'".length;
-      if (regexp.test(moduleName)) {
-        const mark = "// excluded: ";
-        ret +=
-          mark +
-          sourceCode.slice(position, rangeEnd).replace(/\n/g, "\n" + mark);
-        position = rangeEnd;
-      } else {
-        // do nothing
-      }
-    } else if (sourceCode.startsWith("//", position)) {
-      // do nothing
-    } else if (sourceCode.startsWith("/*", position)) {
-      const rangeEnd = sourceCode.indexOf("*/", position) + "*/".length;
-      ret += sourceCode.slice(position, rangeEnd);
-      position = rangeEnd;
-    } else if (
-      sourceCode.startsWith("\n", position) ||
-      sourceCode.startsWith("\t", position) ||
-      sourceCode.startsWith(" ", position)
-    ) {
-      // must not be start with these for useful statements, like "\n  import xxx ..."
-    } else {
-      break;
-    }
-    const nextPosition = sourceCode.indexOf("\n", position) + 1;
-    ret += sourceCode.slice(position, nextPosition);
-    position = nextPosition;
-  }
-  ret += sourceCode.slice(position);
-  return ret;
-};
-
-/**
- * Solve path, like path.resolve with support of home dir prefix.
- *
- * ```js
- * if (process.platform === "win32") {
- *   assert(solvePath("C:\\a\\b", "c/d", "\\e") === "C:\\a\\b\\c\\d\\e");
- *   assert(solvePath("C:\\a\\\\b", "c\\d", "..\\e") === "C:\\a\\b\\c\\e");
- * } else {
- *   assert(solvePath("a/b", "../c", "/d") === import.meta.dirname + "/a/c/d");
- *   assert(solvePath("~/a//b", "c/d", "../e") === process.env.HOME + "/a/b/c/e");
- * }
- * ```
- * @param {...string} parts
- * @returns {string}
- */
-const solvePath = (...parts) => {
-  if (parts[0].startsWith("~")) {
-    parts[0] = parts[0].slice(1);
-    parts.unshift(/** @type {string} */ (process.env.HOME));
-    // process.env.USERPROFILE
-  }
-  // we do not use path.resolve directy because we want to control absolute or not
-  if (!path.isAbsolute(parts[0])) {
-    parts.unshift(process.cwd());
-  }
-  return path.join(...parts); // path.join will convert '\\' to '/' also, like path.resolve
-};
-
-/**
- * Writing to stream, returns promise, auto care about the backpressure. Use [this](https://nodejs.org/api/stream.html#streamreadabletowebstreamreadable-options) when stable.
- *
- * @param {stream.Writable} stream
- * @param {any} chunk
- * @returns {Promise<void>}
- */
-const streamWrite = (stream, chunk) => {
-  return new Promise((resolve, reject) => {
-    let resolveCount = 0;
-    const resolveOnce = () => {
-      resolveCount++;
-      if (resolveCount === 2) {
-        resolve();
-      }
-    };
-    const lowPressure = stream.write(chunk, (error) =>
-      error ? reject(error) : resolveOnce()
-    );
-    if (lowPressure) {
-      resolveOnce();
-    } else {
-      stream.once("drain", resolveOnce);
-    }
-  });
-};
-
+// https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js#L40
 // https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
-// https://www.ghproxy.cc/https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
-// https://hub.whtrys.space/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
-// https://cf.ghproxy.cc/https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
-// https://sciproxy.com/github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
-// https://mirror.ghproxy.com/https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
-// https://ghproxy.net/https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
-// https://kkgithub.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
 
 // /** @type {1} */ (process.exit());
 
@@ -672,7 +438,7 @@ const pageMain = async () => {
     extensionsList = response;
     r$choices();
   };
-  r$profiles(); // 每次安装 extension 结束后调用一次这个
+  r$profiles();
 
   // $action
   const $action = document.createElement("div"); // 在选择好 action 之后，装入这个元素中
@@ -858,6 +624,11 @@ const serverMain = async () => {
   /** @type {Map<string, InstallExtensionController>} */
   const installExtensionControllers = new Map();
 
+  /**
+   * Read request body then parse json.
+   *
+   * @param {http.IncomingMessage} req
+   */
   const readReq = async (req) => {
     return new Promise((resolve) => {
       let body = "";
@@ -867,6 +638,233 @@ const serverMain = async () => {
       req.on("end", () => {
         resolve(JSON.parse(body));
       });
+    });
+  };
+
+  /**
+   * From [node-stream-zip](https://github.com/antelle/node-stream-zip/tree/7c5d50393418b261668b0dd4c8d9ccaa9ac913ce). MIT License. Gen this embed script by commands: `cat a.js | sed -E 's|.+?require\(.+?\);||g' | esbuild --minify-whitespace --line-limit=320 --legal-comments=eof` .
+   *
+   * Because of [this](https://github.com/microsoft/TypeScript/issues/19573) , we need some `/ * @ type {any} * /`.
+   **/
+  // prettier-ignore
+  const Zip = (() => {
+    const consts={LOCHDR:30,LOCSIG:67324752,LOCVER:4,LOCFLG:6,LOCHOW:8,LOCTIM:10,LOCCRC:14,LOCSIZ:18,LOCLEN:22,LOCNAM:26,LOCEXT:28,EXTSIG:134695760,EXTHDR:16,EXTCRC:4,EXTSIZ:8,EXTLEN:12,CENHDR:46,CENSIG:33639248,CENVEM:4,CENVER:6,CENFLG:8,CENHOW:10,CENTIM:12,CENCRC:16,CENSIZ:20,CENLEN:24,CENNAM:28,CENEXT:30,CENCOM:32,CENDSK:34,
+    CENATT:36,CENATX:38,CENOFF:42,ENDHDR:22,ENDSIG:101010256,ENDSIGFIRST:80,ENDSUB:8,ENDTOT:10,ENDSIZ:12,ENDOFF:16,ENDCOM:20,MAXFILECOMMENT:65535,ENDL64HDR:20,ENDL64SIG:117853008,ENDL64SIGFIRST:80,ENDL64OFS:8,END64HDR:56,END64SIG:101075792,END64SIGFIRST:80,END64SUB:24,END64TOT:32,END64SIZ:40,END64OFF:48,STORED:0,SHRUNK:1,REDUCED1:2,
+    REDUCED2:3,REDUCED3:4,REDUCED4:5,IMPLODED:6,DEFLATED:8,ENHANCED_DEFLATED:9,PKWARE:10,BZIP2:12,LZMA:14,IBM_TERSE:18,IBM_LZ77:19,FLG_ENC:0,FLG_COMP1:1,FLG_COMP2:2,FLG_DESC:4,FLG_ENH:8,FLG_STR:16,FLG_LNG:1024,FLG_MSK:4096,FLG_ENTRY_ENC:1,EF_ID:0,EF_SIZE:2,ID_ZIP64:1,ID_AVINFO:7,ID_PFS:8,ID_OS2:9,ID_NTFS:10,ID_OPENVMS:12,ID_UNIX:13,
+    ID_FORK:14,ID_PATCH:15,ID_X509_PKCS7:20,ID_X509_CERTID_F:21,ID_X509_CERTID_C:22,ID_STRONGENC:23,ID_RECORD_MGT:24,ID_X509_PKCS7_RL:25,ID_IBM1:101,ID_IBM2:102,ID_POSZIP:18064,EF_ZIP64_OR_32:4294967295,EF_ZIP64_OR_16:65535};const/** @type {any} */StreamZip=function(config){let fd,fileSize,chunkSize,op,/** @type {any} */centralDirectory,closed;const ready=false,/** @type {any} */
+    that=this,/** @type {any} */entries=config.storeEntries!==false?{}:null,fileName=config.file,textDecoder=config.nameEncoding?new TextDecoder(config.nameEncoding):null;open();function open(){if(config.fd){fd=config.fd;readFile()}else{fs.open(fileName,"r",(err,f)=>{if(err)return that.emit("error",err);fd=f;readFile()})}}function readFile(){
+    fs.fstat(fd,(err,stat)=>{if(err)return that.emit("error",err);fileSize=stat.size;chunkSize=config.chunkSize||Math.round(fileSize/1e3);chunkSize=Math.max(Math.min(chunkSize,Math.min(128*1024,fileSize)),Math.min(1024,fileSize));readCentralDirectory()})}function readUntilFoundCallback(err,bytesRead){if(err||!bytesRead)return that.
+    emit("error",err||new Error("Archive read error"));let pos=op.lastPos,bufferPosition=pos-op.win.position;const buffer=op.win.buffer,minPos=op.minPos;while(--pos>=minPos&&--bufferPosition>=0){if(buffer.length-bufferPosition>=4&&buffer[bufferPosition]===op.firstByte){if(buffer.readUInt32LE(bufferPosition)===op.sig){op.lastBufferPosition=
+    bufferPosition;op.lastBytesRead=bytesRead;op.complete();return}}}if(pos===minPos)return that.emit("error",new Error("Bad archive"));op.lastPos=pos+1;op.chunkSize*=2;if(pos<=minPos)return that.emit("error",new Error("Bad archive"));const expandLength=Math.min(op.chunkSize,pos-minPos);op.win.expandLeft(expandLength,readUntilFoundCallback)}
+    function readCentralDirectory(){const totalReadLength=Math.min(consts.ENDHDR+consts.MAXFILECOMMENT,fileSize);op={win:new FileWindowBuffer(fd),totalReadLength,minPos:fileSize-totalReadLength,lastPos:fileSize,chunkSize:Math.min(1024,chunkSize),firstByte:consts.ENDSIGFIRST,sig:consts.ENDSIG,complete:readCentralDirectoryComplete};
+    op.win.read(fileSize-op.chunkSize,op.chunkSize,readUntilFoundCallback)}function readCentralDirectoryComplete(){const buffer=op.win.buffer,pos=op.lastBufferPosition;try{centralDirectory=new CentralDirectoryHeader;centralDirectory.read(buffer.slice(pos,pos+consts.ENDHDR));centralDirectory.headerOffset=op.win.position+pos;
+    if(centralDirectory.commentLength){that.comment=buffer.slice(pos+consts.ENDHDR,pos+consts.ENDHDR+centralDirectory.commentLength).toString()}else{that.comment=null}that.entriesCount=centralDirectory.volumeEntries;that.centralDirectory=centralDirectory;if(centralDirectory.volumeEntries===consts.EF_ZIP64_OR_16&&centralDirectory.
+    totalEntries===consts.EF_ZIP64_OR_16||centralDirectory.size===consts.EF_ZIP64_OR_32||centralDirectory.offset===consts.EF_ZIP64_OR_32){readZip64CentralDirectoryLocator()}else{op={};readEntries()}}catch(err){that.emit("error",err)}}function readZip64CentralDirectoryLocator(){const length=consts.ENDL64HDR;if(op.lastBufferPosition>
+    length){op.lastBufferPosition-=length;readZip64CentralDirectoryLocatorComplete()}else{op={win:op.win,totalReadLength:length,minPos:op.win.position-length,lastPos:op.win.position,chunkSize:op.chunkSize,firstByte:consts.ENDL64SIGFIRST,sig:consts.ENDL64SIG,complete:readZip64CentralDirectoryLocatorComplete};op.win.read(op.
+    lastPos-op.chunkSize,op.chunkSize,readUntilFoundCallback)}}function readZip64CentralDirectoryLocatorComplete(){const buffer=op.win.buffer,locHeader=new CentralDirectoryLoc64Header;locHeader.read(buffer.slice(op.lastBufferPosition,op.lastBufferPosition+consts.ENDL64HDR));const readLength=fileSize-locHeader.headerOffset;
+    op={win:op.win,totalReadLength:readLength,minPos:locHeader.headerOffset,lastPos:op.lastPos,chunkSize:op.chunkSize,firstByte:consts.END64SIGFIRST,sig:consts.END64SIG,complete:readZip64CentralDirectoryComplete};op.win.read(fileSize-op.chunkSize,op.chunkSize,readUntilFoundCallback)}function readZip64CentralDirectoryComplete(){
+    const buffer=op.win.buffer;const zip64cd=new CentralDirectoryZip64Header;zip64cd.read(buffer.slice(op.lastBufferPosition,op.lastBufferPosition+consts.END64HDR));that.centralDirectory.volumeEntries=zip64cd.volumeEntries;that.centralDirectory.totalEntries=zip64cd.totalEntries;that.centralDirectory.size=zip64cd.size;that.
+    centralDirectory.offset=zip64cd.offset;that.entriesCount=zip64cd.volumeEntries;op={};readEntries()}function readEntries(){op={win:new FileWindowBuffer(fd),pos:centralDirectory.offset,chunkSize,entriesLeft:centralDirectory.volumeEntries};op.win.read(op.pos,Math.min(chunkSize,fileSize-op.pos),readEntriesCallback)}function readEntriesCallback(err,bytesRead){
+    if(err||!bytesRead)return that.emit("error",err||new Error("Entrie    s read error"));let bufferPos=op.pos-op.win.position;let entry=op.entry;const buffer=op.win.buffer;const bufferLength=buffer.length;try{while(op.entriesLeft>0){if(!entry){entry=new ZipEntry;entry.readHeader(buffer,bufferPos);entry.headerOffset=op.win.
+    position+bufferPos;op.entry=entry;op.pos+=consts.CENHDR;bufferPos+=consts.CENHDR}const entryHeaderSize=entry.fnameLen+entry.extraLen+entry.comLen;const advanceBytes=entryHeaderSize+(op.entriesLeft>1?consts.CENHDR:0);if(bufferLength-bufferPos<advanceBytes){op.win.moveRight(chunkSize,readEntriesCallback,bufferPos);op.move=
+    true;return}entry.read(buffer,bufferPos,textDecoder);if(!config.skipEntryNameValidation)entry.validateName();if(entries)entries[entry.name]=entry;that.emit("ent    ry",entry);op.entry=entry=null;op.entriesLeft--;op.pos+=entryHeaderSize;bufferPos+=entryHeaderSize}that.emit("ready")}catch(err2){that.emit("error",err2)}}function checkEntriesExist(){
+    if(!entries)throw new Error("storeEntries disabled")}Object.defineProperty(this,"ready",{get(){return ready}});this.entry=function(name){checkEntriesExist();return entries[name]};this.entries=function(){checkEntriesExist();return entries};this.stream=function(entry,callback){return this.openEntry(entry,(err,entry2)=>{if(err)
+    return callback(err);const offset=dataOffset(entry2);let/** @type {any} */entryStream=new EntryDataReaderStream(fd,offset,entry2.compressedSize);if(entry2.method===consts.STORED){}else if(entry2.method===consts.DEFLATED){entryStream=entryStream.pipe(zlib.createInflateRaw())}else{return callback(new Error("Unknown compression method: "+
+    entry2.method))}if(canVerifyCrc(entry2))entryStream=entryStream.pipe(new EntryVerifyStream(entryStream,entry2.crc,entry2.size));callback(null,entryStream)},false)};this.entryDataSync=function(entry){let err=null;this.openEntry(entry,(e,en)=>{err=e;entry=en},true);if(err)throw err;let data=Buffer.alloc(entry.compressedSize);
+    new FsRead(fd,data,0,entry.compressedSize,dataOffset(entry),e=>{err=e}).read(true);if(err)throw err;if(entry.method===consts.STORED){}else if(entry.method===consts.DEFLATED||entry.method===consts.ENHANCED_DEFLATED){data=zlib.inflateRawSync(data)}else{throw new Error("Unknown compression method: "+entry.method)}if(data.
+    length!==entry.size)throw new Error("Invalid size");if(canVerifyCrc(entry)){const verify=new CrcVerify(entry.crc,entry.size);verify.data(data)}return data};this.openEntry=function(entry,callback,sync){if(typeof entry==="string"){checkEntriesExist();entry=entries[entry];if(!entry)return callback(new Error("Entry not fou\
+    nd"))}if(!entry.isFile)return callback(new Error("Entry is not file"));if(!fd)return callback(new Error("Archive closed"));const buffer=Buffer.alloc(consts.LOCHDR);new FsRead(fd,buffer,0,buffer.length,entry.offset,err=>{if(err)return callback(err);let readEx;try{entry.readDataHeader(buffer);if(entry.encrypted)readEx=new Error(
+    "Entry encrypted")}catch(ex){readEx=ex}callback(readEx,entry)}).read(sync)};function dataOffset(entry){return entry.offset+consts.LOCHDR+entry.fnameLen+entry.extraLen}function canVerifyCrc(entry){return(entry.flags&8)!==8}function extract(entry,outPath,callback){that.stream(entry,(err,stm)=>{if(err){callback(err)}else{
+    let fsStm,errThrown;stm.on("error",err2=>{errThrown=err2;if(fsStm){stm.unpipe(fsStm);fsStm.close(()=>{callback(err2)})}});fs.open(outPath,"w",(err2,fdFile)=>{if(err2)return callback(err2);if(errThrown){fs.close(fd,()=>{callback(errThrown)});return}fsStm=fs.createWriteStream(outPath,{fd:fdFile});fsStm.on("finish",()=>{that.
+    emit("extract",entry,outPath);if(!errThrown)callback()});stm.pipe(fsStm)})}})}function createDirectories(baseDir,dirs,callback){if(!dirs.length)return callback();let dir=dirs.shift();dir=path.join(baseDir,path.join(...dir));fs.mkdir(dir,{recursive:true},err=>{if(err&&err.code!=="EEXIST")return callback(err);createDirectories(
+    baseDir,dirs,callback)})}function extractFiles(baseDir,baseRelPath,files,callback,extractedCount){if(!files.length)return callback(null,extractedCount);const file=files.shift();const targetPath=path.join(baseDir,file.name.replace(baseRelPath,""));extract(file,targetPath,err=>{if(err)return callback(err,extractedCount);
+    extractFiles(baseDir,baseRelPath,files,callback,extractedCount+1)})}this.extract=function(entry,outPath,callback){let entryName=entry||"";if(typeof entry==="string"){entry=this.entry(entry);if(entry){entryName=entry.name}else{if(entryName.length&&entryName[entryName.length-1]!=="/")entryName+="/"}}if(!entry||entry.isDirectory){
+    const files=[],dirs=[],allDirs={};for(const e in entries){if(Object.prototype.hasOwnProperty.call(entries,e)&&e.lastIndexOf(entryName,0)===0){let relPath=e.replace(entryName,"");const childEntry=entries[e];if(childEntry.isFile){files.push(childEntry);relPath=path.dirname(relPath)}if(relPath&&!allDirs[relPath]&&relPath!==
+    "."){allDirs[relPath]=true;let parts=relPath.split("/").filter(f=>f);if(parts.length)dirs.push(parts);while(parts.length>1){parts=parts.slice(0,parts.length-1);const partsPath=parts.join("/");if(allDirs[partsPath]||partsPath===".")break;allDirs[partsPath]=true;dirs.push(parts)}}}}dirs.sort((x,y)=>x.length-y.length);if(dirs.
+    length){createDirectories(outPath,dirs,err=>{if(err)callback(err);else extractFiles(outPath,entryName,files,callback,0)})}else{extractFiles(outPath,entryName,files,callback,0)}}else{fs.stat(outPath,(err,stat)=>{if(stat&&stat.isDirectory()){extract(entry,path.join(outPath,path.basename(entry.name)),callback)}else{extract(
+    entry,outPath,callback)}})}};this.close=function(callback){if(closed||!fd){closed=true;if(callback)callback()}else{closed=true;fs.close(fd,err=>{fd=null;if(callback)callback(err)})}};const originalEmit=events.EventEmitter.prototype.emit;this.emit=function(...args){if(!closed)return originalEmit.call(this,...args)}};StreamZip.
+    debugLog=(...args)=>{if(StreamZip.debug)console.log(...args)};const inherits=function(ctor,superCtor){ctor.super_=superCtor;ctor.prototype=Object.create(superCtor.prototype,{constructor:{value:ctor,enumerable:false,writable:true,configurable:true}})};inherits(StreamZip,events.EventEmitter);const propZip=Symbol("zip");StreamZip.
+    async=class StreamZipAsync extends events.EventEmitter{constructor(config){super();const zip=new StreamZip(config);zip.on("entry",entry=>this.emit("entry",entry));zip.on("extract",(entry,outPath)=>this.emit("extract",entry,outPath));this[propZip]=new Promise((resolve,reject)=>{zip.on("ready",()=>{zip.removeListener("er\
+    ror",reject);resolve(zip)});zip.on("error",reject)})}get entriesCount(){return this[propZip].then(zip=>zip.entriesCount)}get comment(){return this[propZip].then(zip=>zip.comment)}async entry(name){const zip=await this[propZip];return zip.entry(name)}async entries(){const zip=await this[propZip];return zip.entries()}async stream(entry){
+    const zip=await this[propZip];return new Promise((resolve,reject)=>{zip.stream(entry,(err,stm)=>{if(err)reject(err);else resolve(stm)})})}async entryData(entry){const stm=await this.stream(entry);return new Promise((resolve,reject)=>{const data=[];stm.on("data",chunk=>data.push(chunk));stm.on("end",()=>{resolve(Buffer.
+    concat(data))});stm.on("error",err=>{stm.removeAllListeners("end");reject(err)})})}async extract(entry,outPath){const zip=await this[propZip];return new Promise((resolve,reject)=>{zip.extract(entry,outPath,(err,res)=>{if(err)reject(err);else resolve(res)})})}async close(){const zip=await this[propZip];return new Promise(
+    (resolve,reject)=>{zip.close(err=>{if(err)reject(err);else/** @type {any} */(resolve)()})})}};class CentralDirectoryHeader{read(data){if(data.length!==consts.ENDHDR||data.readUInt32LE(0)!==consts.ENDSIG)throw new Error("Invalid central directory");this.volumeEntries=data.readUInt16LE(consts.ENDSUB);this.totalEntries=data.readUInt16LE(consts.
+    ENDTOT);this.size=data.readUInt32LE(consts.ENDSIZ);this.offset=data.readUInt32LE(consts.ENDOFF);this.commentLength=data.readUInt16LE(consts.ENDCOM)}}class CentralDirectoryLoc64Header{read(data){if(data.length!==consts.ENDL64HDR||data.readUInt32LE(0)!==consts.ENDL64SIG)throw new Error("Invalid zip64 central directory lo\
+    cator");this.headerOffset=readUInt64LE(data,consts.ENDSUB)}}class CentralDirectoryZip64Header{read(data){if(data.length!==consts.END64HDR||data.readUInt32LE(0)!==consts.END64SIG)throw new Error("Invalid central directory");this.volumeEntries=readUInt64LE(data,consts.END64SUB);this.totalEntries=readUInt64LE(data,consts.
+    END64TOT);this.size=readUInt64LE(data,consts.END64SIZ);this.offset=readUInt64LE(data,consts.END64OFF)}}class ZipEntry{readHeader(data,offset){if(data.length<offset+consts.CENHDR||data.readUInt32LE(offset)!==consts.CENSIG)throw new Error("Invalid entry header");this.verMade=data.readUInt16LE(offset+consts.CENVEM);this.version=
+    data.readUInt16LE(offset+consts.CENVER);this.flags=data.readUInt16LE(offset+consts.CENFLG);this.method=data.readUInt16LE(offset+consts.CENHOW);const timebytes=data.readUInt16LE(offset+consts.CENTIM);const datebytes=data.readUInt16LE(offset+consts.CENTIM+2);this.time=parseZipTime(timebytes,datebytes);this.crc=data.readUInt32LE(
+    offset+consts.CENCRC);this.compressedSize=data.readUInt32LE(offset+consts.CENSIZ);this.size=data.readUInt32LE(offset+consts.CENLEN);this.fnameLen=data.readUInt16LE(offset+consts.CENNAM);this.extraLen=data.readUInt16LE(offset+consts.CENEXT);this.comLen=data.readUInt16LE(offset+consts.CENCOM);this.diskStart=data.readUInt16LE(
+    offset+consts.CENDSK);this.inattr=data.readUInt16LE(offset+consts.CENATT);this.attr=data.readUInt32LE(offset+consts.CENATX);this.offset=data.readUInt32LE(offset+consts.CENOFF)}readDataHeader(data){if(data.readUInt32LE(0)!==consts.LOCSIG)throw new Error("Invalid local header");this.version=data.readUInt16LE(consts.LOCVER);
+    this.flags=data.readUInt16LE(consts.LOCFLG);this.method=data.readUInt16LE(consts.LOCHOW);const timebytes=data.readUInt16LE(consts.LOCTIM);const datebytes=data.readUInt16LE(consts.LOCTIM+2);this.time=parseZipTime(timebytes,datebytes);this.crc=data.readUInt32LE(consts.LOCCRC)||this.crc;const compressedSize=data.readUInt32LE(
+    consts.LOCSIZ);if(compressedSize&&compressedSize!==consts.EF_ZIP64_OR_32)this.compressedSize=compressedSize;const size=data.readUInt32LE(consts.LOCLEN);if(size&&size!==consts.EF_ZIP64_OR_32)this.size=size;this.fnameLen=data.readUInt16LE(consts.LOCNAM);this.extraLen=data.readUInt16LE(consts.LOCEXT)}read(data,offset,textDecoder){
+    const nameData=data.slice(offset,offset+=this.fnameLen);this.name=textDecoder?textDecoder.decode(new Uint8Array(nameData)):nameData.toString("utf8");const lastChar=data[offset-1];this.isDirectory=lastChar===47||lastChar===92;if(this.extraLen){this.readExtra(data,offset);offset+=this.extraLen}this.comment=this.comLen?data.
+    slice(offset,offset+this.comLen).toString():null}validateName(){if(/\\|^\w+:|^\/|(^|\/)\.\.(\/|$)/.test(this.name))throw new Error("Malicious entry: "+this.name)}readExtra(data,offset){let signature,size;const maxPos=offset+this.extraLen;while(offset<maxPos){signature=data.readUInt16LE(offset);offset+=2;size=data.readUInt16LE(
+    offset);offset+=2;if(consts.ID_ZIP64===signature)this.parseZip64Extra(data,offset,size);offset+=size}}parseZip64Extra(data,offset,length){if(length>=8&&this.size===consts.EF_ZIP64_OR_32){this.size=readUInt64LE(data,offset);offset+=8;length-=8}if(length>=8&&this.compressedSize===consts.EF_ZIP64_OR_32){this.compressedSize=
+    readUInt64LE(data,offset);offset+=8;length-=8}if(length>=8&&this.offset===consts.EF_ZIP64_OR_32){this.offset=readUInt64LE(data,offset);offset+=8;length-=8}if(length>=4&&this.diskStart===consts.EF_ZIP64_OR_16)this.diskStart=data.readUInt32LE(offset)}get encrypted(){return(this.flags&consts.FLG_ENTRY_ENC)===consts.FLG_ENTRY_ENC}get isFile(){
+    return!this.isDirectory}}class FsRead{constructor(fd,buffer,offset,length,position,callback){this.fd=fd;this.buffer=buffer;this.offset=offset;this.length=length;this.position=position;this.callback=callback;this.bytesRead=0;this.waiting=false}read(sync){StreamZip.debugLog("read",this.position,this.bytesRead,this.length,
+    this.offset);this.waiting=true;let err;if(sync){let bytesRead=0;try{bytesRead=fs.readSync(this.fd,this.buffer,this.offset+this.bytesRead,this.length-this.bytesRead,this.position+this.bytesRead)}catch(e){err=e}this.readCallback(sync,err,err?bytesRead:null)}else{fs.read(this.fd,this.buffer,this.offset+this.bytesRead,this.
+    length-this.bytesRead,this.position+this.bytesRead,this.readCallback.bind(this,sync))}}readCallback(sync,err,bytesRead){if(typeof bytesRead==="number")this.bytesRead+=bytesRead;if(err||!bytesRead||this.bytesRead===this.length){this.waiting=false;return this.callback(err,this.bytesRead)}else{this.read(sync)}}}class FileWindowBuffer{constructor(fd){
+    this.position=0;this.buffer=Buffer.alloc(0);this.fd=fd;this.fsOp=null}checkOp(){if(this.fsOp&&/** @type {any} */(this.fsOp).waiting)throw new Error("Operation in progress")}read(pos,length,callback){this.checkOp();if(this.buffer.length<length)this.buffer=Buffer.alloc(length);this.position=pos;this.fsOp=new FsRead(this.fd,this.buffer,0,length,
+    this.position,callback).read()}expandLeft(length,callback){this.checkOp();this.buffer=Buffer.concat([Buffer.alloc(length),this.buffer]);this.position-=length;if(this.position<0)this.position=0;this.fsOp=new FsRead(this.fd,this.buffer,0,length,this.position,callback).read()}expandRight(length,callback){this.checkOp();const offset=this.
+    buffer.length;this.buffer=Buffer.concat([this.buffer,Buffer.alloc(length)]);this.fsOp=new FsRead(this.fd,this.buffer,offset,length,this.position+offset,callback).read()}moveRight(length,callback,shift){this.checkOp();if(shift)this.buffer.copy(this.buffer,0,shift);else shift=0;this.position+=shift;this.fsOp=new FsRead(this.
+    fd,this.buffer,this.buffer.length-shift,shift,this.position+this.buffer.length-shift,callback).read()}}class EntryDataReaderStream extends stream.Readable{constructor(fd,offset,length){super();this.fd=fd;this.offset=offset;this.length=length;this.pos=0;this.readCallback=this.readCallback.bind(this)}_read(n){const buffer=Buffer.
+    alloc(Math.min(n,this.length-this.pos));if(buffer.length){fs.read(this.fd,buffer,0,buffer.length,this.offset+this.pos,this.readCallback)}else{this.push(null)}}readCallback(err,bytesRead,buffer){this.pos+=bytesRead;if(err){this.emit("error",err);this.push(null)}else if(!bytesRead){this.push(null)}else{if(bytesRead!==buffer.
+    length)buffer=buffer.slice(0,bytesRead);this.push(buffer)}}}class EntryVerifyStream extends stream.Transform{constructor(baseStm,crc,size){super();this.verify=new CrcVerify(crc,size);baseStm.on("error",e=>{this.emit("error",e)})}_transform(data,encoding,callback){let err;try{this.verify.data(data)}catch(e){err=e}callback(
+    err,data)}}class CrcVerify{constructor(crc,size){this.crc=crc;this.size=size;this.state={crc:~0,size:0}}data(data){const crcTable=CrcVerify.getCrcTable();let crc=this.state.crc,off=0,len=data.length;while(--len>=0)crc=crcTable[(crc^data[off++])&255]^crc>>>8;this.state.crc=crc;this.state.size+=data.length;if(this.state.
+    size>=this.size){const buf=Buffer.alloc(4);buf.writeInt32LE(~this.state.crc&4294967295,0);crc=buf.readUInt32LE(0);if(crc!==this.crc)throw new Error("Invalid CRC");if(this.state.size!==this.size)throw new Error("Invalid size")}}static getCrcTable(){let crcTable=/** @type {any} */(CrcVerify).crcTable;if(!crcTable){/** @type {any} */(CrcVerify).crcTable=crcTable=
+    [];const b=Buffer.alloc(4);for(let n=0;n<256;n++){let c=n;for(let k=8;--k>=0;){if((c&1)!==0)c=3988292384^c>>>1;else c=c>>>1}if(c<0){b.writeInt32LE(c,0);c=b.readUInt32LE(0)}crcTable[n]=c}}return crcTable}}const parseZipTime=function(timebytes,datebytes){const timebits=toBits(timebytes,16),datebits=toBits(datebytes,16);const mt={
+    h:parseInt(timebits.slice(0,5).join(""),2),m:parseInt(timebits.slice(5,11).join(""),2),s:parseInt(timebits.slice(11,16).join(""),2)*2,Y:parseInt(datebits.slice(0,7).join(""),2)+1980,M:parseInt(datebits.slice(7,11).join(""),2),D:parseInt(datebits.slice(11,16).join(""),2)};const dt_str=[mt.Y,mt.M,mt.D].join("-")+" "+[mt.
+    h,mt.m,mt.s].join(":")+" GMT+0";return new Date(dt_str).getTime()};const toBits=function(dec,size){let b=(dec>>>0).toString(2);while(b.length<size)b="0"+b;return b.split("")};const readUInt64LE=(buffer,offset)=>buffer.readUInt32LE(offset+4)*4294967296+buffer.readUInt32LE(offset);return StreamZip.async;
+  })();
+
+  /**
+   * From [node-machine-id](https://github.com/automation-stack/node-machine-id/tree/f580f9f20668582e9087d92cea2511c972f2e6aa). MIT License.
+   *
+   * We plan to add vip/subscription verification in the future while keeping this project open source. So the verification is just a "gentleman’s agreement" for normal users. Developers can still skip it, like the `shapez.io` game.
+   */
+  // prettier-ignore
+  const machineId = () => {
+    function isWindowsProcessMixedOrNativeArchitecture() {
+      // detect if the node binary is the same arch as the Windows OS. // or if this is 32 bit node on 64 bit windows.
+      if (process.platform !== "win32") return "";
+      if (process.arch === "ia32" && process.env.hasOwnProperty("PROCESSOR_ARCHITEW6432")) return "mixed";
+      return "native";
+    }
+    function expose(result) {
+      switch (process.platform) {
+        case "darwin":  return result.split("IOPlatformUUID")[1].split("\n")[0].replace(/\=|\s+|\"/gi, "").toLowerCase();
+        case "win32":   return result.toString().split("REG_SZ")[1].replace(/\r+|\n+|\s+/gi, "").toLowerCase();
+        case "linux":   return result.toString().replace(/\r+|\n+|\s+/gi, "").toLowerCase();
+        default: throw new Error(`Unsupported platform: ${process.platform}`);
+      }
+    }
+    let win32RegBinPath = { native: "%windir%\\System32", mixed: "%windir%\\sysnative\\cmd.exe /c %windir%\\System32" };
+    let guid = {
+      darwin: "ioreg -rd1 -c IOPlatformExpertDevice",
+      win32: `${ win32RegBinPath[isWindowsProcessMixedOrNativeArchitecture()] }\\REG.exe ` + "QUERY HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography " + "/v MachineGuid",
+      linux: "( cat /var/lib/dbus/machine-id /etc/machine-id 2> /dev/null || hostname ) | head -n 1 || :",
+    };
+    return /** @type {Promise<string>} */(new Promise((resolve,reject)=>import("child_process").then(m=>
+      m.exec(guid[process.platform], {}, (err,stdout, stderr) => err ? reject(err) : resolve(expose(stdout.toString()))))
+    ));
+  };
+
+  /**
+   * Exclude the static `import` declaration matches `regexp`.
+   *
+   * Will be `// excluded: import xxx form ...`.
+   * @param {string} sourceCode
+   * @param {RegExp} regexp
+   * @returns {string}
+   */
+  const excludeImports = (sourceCode, regexp) => {
+    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import
+    // we dont support the "string name import" in reference just match quotas, and ensure the "import" keyword in line beginning, and ensure imports in the head of file
+    let ret = "";
+    let position = 0;
+    while (true) {
+      if (sourceCode.startsWith("import", position)) {
+        let start = position;
+        let end = start;
+        while (true) {
+          if (sourceCode[start] === "'") {
+            start++;
+            end = sourceCode.indexOf("'", start);
+            break;
+          }
+          if (sourceCode[start] === '"') {
+            start++;
+            end = sourceCode.indexOf('"', start);
+            break;
+          }
+          start++;
+        }
+        const moduleName = sourceCode.slice(start, end);
+        const rangeEnd = end + "'".length;
+        if (regexp.test(moduleName)) {
+          const mark = "// excluded: ";
+          ret +=
+            mark +
+            sourceCode.slice(position, rangeEnd).replace(/\n/g, "\n" + mark);
+          position = rangeEnd;
+        } else {
+          // do nothing
+        }
+      } else if (sourceCode.startsWith("//", position)) {
+        // do nothing
+      } else if (sourceCode.startsWith("/*", position)) {
+        const rangeEnd = sourceCode.indexOf("*/", position) + "*/".length;
+        ret += sourceCode.slice(position, rangeEnd);
+        position = rangeEnd;
+      } else if (
+        sourceCode.startsWith("\n", position) ||
+        sourceCode.startsWith("\t", position) ||
+        sourceCode.startsWith(" ", position)
+      ) {
+        // must not be start with these for useful statements, like "\n  import xxx ..."
+      } else {
+        break;
+      }
+      const nextPosition = sourceCode.indexOf("\n", position) + 1;
+      ret += sourceCode.slice(position, nextPosition);
+      position = nextPosition;
+    }
+    ret += sourceCode.slice(position);
+    return ret;
+  };
+
+  /**
+   * Solve path, like path.resolve with support of home dir prefix.
+   *
+   * ```js
+   * if (process.platform === "win32") {
+   *   assert(solvePath("C:\\a\\b", "c/d", "\\e") === "C:\\a\\b\\c\\d\\e");
+   *   assert(solvePath("C:\\a\\\\b", "c\\d", "..\\e") === "C:\\a\\b\\c\\e");
+   * } else {
+   *   assert(solvePath("a/b", "../c", "/d") === import.meta.dirname + "/a/c/d");
+   *   assert(solvePath("~/a//b", "c/d", "../e") === process.env.HOME + "/a/b/c/e");
+   * }
+   * ```
+   * @param {...string} parts
+   * @returns {string}
+   */
+  const solvePath = (...parts) => {
+    if (parts[0].startsWith("~")) {
+      parts[0] = parts[0].slice(1);
+      parts.unshift(/** @type {string} */ (process.env.HOME));
+      // process.env.USERPROFILE
+    }
+    // we do not use path.resolve directy because we want to control absolute or not
+    if (!path.isAbsolute(parts[0])) {
+      parts.unshift(process.cwd());
+    }
+    return path.join(...parts); // path.join will convert '\\' to '/' also, like path.resolve
+  };
+
+  /**
+   * Writing to stream, returns promise, auto care about the backpressure. Use [this](https://nodejs.org/api/stream.html#streamreadabletowebstreamreadable-options) when stable.
+   *
+   * @param {stream.Writable} stream
+   * @param {any} chunk
+   * @returns {Promise<void>}
+   */
+  const streamWrite = (stream, chunk) => {
+    return new Promise((resolve, reject) => {
+      let resolveCount = 0;
+      const resolveOnce = () => {
+        resolveCount++;
+        if (resolveCount === 2) {
+          resolve();
+        }
+      };
+      const lowPressure = stream.write(chunk, (error) =>
+        error ? reject(error) : resolveOnce()
+      );
+      if (lowPressure) {
+        resolveOnce();
+      } else {
+        stream.once("drain", resolveOnce);
+      }
     });
   };
 
