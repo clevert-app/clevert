@@ -1,5 +1,4 @@
 // @ts-check
-/// <reference lib="esnext" />
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -626,7 +625,6 @@ const serverMain = async () => {
 
   /**
    * Read request body then parse json.
-   *
    * @param {http.IncomingMessage} req
    */
   const readReq = async (req) => {
@@ -750,9 +748,7 @@ const serverMain = async () => {
   };
 
   /**
-   * Exclude the static `import` declaration matches `regexp`.
-   *
-   * Will be `// excluded: import xxx form ...`.
+   * Exclude the static `import` declaration matches `regexp`. Will be `// excluded: import xxx form ...`.
    * @param {string} sourceCode
    * @param {RegExp} regexp
    * @returns {string}
@@ -843,7 +839,6 @@ const serverMain = async () => {
 
   /**
    * Writing to stream, returns promise, auto care about the backpressure. Use [this](https://nodejs.org/api/stream.html#streamreadabletowebstreamreadable-options) when stable.
-   *
    * @param {stream.Writable} stream
    * @param {any} chunk
    * @returns {Promise<void>}
@@ -866,16 +861,6 @@ const serverMain = async () => {
         stream.once("drain", resolveOnce);
       }
     });
-  };
-
-  /**
-   * Determine a Promise is pending or not. https://stackoverflow.com/a/35820220
-   * @param {Promise<any>} p
-   * @returns {Promise<boolean>}
-   */
-  const isPending = async (p) => {
-    const t = {};
-    return (await Promise.race([p, t])) === t;
   };
 
   /**
@@ -1316,35 +1301,32 @@ const serverMain = async () => {
   server.listen(9393, "127.0.0.1");
 };
 
-const electronMain = async () => {
-  // @ts-ignore
+if (process?.versions?.electron) {
+  // curl -O -L https://registry.npmmirror.com/electron/32.0.2/files/electron.d.ts
+  /** @import { Electron } from "./electron.d.ts" */
   const { app, protocol, BrowserWindow } = await import("electron");
   const createWindow = () => {
     const win = new BrowserWindow({
       width: 1280,
       height: 720,
       title: "clevert",
-      webPreferences: {
-        // nodeIntegration: true,
-        contextIsolation: false,
-        webSecurity: false,
-        sandbox: false,
-        // preload: fileURLToPath(import.meta.url),
-      },
+      webPreferences: { sandbox: false },
       autoHideMenuBar: true,
     });
-    win.loadURL("resource:///main.html");
+    win.loadURL("resource://main/");
     win.webContents.openDevTools();
   };
-
+  protocol.registerSchemesAsPrivileged([
+    { scheme: "resource", privileges: { standard: true } },
+  ]);
   app.whenReady().then(() => {
     protocol.handle("resource", async (req) => {
       console.log(req.url);
-      if (req.url === "resource:///main.html") {
+      if (req.url === "resource://main/") {
         const type = "text/html; charset=utf-8";
         return new Response(new Blob([pageHtml], { type }));
       }
-      if (req.url === "resource:///index.js") {
+      if (req.url === "resource://main/index.js") {
         const buffer = await fsp.readFile(import.meta.filename);
         const type = "text/javascript; charset=utf-8";
         return new Response(new Blob([buffer], { type }));
@@ -1352,10 +1334,9 @@ const electronMain = async () => {
       return new Response(new Blob(["not found"], { type: "text/plain" }));
     });
     createWindow();
-    // mac
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
+        createWindow(); // for macOS, see https://www.electronjs.org/docs/latest/tutorial/quick-start
       }
     });
   });
@@ -1364,12 +1345,14 @@ const electronMain = async () => {
       app.quit();
     }
   });
-};
+}
 
 // inElectron()
 
 if (globalThis.document) {
   pageMain();
+} else if (process?.versions?.electron) {
+  // electronMain();
 } else {
   serverMain();
 }
