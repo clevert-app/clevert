@@ -8,34 +8,6 @@ import zlib from "node:zlib";
 import stream from "node:stream";
 // import module from "node:module";
 
-/**
- * Assert the value is true, or throw an error. Like "node:assert", but cross platform.
- * @param {any} value
- * @param {any} [info]
- * @returns {asserts value}
- */
-const assert = (value, info) => {
-  if (!value) {
-    throw new Error(info ?? "assertion failed");
-  }
-};
-
-/**
- * Returns a debounced version of the input function.
- * @param {any} f
- * @param {number} delay
- * @return {any}
- */
-const debounce = (f, delay) => {
-  let timer;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      f(...args);
-    }, delay);
-  };
-};
-
 // https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js#L40
 // https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
 
@@ -200,9 +172,36 @@ const debounce = (f, delay) => {
 }} GetStatusResponseEvent
 */
 
+/**
+ * Assert the value is true, or throw an error. Like "node:assert", but cross platform.
+ * @param {any} value
+ * @param {any} [info]
+ * @returns {asserts value}
+ */
+const assert = (value, info) => {
+  if (!value) {
+    throw new Error(info ?? "assertion failed");
+  }
+};
+
+/**
+ * Returns a debounced version of the input function.
+ * @param {any} f
+ * @param {number} delay
+ * @return {any}
+ */
+const debounce = (f, delay) => {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      f(...args);
+    }, delay);
+  };
+};
+
 const css = String.raw;
 const html = String.raw;
-
 const pageCss = css`
   /* 约定，需要显示和隐藏的东西，默认显示，有 off 才隐藏 */
   /* 这里是临时的做法，省得写 xxx.off */
@@ -248,7 +247,6 @@ const pageCss = css`
     background: #777f;
   }
 `;
-
 const pageHtml = html`
   <!DOCTYPE html>
   <head>
@@ -265,10 +263,7 @@ const pageHtml = html`
   </head>
   <body></body>
 `;
-
-// 立刻返回 id
-
-const pageMain = async () => {
+if (globalThis.document) {
   // $tasks
   const $tasks = document.createElement("div");
   document.body.appendChild($tasks);
@@ -596,9 +591,52 @@ const pageMain = async () => {
   {
     $market.classList.remove("off");
   }
-};
+} else {
+  // todo: first, init the config store
 
-const serverMain = async () => {
+  // todo: auto try listening port, then use the port in electron. avoid using electron features
+
+  // may need to pay attention about the race condition?
+  const url = new Promise((resolve) => {
+    resolve("http://127.0.0.1:9393");
+  });
+  if (process?.versions?.electron && !process?.env?.ELECTRON_RUN_AS_NODE) {
+    import("electron").then(async (electron) => {
+      // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
+      // electron /tmp/vsc/VSCode-linux-x64/resources/app/out/main.js
+      const { app, BrowserWindow, nativeTheme } = electron;
+      app.commandLine.appendSwitch("no-sandbox");
+      app.commandLine.appendSwitch("disable-gpu-sandbox");
+      const createWindow = async () => {
+        const win = new BrowserWindow({
+          title: "clevert",
+          webPreferences: {
+            sandbox: false,
+            enableWebSQL: false,
+            spellcheck: false,
+          },
+          autoHideMenuBar: true,
+          backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
+        });
+        win.loadURL(await url);
+      };
+      app.whenReady().then(async () => {
+        createWindow();
+        app.on("activate", () => {
+          if (BrowserWindow.getAllWindows().length === 0) {
+            createWindow();
+          }
+        });
+      });
+      app.on("window-all-closed", () => {
+        if (process.platform !== "darwin") {
+          app.quit();
+        }
+      });
+    });
+    // https://github.com/mawie81/electron-window-state | https://github.com/electron/electron/issues/526 | https://www.electronjs.org/zh/docs/latest/api/browser-window | https://www.electronjs.org/docs/latest/tutorial/quick-start
+  }
+
   // 后端保存，前端无状态
 
   // is in main
@@ -1299,72 +1337,6 @@ const serverMain = async () => {
 
   server.on("listening", () => console.log(server.address()));
   server.listen(9393, "127.0.0.1");
-};
-
-if (globalThis.document) {
-  pageMain();
-} else {
-  // todo: first, init the config store
-
-  // todo: auto try listening port, then use the port in electron. avoid using electron features
-
-  // may need to pay attention about the race condition?
-  const url = new Promise((resolve) => {
-    resolve("http://127.0.0.1:9393");
-  });
-  if (process?.versions?.electron && !process?.env?.ELECTRON_RUN_AS_NODE) {
-    import("electron").then(async (electron) => {
-      // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
-      // electron /tmp/vsc/VSCode-linux-x64/resources/app/out/main.js
-      const { app, BrowserWindow, nativeTheme } = electron;
-      const createWindow = async () => {
-        const win = new BrowserWindow({
-          title: "clevert",
-          webPreferences: {
-            sandbox: false,
-            enableWebSQL: false,
-            spellcheck: false,
-          },
-          autoHideMenuBar: true,
-          backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
-          // avoid flicker on windows
-          ...(process.platform === "win32" && {
-            titleBarStyle: "hidden",
-            titleBarOverlay: nativeTheme.shouldUseDarkColors
-              ? { color: "#000", symbolColor: "#fff" }
-              : true,
-          }),
-        });
-        win.loadURL("https://kkocdko.site/toy/realpha");
-        // const examplePage = `<!DOCTYPE html><head><meta name="color-scheme" content="dark"></head><h2>fuck</h2>`;
-        // win.loadURL("data:text/html," + encodeURIComponent(examplePage));
-        // win.loadURL(await url);
-      };
-      app.commandLine.appendSwitch("no-sandbox");
-      app.commandLine.appendSwitch("disable-gpu-sandbox");
-      // app.commandLine.appendSwitch("ozone-platform", "wayland");
-      // app.commandLine.appendSwitch("enable-features", "UseOzonePlatform");
-      // app.commandLine.appendSwitch("gtk-version", "4");
-      // app.commandLine.appendSwitch("ozone-platform-hint", "wayland");
-      // app.commandLine.appendSwitch("enable-wayland-ime"); // https://github.com/electron/electron/issues/33662
-      app.whenReady().then(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0)); // avoid flicker // https://github.com/electron/electron/issues/42523
-        createWindow();
-        app.on("activate", () => {
-          if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-          }
-        });
-      });
-      app.on("window-all-closed", () => {
-        if (process.platform !== "darwin") {
-          app.quit();
-        }
-      });
-    });
-    // https://github.com/mawie81/electron-window-state | https://github.com/electron/electron/issues/526 | https://www.electronjs.org/zh/docs/latest/api/browser-window | https://www.electronjs.org/docs/latest/tutorial/quick-start
-  }
-  // serverMain();
 }
 
 /*
