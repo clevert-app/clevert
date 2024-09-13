@@ -1,4 +1,5 @@
 // @ts-check
+/// <reference lib="esnext" />
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -6,12 +7,7 @@ import http from "node:http";
 import events from "node:events";
 import zlib from "node:zlib";
 import stream from "node:stream";
-// import module from "node:module";
-
-// https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js#L40
-// https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
-
-// /** @type {1} */ (process.exit());
+import util from "node:util";
 
 /**
 @typedef {
@@ -197,6 +193,28 @@ const debounce = (f, delay) => {
     timer = setTimeout(() => {
       f(...args);
     }, delay);
+  };
+};
+
+/**
+ * Only allow one waiting task. For example: `{1} => {1}_2 => {1}_3 => {3}` .
+ * @param {any} f
+ * @return {any}
+ */
+const bleeding = (f) => {
+  let waiting = null;
+  return async (...args) => {
+    const needSpawnNow = !waiting;
+    waiting = () => f(...args);
+    if (needSpawnNow) {
+      while (waiting) {
+        let previous = waiting;
+        await waiting();
+        if (waiting === previous) {
+          waiting = null;
+        }
+      }
+    }
   };
 };
 
@@ -595,45 +613,49 @@ if (globalThis.document) {
   // is in main
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
-  const PATH_CONFIG = "./temp/config.jsonc";
+  const PATH_CONFIG = "./temp/config.json";
   await fsp.mkdir(PATH_EXTENSIONS, { recursive: true });
   await fsp.mkdir(PATH_CACHE, { recursive: true });
 
   // todo: first, init the config store
   // 后端保存，前端无状态
-  const openJsoncBinding = async (filePath) => {
-    // 可以很快地 parse，然后快速异步写入？自己写一个实现！用 proxy
-    // 首先，用正则 strip 掉注释和尾随逗号，然后 parse 之。
-    // 编辑的时候用正则替换！如果找不到就插入
-    // 要支持嵌套
-    // https://github.com/microsoft/node-jsonc-parser
-    // 读写是同步的，打开肯定是异步的，因为需要保证后续能直接读写
-    const file = await fs.promises.open("config.jsonc", "r+");
-    let text = (await file.readFile()).toString();
-    return new Proxy(JSON.parse(text.replace(/a/g, "")), {
-      get(target, p, _) {},
+  const openJsonBinding = async (filePath) => {
+    // open must be async because we should ensure the field read/write is sync
+    const file = await fs.promises.open(filePath, "r+"); // we do not care about the `.close`
+    const syncToFile = bleeding(async () => {
+      const data = JSON.stringify(ret, null, 2);
+      const { bytesWritten } = await file.write(data, 0); // do not use `.writeFile`
+      await file.truncate(bytesWritten); // write then truncate, do not reverse
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // util.
     });
+    const ret = new Proxy(JSON.parse((await file.readFile()).toString()), {
+      set(obj, key, value) {
+        obj[key] = Object.isExtensible(value) ? new Proxy(value, this) : value;
+        syncToFile();
+        return true;
+      },
+      deleteProperty(obj, key) {
+        delete obj[key];
+        syncToFile();
+        return true;
+      },
+    });
+    const recursiveProxy = (obj) => {
+      for (const key in obj) {
+        if (Object.isExtensible(obj[key])) {
+          obj[key] = obj[key];
+          recursiveProxy(obj[key]);
+        }
+      }
+    };
+    recursiveProxy(ret);
+    return ret;
   };
-  const jb = openJsoncBinding("config.jsonc");
-  const config = new Proxy(
-    { a: 1 },
-    /** @type {ProxyHandler | any} */ ({
-      _prefix: "",
-      _file: fs.promises.open("config.jsonc"),
-      set(target, p, newValue, _) {
-        target[p] = Object.isExtensible(newValue)
-          ? new Proxy(newValue, { ...this, _prefix: this._prefix + "." + p })
-          : newValue;
-        // todo: edit the file
-        return true;
-      },
-      deleteProperty(target, p) {
-        delete target[p];
-        // todo: edit the file
-        return true;
-      },
-    })
-  );
+  const jb = openJsonBinding("config.json");
+
+  /** @type {0} */ (process.exit());
+
   // we use the ".jsonc" extension name because of https://github.com/microsoft/vscode/blob/1.93.1/extensions/json/package.json#L54
 
   const serverPort = {}; // usage: `serverPort.set(1234); await serverPort.value`. like Promise.withResolvers
@@ -1464,6 +1486,13 @@ import { hello } from "a:main";
 console.log({ hello });
 console.log(import.meta.url);
 */
+
+// import module from "node:module";
+
+// https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js#L40
+// https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
+
+// /** @type {0} */ (process.exit());
 
 // type Boxify<T> = { [K in keyof T]: Box<T> };
 // let c = {};
