@@ -592,14 +592,49 @@ if (globalThis.document) {
     $market.classList.remove("off");
   }
 } else {
-  // todo: first, init the config store
-  // 后端保存，前端无状态
-
   // is in main
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
+  const PATH_CONFIG = "./temp/config.jsonc";
   await fsp.mkdir(PATH_EXTENSIONS, { recursive: true });
   await fsp.mkdir(PATH_CACHE, { recursive: true });
+
+  // todo: first, init the config store
+  // 后端保存，前端无状态
+  const openJsoncBinding = async (filePath) => {
+    // 可以很快地 parse，然后快速异步写入？自己写一个实现！用 proxy
+    // 首先，用正则 strip 掉注释和尾随逗号，然后 parse 之。
+    // 编辑的时候用正则替换！如果找不到就插入
+    // 要支持嵌套
+    // https://github.com/microsoft/node-jsonc-parser
+    // 读写是同步的，打开肯定是异步的，因为需要保证后续能直接读写
+    const file = await fs.promises.open("config.jsonc", "r+");
+    let text = (await file.readFile()).toString();
+    return new Proxy(JSON.parse(text.replace(/a/g, "")), {
+      get(target, p, _) {},
+    });
+  };
+  const jb = openJsoncBinding("config.jsonc");
+  const config = new Proxy(
+    { a: 1 },
+    /** @type {ProxyHandler | any} */ ({
+      _prefix: "",
+      _file: fs.promises.open("config.jsonc"),
+      set(target, p, newValue, _) {
+        target[p] = Object.isExtensible(newValue)
+          ? new Proxy(newValue, { ...this, _prefix: this._prefix + "." + p })
+          : newValue;
+        // todo: edit the file
+        return true;
+      },
+      deleteProperty(target, p) {
+        delete target[p];
+        // todo: edit the file
+        return true;
+      },
+    })
+  );
+  // we use the ".jsonc" extension name because of https://github.com/microsoft/vscode/blob/1.93.1/extensions/json/package.json#L54
 
   const serverPort = {}; // usage: `serverPort.set(1234); await serverPort.value`. like Promise.withResolvers
   serverPort.value = new Promise((resolve) => (serverPort.set = resolve));
@@ -613,14 +648,14 @@ if (globalThis.document) {
       const createWindow = async () => {
         const win = new BrowserWindow({
           title: "clevert",
+          autoHideMenuBar: true,
+          backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
           webPreferences: {
             sandbox: false,
             spellcheck: false,
-            // zoomFactor: 2,
           },
-          autoHideMenuBar: true,
-          backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
         });
+        // todo: restore windows size // https://github.com/electron/electron/issues/526 |  https://github.com/mawie81/electron-window-state
         win.loadURL("http://127.0.0.1:" + (await serverPort.value));
       };
       app.whenReady().then(async () => {
@@ -638,7 +673,6 @@ if (globalThis.document) {
         }
       });
     });
-    // https://github.com/mawie81/electron-window-state | https://github.com/electron/electron/issues/526 | https://www.electronjs.org/zh/docs/latest/api/browser-window | https://www.electronjs.org/docs/latest/tutorial/quick-start
   }
 
   /** @type {Platform} */
@@ -1329,8 +1363,7 @@ if (globalThis.document) {
     r.end();
   });
 
-  // todo: read from config store
-  let port = 9393;
+  let port = 9393; // todo: read from config store
   server.on("listening", () => {
     serverPort.set(port);
     console.log(server.address());
