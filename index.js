@@ -639,25 +639,6 @@ if (globalThis.document) {
     recursiveProxy(ret);
     return ret;
   };
-  const _test = async () => {
-    await fsp.writeFile("config.json", '{"a":1.2}');
-    const jm = await openJsonMmap("config.json");
-    if (jm.a !== 1.2) {
-      throw new Error("assert error");
-    }
-    jm.a = 3.4;
-    jm.b = { c: { d: "e" } };
-    jm.b.c.f = null;
-    jm.b.c.g = [];
-    jm.b.c.g.push(5);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const result = (await fsp.readFile("config.json")).toString();
-    const expect = JSON.stringify(jm, null, 2) + "\n";
-    if (result !== expect) {
-      console.error("result !== expect", { result, expect });
-      throw new Error("assert error");
-    }
-  };
   const jm = await openJsonMmap("config.json");
   jm.c = { d: { f: 4 } };
 
