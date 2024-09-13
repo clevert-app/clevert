@@ -1301,60 +1301,70 @@ const serverMain = async () => {
   server.listen(9393, "127.0.0.1");
 };
 
-if (process?.versions?.electron) {
-  // curl -O -L https://registry.npmmirror.com/electron/32.0.2/files/electron.d.ts
-  /** @import { Electron } from "./electron.d.ts" */
-  const { app, protocol, BrowserWindow } = await import("electron");
-  const createWindow = () => {
-    const win = new BrowserWindow({
-      width: 1280,
-      height: 720,
-      title: "clevert",
-      webPreferences: { sandbox: false },
-      autoHideMenuBar: true,
-    });
-    win.loadURL("resource://main/");
-    win.webContents.openDevTools();
-  };
-  protocol.registerSchemesAsPrivileged([
-    { scheme: "resource", privileges: { standard: true } },
-  ]);
-  app.whenReady().then(() => {
-    protocol.handle("resource", async (req) => {
-      console.log(req.url);
-      if (req.url === "resource://main/") {
-        const type = "text/html; charset=utf-8";
-        return new Response(new Blob([pageHtml], { type }));
-      }
-      if (req.url === "resource://main/index.js") {
-        const buffer = await fsp.readFile(import.meta.filename);
-        const type = "text/javascript; charset=utf-8";
-        return new Response(new Blob([buffer], { type }));
-      }
-      return new Response(new Blob(["not found"], { type: "text/plain" }));
-    });
-    createWindow();
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow(); // for macOS, see https://www.electronjs.org/docs/latest/tutorial/quick-start
-      }
-    });
-  });
-  app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") {
-      app.quit();
-    }
-  });
-}
-
-// inElectron()
-
 if (globalThis.document) {
   pageMain();
-} else if (process?.versions?.electron) {
-  // electronMain();
 } else {
-  serverMain();
+  // todo: first, init the config store
+
+  // todo: auto try listening port, then use the port in electron. avoid using electron features
+
+  // may need to pay attention about the race condition?
+  const url = new Promise((resolve) => {
+    resolve("http://127.0.0.1:9393");
+  });
+  if (process?.versions?.electron && !process?.env?.ELECTRON_RUN_AS_NODE) {
+    import("electron").then(async (electron) => {
+      // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
+      // electron /tmp/vsc/VSCode-linux-x64/resources/app/out/main.js
+      const { app, BrowserWindow, nativeTheme } = electron;
+      const createWindow = async () => {
+        const win = new BrowserWindow({
+          title: "clevert",
+          webPreferences: {
+            sandbox: false,
+            enableWebSQL: false,
+            spellcheck: false,
+          },
+          autoHideMenuBar: true,
+          backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
+          // avoid flicker on windows
+          ...(process.platform === "win32" && {
+            titleBarStyle: "hidden",
+            titleBarOverlay: nativeTheme.shouldUseDarkColors
+              ? { color: "#000", symbolColor: "#fff" }
+              : true,
+          }),
+        });
+        win.loadURL("https://kkocdko.site/toy/realpha");
+        // const examplePage = `<!DOCTYPE html><head><meta name="color-scheme" content="dark"></head><h2>fuck</h2>`;
+        // win.loadURL("data:text/html," + encodeURIComponent(examplePage));
+        // win.loadURL(await url);
+      };
+      app.commandLine.appendSwitch("no-sandbox");
+      app.commandLine.appendSwitch("disable-gpu-sandbox");
+      // app.commandLine.appendSwitch("ozone-platform", "wayland");
+      // app.commandLine.appendSwitch("enable-features", "UseOzonePlatform");
+      // app.commandLine.appendSwitch("gtk-version", "4");
+      // app.commandLine.appendSwitch("ozone-platform-hint", "wayland");
+      // app.commandLine.appendSwitch("enable-wayland-ime"); // https://github.com/electron/electron/issues/33662
+      app.whenReady().then(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0)); // avoid flicker // https://github.com/electron/electron/issues/42523
+        createWindow();
+        app.on("activate", () => {
+          if (BrowserWindow.getAllWindows().length === 0) {
+            createWindow();
+          }
+        });
+      });
+      app.on("window-all-closed", () => {
+        if (process.platform !== "darwin") {
+          app.quit();
+        }
+      });
+    });
+    // https://github.com/mawie81/electron-window-state | https://github.com/electron/electron/issues/526 | https://www.electronjs.org/zh/docs/latest/api/browser-window | https://www.electronjs.org/docs/latest/tutorial/quick-start
+  }
+  // serverMain();
 }
 
 /*
@@ -1441,17 +1451,11 @@ console.log(import.meta.url);
 // type Boxify<T> = { [K in keyof T]: Box<T> };
 // let c = {};
 
+// https://medium.com/@felixrieseberg/javascript-on-the-desktop-fast-and-slow-2b744dfb8b55
 // https://www.typescriptlang.org/docs/handbook/jsdoc-supported-types.html
-// https://apple.stackexchange.com/q/420494/ # macos arm64 vm
-// https://github.com/orgs/community/discussions/69211#discussioncomment-7941899 # macos arm64 ci free
 // https://registry.npmmirror.com/binary.html?path=electron/
-// https://registry.npmmirror.com/-/binary/electron/v30.0.1/electron-v30.0.1-linux-x64.zip
-// /home/kkocdko/misc/res/electron-v30.0.1-linux-x64/electron
-
-// core -> extension -> action -> profile
-
-// mkdir -p node_modules/electron ; dl_prefix="https://registry.npmmirror.com/electron/30.0.2/files" ; curl -o node_modules/electron/electron.d.ts -L $dl_prefix/electron.d.ts -o node_modules/electron/package.json -L $dl_prefix/package.json
 // http://127.0.0.1:9439/extensions/zcodecs/index.js
 // /home/kkocdko/misc/code/clevert/temp/_test_res/i
 
+// core -> extension -> action -> profile
 // 暂时先用内置 mirror 列表，以后可以考虑国内放一个或多个固定地址来存 mirror 的列表

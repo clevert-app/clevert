@@ -1,11 +1,11 @@
 {
   "name": "clevert",
-  "version": "0.1.1",
-  "scripts": {
-    "start": "exit ; python -m http.server -b 127.0.0.1 9439 > /dev/null 2>&1 & ; clear ; node --trace-uncaught index.js ; electron index.js --no-sandbox"
-  },
+  "version": "0.1.2",
   "type": "module",
   "files": [
     "index.js"
-  ]
+  ],
+  "scripts": {
+    "start": "exit ; python -m http.server -b 127.0.0.1 9439 > /dev/null 2>&1 & ; clear ; node --trace-uncaught index.js ; electron index.js"
+  }
 }

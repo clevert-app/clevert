@@ -63,6 +63,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [x] zcodecs 合并 ect, webp, jpegxl
 - [x] 完善 action 执行逻辑
 - [x] 执行进度和扩展安装进度展示
+- [ ] config storage
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 多弄一个扩展，展示用，一共至少要两个吧
 - [ ] CSS 初步
@@ -86,6 +87,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 
 ## 扩展灵感
 
+- https://v2ex.com/t/1073426#reply32
 - https://v2ex.com/t/1065469
 - https://v2ex.com/t/1059035#reply52
 - https://v2ex.com/t/984548
