@@ -262,7 +262,7 @@ const pageHtml = html`
   </head>
   <body></body>
 `;
-if (globalThis.document) {
+const pageMain = async () => {
   // $tasks
   const $tasks = document.createElement("div");
   document.body.appendChild($tasks);
@@ -590,7 +590,8 @@ if (globalThis.document) {
   {
     $market.classList.remove("off");
   }
-} else {
+};
+const serverMain = async () => {
   // is in main
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
@@ -1380,6 +1381,11 @@ if (globalThis.document) {
     });
   });
   server.listen(port, "127.0.0.1");
+};
+if (globalThis.document) {
+  pageMain();
+} else {
+  serverMain(); // wrap it in function instead of top-level await, see https://github.com/electron/electron/issues/40719
 }
 
 /*
