@@ -7,7 +7,6 @@ import http from "node:http";
 import events from "node:events";
 import zlib from "node:zlib";
 import stream from "node:stream";
-import util from "node:util";
 
 /**
 @typedef {
@@ -597,14 +596,21 @@ if (globalThis.document) {
 
   // todo: first, init the config store
   // 后端保存，前端无状态
-  const openJsonBinding = async (filePath) => {
+
+  /**
+   * Open a json file and returns mapping object.
+   * @param {any} path
+   * @return {Promise<any>}
+   */
+  const openJsonMmap = async (path) => {
     // open must be async because we should ensure the field read/write is sync
-    const file = await fs.promises.open(filePath, "r+"); // we do not care about the `.close`
+    await fsp.access(path).catch(() => fsp.writeFile(path, "{}"));
+    const file = await fsp.open(path, "r+"); // we do not care about the `.close`
     let locked = false;
     const syncToFile = debounce(async () => {
       if (locked) return syncToFile(); // avoid race, see docs of `.write`
       locked = true;
-      const data = JSON.stringify(ret, null, 2);
+      const data = JSON.stringify(ret, null, 2) + "\n";
       const { bytesWritten } = await file.write(data, 0); // do not use `.writeFile`
       await file.truncate(bytesWritten); // write then truncate, do not reverse
       locked = false;
@@ -612,6 +618,7 @@ if (globalThis.document) {
     const ret = new Proxy(JSON.parse((await file.readFile()).toString()), {
       set(obj, key, value) {
         obj[key] = Object.isExtensible(value) ? new Proxy(value, this) : value;
+        recursiveProxy(obj[key]);
         syncToFile();
         return true;
       },
@@ -632,8 +639,29 @@ if (globalThis.document) {
     recursiveProxy(ret);
     return ret;
   };
-  const jb = openJsonBinding("config.json");
+  const _test = async () => {
+    await fsp.writeFile("config.json", '{"a":1.2}');
+    const jm = await openJsonMmap("config.json");
+    if (jm.a !== 1.2) {
+      throw new Error("assert error");
+    }
+    jm.a = 3.4;
+    jm.b = { c: { d: "e" } };
+    jm.b.c.f = null;
+    jm.b.c.g = [];
+    jm.b.c.g.push(5);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const result = (await fsp.readFile("config.json")).toString();
+    const expect = JSON.stringify(jm, null, 2) + "\n";
+    if (result !== expect) {
+      console.error("result !== expect", { result, expect });
+      throw new Error("assert error");
+    }
+  };
+  const jm = await openJsonMmap("config.json");
+  jm.c = { d: { f: 4 } };
 
+  await new Promise((resolve) => setTimeout(resolve, 5000));
   /** @type {0} */ (process.exit());
 
   // we use the ".jsonc" extension name because of https://github.com/microsoft/vscode/blob/1.93.1/extensions/json/package.json#L54
