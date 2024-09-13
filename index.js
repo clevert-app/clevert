@@ -593,17 +593,20 @@ if (globalThis.document) {
   }
 } else {
   // todo: first, init the config store
+  // 后端保存，前端无状态
 
-  // todo: auto try listening port, then use the port in electron. avoid using electron features
+  // is in main
+  const PATH_EXTENSIONS = "./temp/extensions";
+  const PATH_CACHE = "./temp/cache";
+  await fsp.mkdir(PATH_EXTENSIONS, { recursive: true });
+  await fsp.mkdir(PATH_CACHE, { recursive: true });
 
-  // may need to pay attention about the race condition?
-  const url = new Promise((resolve) => {
-    resolve("http://127.0.0.1:9393");
-  });
+  const serverPort = {}; // usage: `serverPort.set(1234); await serverPort.value`. like Promise.withResolvers
+  serverPort.value = new Promise((resolve) => (serverPort.set = resolve));
+
   if (process?.versions?.electron && !process?.env?.ELECTRON_RUN_AS_NODE) {
+    // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
     import("electron").then(async (electron) => {
-      // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
-      // electron /tmp/vsc/VSCode-linux-x64/resources/app/out/main.js
       const { app, BrowserWindow, nativeTheme } = electron;
       app.commandLine.appendSwitch("no-sandbox");
       app.commandLine.appendSwitch("disable-gpu-sandbox");
@@ -612,15 +615,16 @@ if (globalThis.document) {
           title: "clevert",
           webPreferences: {
             sandbox: false,
-            enableWebSQL: false,
             spellcheck: false,
+            // zoomFactor: 2,
           },
           autoHideMenuBar: true,
           backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
         });
-        win.loadURL(await url);
+        win.loadURL("http://127.0.0.1:" + (await serverPort.value));
       };
       app.whenReady().then(async () => {
+        await new Promise((resolve) => setTimeout(resolve)); // workaround to reduce flicker in linux
         createWindow();
         app.on("activate", () => {
           if (BrowserWindow.getAllWindows().length === 0) {
@@ -630,20 +634,12 @@ if (globalThis.document) {
       });
       app.on("window-all-closed", () => {
         if (process.platform !== "darwin") {
-          app.quit();
+          app.quit(); // https://github.com/electron/electron/blob/v32.1.0/docs/tutorial/quick-start.md#recap
         }
       });
     });
     // https://github.com/mawie81/electron-window-state | https://github.com/electron/electron/issues/526 | https://www.electronjs.org/zh/docs/latest/api/browser-window | https://www.electronjs.org/docs/latest/tutorial/quick-start
   }
-
-  // 后端保存，前端无状态
-
-  // is in main
-  const PATH_EXTENSIONS = "./temp/extensions";
-  const PATH_CACHE = "./temp/cache";
-  await fsp.mkdir(PATH_EXTENSIONS, { recursive: true });
-  await fsp.mkdir(PATH_CACHE, { recursive: true });
 
   /** @type {Platform} */
   const CURRENT_PLATFORM = false
@@ -656,8 +652,9 @@ if (globalThis.document) {
     ? "mac-arm64"
     : /** @type {never} */ (assert(false, "unsupported platform"));
 
+  // these controllers will not be delete forever
   /** @type {Map<string, RunActionController>} */
-  const runActionControllers = new Map(); // 永远不删除
+  const runActionControllers = new Map();
   /** @type {Map<string, InstallExtensionController>} */
   const installExtensionControllers = new Map();
 
@@ -666,14 +663,11 @@ if (globalThis.document) {
    * @param {http.IncomingMessage} req
    */
   const readReq = async (req) => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", () => {
-        resolve(JSON.parse(body));
-      });
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => resolve(JSON.parse(body)));
+      req.on("error", (error) => reject(error));
     });
   };
 
@@ -1335,8 +1329,26 @@ if (globalThis.document) {
     r.end();
   });
 
-  server.on("listening", () => console.log(server.address()));
-  server.listen(9393, "127.0.0.1");
+  // todo: read from config store
+  let port = 9393;
+  server.on("listening", () => {
+    serverPort.set(port);
+    console.log(server.address());
+    // todo: save into config store
+  });
+  server.on("error", (error) => {
+    port++;
+    console.log(
+      "retrying next port ",
+      port,
+      " , server error = " + JSON.stringify(error)
+    );
+    setTimeout(() => {
+      server.close();
+      server.listen(port, "127.0.0.1");
+    });
+  });
+  server.listen(port, "127.0.0.1");
 }
 
 /*

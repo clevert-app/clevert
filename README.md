@@ -63,7 +63,8 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [x] zcodecs 合并 ect, webp, jpegxl
 - [x] 完善 action 执行逻辑
 - [x] 执行进度和扩展安装进度展示
-- [ ] config storage
+- [x] electron 和流程重构，自动尝试新端口
+- [ ] config store
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 多弄一个扩展，展示用，一共至少要两个吧
 - [ ] CSS 初步
