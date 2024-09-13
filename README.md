@@ -109,6 +109,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - https://github.com/HandBrake/HandBrake
 - https://github.com/ArtifexSoftware/mupdf
 - https://v2ex.com/t/1067501#reply5
+- https://github.com/hzwer/Practical-RIFE/
 
 - https://github.com/zincsearch/zincsearch
 - https://github.com/meilisearch/meilisearch

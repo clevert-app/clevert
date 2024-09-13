@@ -606,7 +606,6 @@ if (globalThis.document) {
    * @param {fs.PathLike} path
    */
   const openJsonMmap = async (path) => {
-    // open must be async because we should ensure the field read/write is sync
     await fsp.access(path).catch(() => fsp.writeFile(path, "{}")); // create if not exist
     const file = await fsp.open(path, "r+"); // we do not care about the `.close`
     let locked = false;
@@ -647,7 +646,7 @@ if (globalThis.document) {
     // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
     import("electron").then(async (electron) => {
       const { app, BrowserWindow, nativeTheme } = electron;
-      app.commandLine.appendSwitch("no-sandbox"); // question: 时机问题？ chromium 到底是什么时候启动？
+      app.commandLine.appendSwitch("no-sandbox"); // bug: 导致 devtool 打不开提示 /dev/shm 无法访问。 question: 时机问题？ chromium 到底是什么时候启动？
       app.commandLine.appendSwitch("disable-gpu-sandbox");
       const createWindow = async () => {
         const win = new BrowserWindow({
@@ -659,8 +658,10 @@ if (globalThis.document) {
             spellcheck: false,
           },
         });
-        // todo: restore windows size // https://github.com/electron/electron/issues/526 |  https://github.com/mawie81/electron-window-state
         win.loadURL("http://127.0.0.1:" + (await serverPort.value));
+        // todo: restore windows size // https://github.com/electron/electron/issues/526 |  https://github.com/mawie81/electron-window-state
+        // win.on("restore", () => {});
+        // win.getBounds();
       };
       app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve)); // workaround to reduce flicker in linux
@@ -821,7 +822,6 @@ if (globalThis.document) {
    * Exclude the static `import` declaration matches `regexp`. Will be `// excluded: import xxx form ...`.
    * @param {string} sourceCode
    * @param {RegExp} regexp
-   * @returns {string}
    */
   const excludeImports = (sourceCode, regexp) => {
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import
@@ -880,31 +880,25 @@ if (globalThis.document) {
   };
 
   /**
-   * Solve path, like path.resolve with support of home dir prefix.
-   *
+   * Solve path, like path.resolve, with support of home dir prefix `~/`.
    * ```js
-   * if (process.platform === "win32") {
-   *   assert(solvePath("C:\\a\\b", "c/d", "\\e") === "C:\\a\\b\\c\\d\\e");
-   *   assert(solvePath("C:\\a\\\\b", "c\\d", "..\\e") === "C:\\a\\b\\c\\e");
-   * } else {
-   *   assert(solvePath("a/b", "../c", "/d") === import.meta.dirname + "/a/c/d");
-   *   assert(solvePath("~/a//b", "c/d", "../e") === process.env.HOME + "/a/b/c/e");
-   * }
+   * // unix
+   * assert(solvePath("~/a/", "b/../c/d", "//e") === process.env.HOME + "/a/c/d/e");
+   * // windows
+   * assert(solvePath("C:\\a\\", "b\\../c/\\d", "\\\\e") === "C:\\a\\c\\d\\e"); // auto slash convert
    * ```
    * @param {...string} parts
-   * @returns {string}
    */
   const solvePath = (...parts) => {
     if (parts[0].startsWith("~")) {
-      parts[0] = parts[0].slice(1);
-      parts.unshift(/** @type {string} */ (process.env.HOME));
-      // process.env.USERPROFILE
+      parts[0] = process.env.HOME + parts[0].slice(1);
+      // todo: windows process.env.USERPROFILE
     }
     // we do not use path.resolve directy because we want to control absolute or not
     if (!path.isAbsolute(parts[0])) {
       parts.unshift(process.cwd());
     }
-    return path.join(...parts); // path.join will convert '\\' to '/' also, like path.resolve
+    return path.join(...parts);
   };
 
   /**
@@ -963,8 +957,8 @@ if (globalThis.document) {
       recursive: true,
     })) {
       if (!v.isFile()) continue;
-      const parentPath = /** @type {string} */ (v.parentPath ?? v.path); // https://nodejs.org/api/fs.html#class-fsdirent
-      await fsp.chmod(solvePath(parentPath, v.name), 0o777); // https://stackoverflow.com/a/20769157
+      await fsp.chmod(solvePath(v.parentPath, v.name), 0o777); // https://stackoverflow.com/a/20769157
+      // todo: what about windows?
     }
   };
 
