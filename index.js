@@ -165,34 +165,38 @@ import stream from "node:stream";
   id: string;
   error: any;
 }} GetStatusResponseEvent
+@typedef {{
+  windowWidth: number;
+  windowHeight: number;
+  windowMaximized: boolean;
+}} Config
 */
 
 /**
  * Assert the value is true, or throw an error. Like "node:assert", but cross platform.
- * @param {any} value
- * @param {any} [info]
  * @returns {asserts value}
  */
 const assert = (value, info = "assertion failed") => {
-  if (!value) {
-    throw new Error(info);
-  }
+  if (!value) throw new Error(info);
 };
 
 /**
  * Returns a debounced version of the input function.
- * @param {any} f
+ * @template {Function} T
+ * @param {T} f
  * @param {number} delay
- * @return {any}
+ * @return {T}
  */
 const debounce = (f, delay) => {
   let timer;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      f(...args);
-    }, delay);
-  };
+  return /** @type {any} */ (
+    (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        f(...args);
+      }, delay);
+    }
+  );
 };
 
 const css = String.raw;
@@ -598,13 +602,12 @@ if (globalThis.document) {
   // 后端保存，前端无状态
 
   /**
-   * Open a json file and returns mapping object.
-   * @param {any} path
-   * @return {Promise<any>}
+   * Open a json file and returns mapping object. Like [valtio](https://github.com/pmndrs/valtio).
+   * @param {fs.PathLike} path
    */
   const openJsonMmap = async (path) => {
     // open must be async because we should ensure the field read/write is sync
-    await fsp.access(path).catch(() => fsp.writeFile(path, "{}"));
+    await fsp.access(path).catch(() => fsp.writeFile(path, "{}")); // create if not exist
     const file = await fsp.open(path, "r+"); // we do not care about the `.close`
     let locked = false;
     const syncToFile = debounce(async () => {
@@ -616,44 +619,35 @@ if (globalThis.document) {
       locked = false;
     }, 50);
     const ret = new Proxy(JSON.parse((await file.readFile()).toString()), {
-      set(obj, key, value) {
-        obj[key] = Object.isExtensible(value) ? new Proxy(value, this) : value;
-        recursiveProxy(obj[key]);
+      set(obj, k, v) {
+        obj[k] = Object.isExtensible(v) ? new Proxy(v, this) : v;
+        touchProps(obj[k]); // supports recursive
         syncToFile();
         return true;
       },
-      deleteProperty(obj, key) {
-        delete obj[key];
+      deleteProperty(obj, k) {
+        delete obj[k];
         syncToFile();
         return true;
       },
     });
-    const recursiveProxy = (obj) => {
-      for (const key in obj) {
-        if (Object.isExtensible(obj[key])) {
-          obj[key] = obj[key];
-        }
-      }
+    const touchProps = (obj) => {
+      for (const k in obj) if (Object.isExtensible(obj[k])) obj[k] = obj[k]; // trigger `.set`
     };
-    recursiveProxy(ret);
+    touchProps(ret);
     return ret;
   };
-  const jm = await openJsonMmap("config.json");
-  jm.c = { d: { f: 4 } };
-
-  await new Promise((resolve) => setTimeout(resolve, 5000));
-  /** @type {0} */ (process.exit());
-
-  // we use the ".jsonc" extension name because of https://github.com/microsoft/vscode/blob/1.93.1/extensions/json/package.json#L54
+  const config = await openJsonMmap(PATH_CONFIG); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
 
   const serverPort = {}; // usage: `serverPort.set(1234); await serverPort.value`. like Promise.withResolvers
   serverPort.value = new Promise((resolve) => (serverPort.set = resolve));
 
+  // todo: ensure electron run as early as possible
   if (process?.versions?.electron && !process?.env?.ELECTRON_RUN_AS_NODE) {
     // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
     import("electron").then(async (electron) => {
       const { app, BrowserWindow, nativeTheme } = electron;
-      app.commandLine.appendSwitch("no-sandbox");
+      app.commandLine.appendSwitch("no-sandbox"); // question: 时机问题？ chromium 到底是什么时候启动？
       app.commandLine.appendSwitch("disable-gpu-sandbox");
       const createWindow = async () => {
         const win = new BrowserWindow({
