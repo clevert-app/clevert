@@ -196,28 +196,6 @@ const debounce = (f, delay) => {
   };
 };
 
-/**
- * Only allow one waiting task. For example: `{1} => {1}_2 => {1}_3 => {3}` .
- * @param {any} f
- * @return {any}
- */
-const bleeding = (f) => {
-  let waiting = null;
-  return async (...args) => {
-    const needSpawnNow = !waiting;
-    waiting = () => f(...args);
-    if (needSpawnNow) {
-      while (waiting) {
-        let previous = waiting;
-        await waiting();
-        if (waiting === previous) {
-          waiting = null;
-        }
-      }
-    }
-  };
-};
-
 const css = String.raw;
 const html = String.raw;
 const pageCss = css`
@@ -622,13 +600,15 @@ if (globalThis.document) {
   const openJsonBinding = async (filePath) => {
     // open must be async because we should ensure the field read/write is sync
     const file = await fs.promises.open(filePath, "r+"); // we do not care about the `.close`
-    const syncToFile = bleeding(async () => {
+    let locked = false;
+    const syncToFile = debounce(async () => {
+      if (locked) return syncToFile(); // avoid race, see docs of `.write`
+      locked = true;
       const data = JSON.stringify(ret, null, 2);
       const { bytesWritten } = await file.write(data, 0); // do not use `.writeFile`
       await file.truncate(bytesWritten); // write then truncate, do not reverse
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      // util.
-    });
+      locked = false;
+    }, 50);
     const ret = new Proxy(JSON.parse((await file.readFile()).toString()), {
       set(obj, key, value) {
         obj[key] = Object.isExtensible(value) ? new Proxy(value, this) : value;
