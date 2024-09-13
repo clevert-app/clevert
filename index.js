@@ -173,9 +173,9 @@ import stream from "node:stream";
  * @param {any} [info]
  * @returns {asserts value}
  */
-const assert = (value, info) => {
+const assert = (value, info = "assertion failed") => {
   if (!value) {
-    throw new Error(info ?? "assertion failed");
+    throw new Error(info);
   }
 };
 
@@ -632,7 +632,6 @@ if (globalThis.document) {
       for (const key in obj) {
         if (Object.isExtensible(obj[key])) {
           obj[key] = obj[key];
-          recursiveProxy(obj[key]);
         }
       }
     };
