@@ -178,6 +178,7 @@ const i18nRes = (() => {
   const zhcn = {
     title: () => "Clevert - 通用的文件转换平台",
   };
+  // todo: use llm to do translate
   return {
     "en-US": enus,
     "zh-CN": zhcn,
@@ -186,27 +187,28 @@ const i18nRes = (() => {
 
 /**
  * Assert the value is true, or throw an error. Like "node:assert", but cross platform.
- * @returns {asserts value}
+ * @type {{ (value: false, info?): never; (value, info?): asserts value; }}
  */
 const assert = (value, info = "assertion failed") => {
-  if (!value) throw new Error(info);
+  if (value) return /** @type {never} */ (true); // what the fuck
+  throw new Error(info);
 };
 
 /**
- * Returns a debounced version of the input function.
+ * Returns a debounced variant of the input function.
  * @template {Function} T
  * @param {T} f
- * @param {number} delay
- * @return {T}
+ * @param {number} ms
+ * @returns {T}
  */
-const debounce = (f, delay) => {
+const debounce = (f, ms) => {
   let timer;
   return /** @type {any} */ (
     (...args) => {
       clearTimeout(timer);
       timer = setTimeout(() => {
         f(...args);
-      }, delay);
+      }, ms);
     }
   );
 };
@@ -217,7 +219,7 @@ const debounce = (f, delay) => {
  */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const [html, css, js] = [String.raw, String.raw, String.raw];
+const [html, css] = [String.raw, String.raw];
 const pageCss = () => css`
   /* 约定，需要显示和隐藏的东西，默认显示，有 off 才隐藏 */
   /* 这里是临时的做法，省得写 xxx.off */
@@ -620,7 +622,8 @@ const pageMain = async () => {
   }
 };
 const serverMain = async () => {
-  const electronImport = import("electron"); // import electron as early as possible // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
+  const electronImport = import("electron"); // as early as possible // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _electron ; echo '{"name":"@types/electron"}' > _electron/package.json ; curl -o _electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron/electron.d.ts ; npm i -D ./_electron
+  electronImport.catch(() => {});
 
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
@@ -692,6 +695,10 @@ const serverMain = async () => {
 
   const serverPort = Promise.withResolvers();
 
+  const beforeQuit = async () => {
+    await sleep(100); // wait for config file sync (50ms), however ctrl+c still cause force exit
+  };
+
   const electronRun = electronImport.then(async (electron) => {
     const { app, BrowserWindow, nativeTheme, screen } = electron;
     app.commandLine.appendSwitch("no-sandbox"); // cause devtools error /dev/shm ... on linux
@@ -731,7 +738,7 @@ const serverMain = async () => {
     });
     app.on("window-all-closed", async () => {
       if (process.platform !== "darwin") {
-        await sleep(100); // wait for config file sync (50ms), however ctrl+c still cause force exit
+        await beforeQuit();
         app.quit(); // https://github.com/electron/electron/blob/v32.1.0/docs/tutorial/quick-start.md#recap
       }
     });
@@ -742,14 +749,14 @@ const serverMain = async () => {
 
   /** @type {Platform} */
   const CURRENT_PLATFORM = false
-    ? /** @type {never} */ (assert(false))
+    ? assert(false)
     : process.platform === "linux" && process.arch === "x64"
     ? "linux-x64"
     : process.platform === "win32" && process.arch === "x64"
     ? "win-x64"
     : process.platform === "darwin" && process.arch === "arm64"
     ? "mac-arm64"
-    : /** @type {never} */ (assert(false, "unsupported platform"));
+    : assert(false, "unsupported platform");
 
   // these controllers will not be delete forever
   /** @type {Map<string, RunActionController>} */
@@ -1394,6 +1401,14 @@ const serverMain = async () => {
         await sleep(1000); // loop interval, not SSE sending interval
       }
       r.end();
+      return;
+    }
+
+    if (r.req.url === "/quit") {
+      r.writeHead(200);
+      r.end();
+      await beforeQuit();
+      process.exit();
       return;
     }
 
