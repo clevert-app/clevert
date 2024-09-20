@@ -1287,26 +1287,7 @@ const serverMain = async () => {
           })()
         )
       );
-      /**
-       * See https://stackoverflow.com/q/40500490/
-       *
-       * ```js
-       * // create a promise that will reject after 200ms
-       * const p0 = new Promise((r, j) => setTimeout(() => j(1), 200));
-       * // now `p0` have a `catch`, if do not do so, nodejs UnhandledPromiseRejection,
-       * p0.catch((e) => console.log("> p0.catch: ", e));
-       * // the `p0.then` acturally create a new Promise
-       * const p1 = p0.then((e) => console.log("> p1 = p0.then: ", e));
-       * // so if you don't do this to catch `p1`, nodejs UnhandledPromiseRejection,
-       * const p2 = p1.catch((e) => console.log("> p2 = p1.catch = p0.then.catch: ", e));
-       * // the `p2` is `p1.catch`, so `p2.then` and `p2.finally` will both be executed
-       * p2.then((e) => console.log("> p2.then: ", e));
-       * p2.finally((e) => console.log("> p2.finally: ", e));
-       * // avoid nodejs exit
-       * await new Promise((r) => setTimeout(r, 999999));
-       * ```
-       */
-      const _catched = wait.catch(() => {});
+      wait.catch(() => {}); // avoid UnhandledPromiseRejection
       const beginTime = Math.trunc(Date.now() / 1000);
       runActionControllers.set(nextId(), {
         title: request.title,
