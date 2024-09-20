@@ -5,11 +5,27 @@ import path from "node:path";
 
 const cu = /** @type {ClevertUtils} */ (globalThis.clevertUtils);
 
-const C = globalThis.process && {
+const consts = globalThis.process && {
   exe: path.join(import.meta.dirname, "zcodecs"), // 这个不太好用依赖注入搞?因为 import.meta.url 只在当前文件中才能拿到正确的
 };
 
-// 暂时还没有需要 hook 或者依赖注入的地方
+const i18nRes = (() => {
+  const enus = {
+    description: () =>
+      "Includes ect, webp, jpeg-xl and other cutting-edge codecs",
+  };
+  /** @type {typeof enus} */
+  const zhcn = {
+    description: () => "包含了 ect，webp，jpeg-xl 等先进编码器",
+  };
+  // todo: use llm to do translate
+  return {
+    "en-US": enus,
+    "zh-CN": zhcn,
+  }; // thanks to vscode, typesafe-i18n and more // http://www.lingoes.net/en/translator/langcode.htm
+})();
+
+const i18n = i18nRes[cu.locale];
 
 // https://effectivetypescript.com/2023/09/27/closure-compiler/
 // https://github.com/microsoft/TypeScript/issues/41825
@@ -17,10 +33,10 @@ const C = globalThis.process && {
 
 // 设计成导出一整个的形式，单个单个导出没法做 type check
 export default /** @type {Extension} */ ({
-  id: "zcodecs", // 保证唯一，让商店去保证
+  id: "zcodecs", // 保证唯一，让商店去保证。以后商店上架就是在这里放个 json
   version: "0.1.0", // 必须遵循 https://semver.org
   name: "zcodecs name", // 以后可以做 i18n
-  description: "zcodecs description",
+  description: i18n.description(),
   dependencies: [], // 可以填写其他的 extension 的 id (这个功能需要扩展商店)（注意考虑 semver？）
   assets: [
     {
@@ -50,11 +66,6 @@ export default /** @type {Extension} */ ({
       ui: (profile) => {
         // 这个函数在前端跑，画界面
         // 不能用 select  multiple， 在移动端显示效果不一样
-        // <select  multiple>
-        // <option value="dog">Dog</option>
-        // <option value="cat">Cat</option>
-        // <option value="parrot">Parrot</option>
-        // </select>
         const css = String.raw;
         const $profile = document.createElement("div");
         $profile.classList.add("profile");
@@ -100,7 +111,7 @@ export default /** @type {Extension} */ ({
       execute: (profile, { input, output }) => {
         // 这个函数在后端跑，要求不 block 主线程，只能 async。如果要 block 请自行开 worker
         // 后续提供调用其他 action 的功能？
-        const child = child_process.spawn(C.exe, [
+        const child = child_process.spawn(consts.exe, [
           "cjpegli",
           input.main[0],
           output.main[0],

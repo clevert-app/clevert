@@ -339,7 +339,7 @@ const pageMain = async () => {
       $tips.textContent = "Success";
       r$profiles();
     } else if (e.kind === "install-extension-error") {
-      $tips.textContent = "Error: " + e.error;
+      $tips.textContent = "Error: " + JSON.stringify(e.error);
     } else {
       const /** @type {never} */ _ = e; // exhaustiveness
     }
