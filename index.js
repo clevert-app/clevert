@@ -7,6 +7,7 @@ import http from "node:http";
 import events from "node:events";
 import zlib from "node:zlib";
 import stream from "node:stream";
+import module from "node:module";
 
 /**
 @typedef {
@@ -214,9 +215,8 @@ const debounce = (f, delay) => {
  */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const css = String.raw;
-const html = String.raw;
-const pageCss = css`
+const [html, css, js] = [String.raw, String.raw, String.raw];
+const pageCss = () => css`
   /* 约定，需要显示和隐藏的东西，默认显示，有 off 才隐藏 */
   /* 这里是临时的做法，省得写 xxx.off */
   .off {
@@ -273,7 +273,7 @@ const pageHtml = (lang) => html`
       <!-- module script defer by default -->
       <script type="module" src="/index.js"></script>
       <style>
-        ${pageCss}
+        ${pageCss()}
       </style>
     </head>
     <body></body>
@@ -637,7 +637,7 @@ const serverMain = async () => {
       const { bytesWritten } = await file.write(data, 0); // do not use `.writeFile`
       await file.truncate(bytesWritten); // write then truncate, do not reverse
       locked = false;
-    }, 50);
+    }, 50); // 50ms is enough for most machines, and the JSON.stringify is sync which can delay the await sleep in electron's app.on("window-all-closed", ...)
     const ret = new Proxy(JSON.parse((await file.readFile()).toString()), {
       set(obj, k, v) {
         obj[k] = Object.isExtensible(v) ? new Proxy(v, this) : v;
@@ -665,6 +665,7 @@ const serverMain = async () => {
     locale: /** @type {keyof i18nRes} */ (
       Intl.DateTimeFormat().resolvedOptions().locale
     ),
+    serverPort: 9393,
   });
   /** @type {typeof defaultConfig} */
   const config = await openJsonMmap(PATH_CONFIG); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
@@ -699,8 +700,7 @@ const serverMain = async () => {
         win.maximize();
       }
       win.on("close", () => {
-        const primaryDisplay = screen.getPrimaryDisplay();
-        const workAreaSize = primaryDisplay.workAreaSize;
+        const workAreaSize = screen.getPrimaryDisplay().workAreaSize;
         const bounds = win.getBounds();
         config.windowWidth = Math.min(bounds.width, workAreaSize.width - 64);
         config.windowHeight = Math.min(bounds.height, workAreaSize.height - 64);
@@ -719,7 +719,7 @@ const serverMain = async () => {
     });
     app.on("window-all-closed", async () => {
       if (process.platform !== "darwin") {
-        await sleep(100); // wait for config file sync, however ctrl+c still cause force exit
+        await sleep(100); // wait for config file sync (50ms), however ctrl+c still cause force exit
         app.quit(); // https://github.com/electron/electron/blob/v32.1.0/docs/tutorial/quick-start.md#recap
       }
     });
@@ -864,6 +864,28 @@ const serverMain = async () => {
     return /** @type {Promise<string>} */(new Promise((resolve,reject)=>import("child_process").then(m=>
       m.exec(guid[process.platform], {}, (err,stdout, stderr) => err ? reject(err) : resolve(expose(stdout.toString()))))
     ));
+  };
+
+  /**
+   * Generate es module string from object.
+   * ```js
+   * const esmSource = obj2esm('import something from "whatever" ', {
+   *   arrow: () => console.log("arrow"),
+   *   // func() { console.log("func"); }, // illegal
+   * });
+   * console.log(esmSource);
+   * ```
+   * @param {string} prefix
+   */
+  const obj2esm = (prefix, obj) => {
+    let ret = prefix;
+    ret += "\n";
+    for (const k in obj) {
+      ret += "\nexport let " + k + " = "; // we don't care about `const` and `var`
+      ret += obj[k].toString();
+      ret += "\n";
+    }
+    return ret;
   };
 
   /**
@@ -1389,25 +1411,24 @@ const serverMain = async () => {
     r.end();
   });
 
-  let port = 9393; // todo: read from config store
   server.on("listening", () => {
-    serverPort.resolve(port);
+    serverPort.resolve(config.serverPort);
     console.log(server.address());
     // todo: save into config store
   });
   server.on("error", (error) => {
-    port++;
+    config.serverPort++;
     console.log(
       "retrying next port ",
-      port,
+      config.serverPort,
       " , server error = " + JSON.stringify(error)
     );
     setTimeout(() => {
       server.close();
-      server.listen(port, "127.0.0.1");
+      server.listen(config.serverPort, "127.0.0.1");
     });
   });
-  server.listen(port, "127.0.0.1");
+  server.listen(config.serverPort, "127.0.0.1");
 };
 if (globalThis.document) {
   pageMain();
@@ -1460,15 +1481,12 @@ const orders = dirProvider({
 /*
 //> a.mjs
 import { register } from "node:module";
-import { pathToFileURL } from "node:url";
-
 const resolverCode = `
   console.log(1);
   export async function initialize(...args) {
     console.log({ args });
     // Receives data from "register".
   }
-
   export async function load(url, context, nextLoad) {
     if (url.startsWith("a:")) {
       return ({
@@ -1481,11 +1499,6 @@ const resolverCode = `
     return nextLoad(url);
   }
 `;
-// const blob = new Blob([resolverCode], { type: "text/javascript" });
-// const url = URL.createObjectURL(blob);
-// register(url);
-// register(pathToFileURL("./b.mjs"));
-// const aa = await import("a:main");
 register("data:text/javascript," + encodeURIComponent(resolverCode));
 await import("./c.mjs");
 // https://nodejs.org/api/module.html#customization-hooks
@@ -1496,15 +1509,12 @@ console.log({ hello });
 console.log(import.meta.url);
 */
 
-// import module from "node:module";
-
 // https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js#L40
 // https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
 
 // /** @type {0} */ (process.exit());
 
 // type Boxify<T> = { [K in keyof T]: Box<T> };
-// let c = {};
 
 // https://medium.com/@felixrieseberg/javascript-on-the-desktop-fast-and-slow-2b744dfb8b55
 // https://www.typescriptlang.org/docs/handbook/jsdoc-supported-types.html
