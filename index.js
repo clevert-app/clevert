@@ -592,6 +592,20 @@ const pageMain = async () => {
   }
 };
 const serverMain = async () => {
+  const electronImport = import("electron"); // import electron as early as possible // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
+  /*
+  // test.js
+  console.time();
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  import("electron").then(async (electron) => {
+    const { app } = electron;
+    console.timeLog();
+    app.whenReady().then(() => {
+      console.timeLog();
+    });
+  });
+  */
+
   // is in main
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
@@ -642,43 +656,42 @@ const serverMain = async () => {
   const serverPort = {}; // usage: `serverPort.set(1234); await serverPort.value`. like Promise.withResolvers
   serverPort.value = new Promise((resolve) => (serverPort.set = resolve));
 
-  // todo: ensure electron run as early as possible
-  if (process?.versions?.electron && !process?.env?.ELECTRON_RUN_AS_NODE) {
-    // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
-    import("electron").then(async (electron) => {
-      const { app, BrowserWindow, nativeTheme } = electron;
-      app.commandLine.appendSwitch("no-sandbox"); // bug: 导致 devtool 打不开提示 /dev/shm 无法访问。 question: 时机问题？ chromium 到底是什么时候启动？
-      app.commandLine.appendSwitch("disable-gpu-sandbox");
-      const createWindow = async () => {
-        const win = new BrowserWindow({
-          title: "clevert",
-          autoHideMenuBar: true,
-          backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
-          webPreferences: {
-            sandbox: false,
-            spellcheck: false,
-          },
-        });
-        win.loadURL("http://127.0.0.1:" + (await serverPort.value));
-        // todo: restore windows size // https://github.com/electron/electron/issues/526 |  https://github.com/mawie81/electron-window-state
-        // win.on("restore", () => {});
-        // win.getBounds();
-      };
-      app.whenReady().then(async () => {
-        await new Promise((resolve) => setTimeout(resolve)); // workaround to reduce flicker in linux
-        createWindow();
-        app.on("activate", () => {
-          if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-          }
-        });
+  const electronRun = electronImport.then(async (electron) => {
+    const { app, BrowserWindow, nativeTheme } = electron;
+    app.commandLine.appendSwitch("no-sandbox"); // cause devtools error /dev/shm ... on linux
+    app.commandLine.appendSwitch("disable-gpu-sandbox");
+    const createWindow = async () => {
+      const win = new BrowserWindow({
+        title: "clevert",
+        autoHideMenuBar: true,
+        backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
+        webPreferences: {
+          sandbox: false,
+          spellcheck: false,
+        },
       });
-      app.on("window-all-closed", () => {
-        if (process.platform !== "darwin") {
-          app.quit(); // https://github.com/electron/electron/blob/v32.1.0/docs/tutorial/quick-start.md#recap
+      win.loadURL("http://127.0.0.1:" + (await serverPort.value));
+      // todo: restore windows size // https://github.com/electron/electron/issues/526 |  https://github.com/mawie81/electron-window-state
+      // win.on("restore", () => {});
+      // win.getBounds();
+    };
+    app.whenReady().then(async () => {
+      await new Promise((resolve) => setTimeout(resolve)); // workaround to reduce flicker in linux
+      createWindow();
+      app.on("activate", () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+          createWindow();
         }
       });
     });
+    app.on("window-all-closed", () => {
+      if (process.platform !== "darwin") {
+        app.quit(); // https://github.com/electron/electron/blob/v32.1.0/docs/tutorial/quick-start.md#recap
+      }
+    });
+  });
+  if (!process?.versions?.electron || process?.env?.ELECTRON_RUN_AS_NODE) {
+    electronRun.catch(() => {}); // ignore errors if not in electron
   }
 
   /** @type {Platform} */
@@ -1385,7 +1398,7 @@ const serverMain = async () => {
 if (globalThis.document) {
   pageMain();
 } else {
-  serverMain(); // wrap it in function instead of top-level await, see https://github.com/electron/electron/issues/40719
+  serverMain(); // wrap it in function, avoid top-level await, see https://github.com/electron/electron/issues/40719
 }
 
 /*
