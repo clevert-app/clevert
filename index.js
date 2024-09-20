@@ -7,7 +7,6 @@ import http from "node:http";
 import events from "node:events";
 import zlib from "node:zlib";
 import stream from "node:stream";
-import module from "node:module";
 
 /**
 @typedef {
@@ -166,6 +165,9 @@ import module from "node:module";
   id: string;
   error: any;
 }} GetStatusResponseEvent
+@typedef {{
+  locale: keyof i18nRes;
+}} ClevertUtils
 */
 
 const i18nRes = (() => {
@@ -280,9 +282,13 @@ const pageHtml = (lang) => html`
   </html>
 `;
 const pageMain = async () => {
-  const htmlLang = document.documentElement.lang;
-  const i18n = i18nRes[/** @type {keyof i18nRes} */ (htmlLang)];
+  /** @type {ClevertUtils} */
+  const cu = {
+    locale: /** @type {keyof i18nRes} */ (document.documentElement.lang),
+  };
+  globalThis.clevertUtils = cu;
 
+  const i18n = i18nRes[cu.locale];
   document.title = i18n.title();
 
   // $tasks
@@ -676,6 +682,12 @@ const serverMain = async () => {
     }
   }
 
+  /** @type {ClevertUtils} */
+  const cu = {
+    locale: config.locale,
+  };
+  globalThis.clevertUtils = cu;
+
   const i18n = i18nRes[config.locale];
 
   const serverPort = Promise.withResolvers();
@@ -864,28 +876,6 @@ const serverMain = async () => {
     return /** @type {Promise<string>} */(new Promise((resolve,reject)=>import("child_process").then(m=>
       m.exec(guid[process.platform], {}, (err,stdout, stderr) => err ? reject(err) : resolve(expose(stdout.toString()))))
     ));
-  };
-
-  /**
-   * Generate es module string from object.
-   * ```js
-   * const esmSource = obj2esm('import something from "whatever" ', {
-   *   arrow: () => console.log("arrow"),
-   *   // func() { console.log("func"); }, // illegal
-   * });
-   * console.log(esmSource);
-   * ```
-   * @param {string} prefix
-   */
-  const obj2esm = (prefix, obj) => {
-    let ret = prefix;
-    ret += "\n";
-    for (const k in obj) {
-      ret += "\nexport let " + k + " = "; // we don't care about `const` and `var`
-      ret += obj[k].toString();
-      ret += "\n";
-    }
-    return ret;
   };
 
   /**
@@ -1475,38 +1465,6 @@ const orders = dirProvider({
     some: 1,
   }),
 });
-
-*
-
-/*
-//> a.mjs
-import { register } from "node:module";
-const resolverCode = `
-  console.log(1);
-  export async function initialize(...args) {
-    console.log({ args });
-    // Receives data from "register".
-  }
-  export async function load(url, context, nextLoad) {
-    if (url.startsWith("a:")) {
-      return ({
-        format: "module",
-        shortCircuit: true,
-        source: 'export const hello="world";',
-      })
-    }
-    // Let Node.js handle all other URLs.
-    return nextLoad(url);
-  }
-`;
-register("data:text/javascript," + encodeURIComponent(resolverCode));
-await import("./c.mjs");
-// https://nodejs.org/api/module.html#customization-hooks
-
-//> c.mjs
-import { hello } from "a:main";
-console.log({ hello });
-console.log(import.meta.url);
 */
 
 // https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js#L40

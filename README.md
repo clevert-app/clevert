@@ -71,7 +71,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [x] config 最好是保存到本地，而不是浏览器。让浏览器成为一个无状态的东西会比较好。
 - [x] 考虑前端如何传状态到后端？答：需要的时候实现 get-profile，add-profile 等操作即可。
 - [x] i18n 如何设计？~~参考 typescript(typescript 的方案实现复杂)~~ ，参考 https://github.com/ivanhofer/typesafe-i18n/tree/main/packages/detectors
-- [ ] 与扩展互操作。导出到扩展，提供工具函数 (比如提供固定 locale=en-US)
+- [x] 与扩展互操作。导出到扩展，提供工具函数 (比如提供固定 locale=en-US) ~~(浏览器使用 import map，node 使用 module import hook)~~ 直接使用 globalThis 插进去
 - [ ] CSS 与交互初步，成为一个能用的东西
 - [ ] 官方扩展 zcodecs
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x

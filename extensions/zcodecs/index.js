@@ -1,8 +1,9 @@
 // @ts-check
-/** @import { Extension } from "../../index.js" */
+/** @import { Extension, ClevertUtils } from "../../index.js" */
 import child_process from "node:child_process";
 import path from "node:path";
-// excluded: import util from "node:util"; // 可以这种形式为前端禁用 // 这些砍 import 的魔法，在加载扩展的时候做
+
+const cu = /** @type {ClevertUtils} */ (globalThis.clevertUtils);
 
 const C = globalThis.process && {
   exe: path.join(import.meta.dirname, "zcodecs"), // 这个不太好用依赖注入搞?因为 import.meta.url 只在当前文件中才能拿到正确的
