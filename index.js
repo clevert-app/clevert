@@ -165,12 +165,21 @@ import stream from "node:stream";
   id: string;
   error: any;
 }} GetStatusResponseEvent
-@typedef {{
-  windowWidth: number;
-  windowHeight: number;
-  windowMaximized: boolean;
-}} Config
 */
+
+const i18nRes = (() => {
+  const enus = {
+    title: () => "Clevert - Universal file converter platform",
+  };
+  /** @type {typeof enus} */
+  const zhcn = {
+    title: () => "Clevert - 通用的文件转换平台",
+  };
+  return {
+    "en-US": enus,
+    "zh-CN": zhcn,
+  }; // thanks to vscode, typesafe-i18n and more // http://www.lingoes.net/en/translator/langcode.htm
+})();
 
 /**
  * Assert the value is true, or throw an error. Like "node:assert", but cross platform.
@@ -252,23 +261,30 @@ const pageCss = css`
     background: #777f;
   }
 `;
-const pageHtml = html`
+const pageHtml = (lang) => html`
   <!DOCTYPE html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="color-scheme" content="light dark" />
-    <link rel="icon" href="data:" />
-    <title>clevert</title>
-    <!-- module script defer by default -->
-    <script type="module" src="/index.js"></script>
-    <style>
-      ${pageCss}
-    </style>
-  </head>
-  <body></body>
+  <html lang="${lang}">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width" />
+      <meta name="color-scheme" content="light dark" />
+      <link rel="icon" href="data:" />
+      <title>Clevert</title>
+      <!-- module script defer by default -->
+      <script type="module" src="/index.js"></script>
+      <style>
+        ${pageCss}
+      </style>
+    </head>
+    <body></body>
+  </html>
 `;
 const pageMain = async () => {
+  const htmlLang = document.documentElement.lang;
+  const i18n = i18nRes[/** @type {keyof i18nRes} */ (htmlLang)];
+
+  document.title = i18n.title();
+
   // $tasks
   const $tasks = document.createElement("div");
   document.body.appendChild($tasks);
@@ -641,7 +657,25 @@ const serverMain = async () => {
     touchProps(ret);
     return ret;
   };
-  const config = /** @type {Config} */ (await openJsonMmap(PATH_CONFIG)); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
+
+  const defaultConfig = Object.seal({
+    windowWidth: 800,
+    windowHeight: 600,
+    windowMaximized: false,
+    locale: /** @type {keyof i18nRes} */ (
+      Intl.DateTimeFormat().resolvedOptions().locale
+    ),
+  });
+  /** @type {typeof defaultConfig} */
+  const config = await openJsonMmap(PATH_CONFIG); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
+  for (const k in defaultConfig) {
+    // be relax, Object.hasOwn({ a: undefined }, "a") === true
+    if (!Object.hasOwn(config, k)) {
+      config[k] = defaultConfig[k];
+    }
+  }
+
+  const i18n = i18nRes[config.locale];
 
   const serverPort = Promise.withResolvers();
 
@@ -651,7 +685,7 @@ const serverMain = async () => {
     app.commandLine.appendSwitch("disable-gpu-sandbox");
     const createWindow = async () => {
       const win = new BrowserWindow({
-        title: "clevert",
+        title: i18n.title(),
         autoHideMenuBar: true,
         backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
         webPreferences: {
@@ -1019,7 +1053,7 @@ const serverMain = async () => {
     if (r.req.url === "/") {
       r.setHeader("Content-Type", "text/html; charset=utf-8");
       r.writeHead(200);
-      r.end(pageHtml);
+      r.end(pageHtml(config.locale));
       return;
     }
 

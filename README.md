@@ -66,35 +66,35 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [x] electron 和流程重构，自动尝试新端口
 - [x] config store
 - [x] electron window state restore
+- [x] 一个扩展的多个版本共存
+- [x] 约定扩展目录是 id_1.2.3
+- [x] config 最好是保存到本地，而不是浏览器。让浏览器成为一个无状态的东西会比较好。
+- [x] 考虑前端如何传状态到后端？答：需要的时候实现 get-profile，add-profile 等操作即可。
+- [x] i18n 如何设计？~~参考 typescript(typescript 的方案实现复杂)~~ ，参考 https://github.com/ivanhofer/typesafe-i18n/tree/main/packages/detectors
+- [ ] 导出到扩展，提供工具函数，与扩展互操作 (比如提供固定 locale=en-US)
+- [ ] CSS 与交互初步，成为一个能用的东西
+- [ ] 官方扩展 zcodecs
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 多弄一个扩展，展示用，一共至少要两个吧
-- [ ] CSS 初步
 - [ ] 关于扩展建议 out extension 的设计
 - [ ] 用户保存的 profile，最近使用的 profile，extension-profile 三种进入入口
-- [ ] 用户保存 profile 的设计，或者是 json with comments 保存到总 config 中？
-- [ ] config 最好是保存到本地，而不是浏览器。让浏览器成为一个无状态的东西会比较好。
-- [ ] 前端的状态改善
-- [ ] UI 美化完善
 - [ ] 扩展商店改进
 - [ ] ect 的 zip 和 gzip 优化需要先解压再压缩。ect 似乎不支持 unicode 文件名？这些都是可以考虑的，让扩展去做的补救措施。
 - [ ] 支持 7z，zstd，xz 等，用扩展形式
-- [ ] 一个扩展的多个版本共存
 - [ ] 更多扩展
-- [ ] 约定扩展目录是 id_1.2.3
-- [ ] 官方扩展 jpegxl
-- [ ] https://v2ex.com/t/1042387
 - [ ] 扩展商店初步
 - [ ] 改进 PGO 抽奖技术
 - [ ] 上线
 
-## 扩展灵感
+## 扩展与营销灵感
 
-- https://v2ex.com/t/1073426#reply32
+- https://v2ex.com/t/1042387
+- https://v2ex.com/t/1073426
 - https://v2ex.com/t/1065469
-- https://v2ex.com/t/1059035#reply52
+- https://v2ex.com/t/1059035
 - https://v2ex.com/t/984548
 - https://v2ex.com/t/1041478
-- https://v2ex.com/t/1052395#reply10
+- https://v2ex.com/t/1052395
 - https://github.com/rsyncOSX/RsyncOSX
 - https://v2ex.com/t/1044205
 - https://github.com/rubickCenter/rubick
@@ -182,6 +182,6 @@ https://indiehackertools.net/
 <details>
 <summary id="translation-zh-cn">简体中文</summary>
 
-> clevert - 可扩展文件转换器？
+> clevert - 通用的文件转换平台
 
 </details>
