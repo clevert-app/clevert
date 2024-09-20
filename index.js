@@ -199,6 +199,12 @@ const debounce = (f, delay) => {
   );
 };
 
+/**
+ * Sleep. `await sleep(123)`.
+ * @param {number} ms
+ */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const css = String.raw;
 const html = String.raw;
 const pageCss = css`
@@ -593,28 +599,12 @@ const pageMain = async () => {
 };
 const serverMain = async () => {
   const electronImport = import("electron"); // import electron as early as possible // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _t_electron ; echo '{"name":"@types/electron"}' > _t_electron/package.json ; curl -o _t_electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron@32/electron.d.ts ; npm i -D ./_t_electron
-  /*
-  // test.js
-  console.time();
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  import("electron").then(async (electron) => {
-    const { app } = electron;
-    console.timeLog();
-    app.whenReady().then(() => {
-      console.timeLog();
-    });
-  });
-  */
 
-  // is in main
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
   const PATH_CONFIG = "./temp/config.json";
   await fsp.mkdir(PATH_EXTENSIONS, { recursive: true });
   await fsp.mkdir(PATH_CACHE, { recursive: true });
-
-  // todo: first, init the config store
-  // 后端保存，前端无状态
 
   /**
    * Open a json file and returns mapping object. Like [valtio](https://github.com/pmndrs/valtio).
@@ -651,13 +641,12 @@ const serverMain = async () => {
     touchProps(ret);
     return ret;
   };
-  const config = await openJsonMmap(PATH_CONFIG); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
+  const config = /** @type {Config} */ (await openJsonMmap(PATH_CONFIG)); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
 
-  const serverPort = {}; // usage: `serverPort.set(1234); await serverPort.value`. like Promise.withResolvers
-  serverPort.value = new Promise((resolve) => (serverPort.set = resolve));
+  const serverPort = Promise.withResolvers();
 
   const electronRun = electronImport.then(async (electron) => {
-    const { app, BrowserWindow, nativeTheme } = electron;
+    const { app, BrowserWindow, nativeTheme, screen } = electron;
     app.commandLine.appendSwitch("no-sandbox"); // cause devtools error /dev/shm ... on linux
     app.commandLine.appendSwitch("disable-gpu-sandbox");
     const createWindow = async () => {
@@ -669,14 +658,24 @@ const serverMain = async () => {
           sandbox: false,
           spellcheck: false,
         },
+        width: config.windowWidth, // only (width,height), no (x,y), see https://kkocdko.site/post/202409161747
+        height: config.windowHeight,
       });
-      win.loadURL("http://127.0.0.1:" + (await serverPort.value));
-      // todo: restore windows size // https://github.com/electron/electron/issues/526 |  https://github.com/mawie81/electron-window-state
-      // win.on("restore", () => {});
-      // win.getBounds();
+      if (config.windowMaximized) {
+        win.maximize();
+      }
+      win.on("close", () => {
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const workAreaSize = primaryDisplay.workAreaSize;
+        const bounds = win.getBounds();
+        config.windowWidth = Math.min(bounds.width, workAreaSize.width - 64);
+        config.windowHeight = Math.min(bounds.height, workAreaSize.height - 64);
+        config.windowMaximized = win.isMaximized();
+      });
+      win.loadURL("http://127.0.0.1:" + (await serverPort.promise));
     };
     app.whenReady().then(async () => {
-      await new Promise((resolve) => setTimeout(resolve)); // workaround to reduce flicker in linux
+      await sleep(0); // workaround to reduce flicker in linux, see https://github.com/electron/electron/issues/42523#issuecomment-2354912311
       createWindow();
       app.on("activate", () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -684,8 +683,9 @@ const serverMain = async () => {
         }
       });
     });
-    app.on("window-all-closed", () => {
+    app.on("window-all-closed", async () => {
       if (process.platform !== "darwin") {
+        await sleep(100); // wait for config file sync, however ctrl+c still cause force exit
         app.quit(); // https://github.com/electron/electron/blob/v32.1.0/docs/tutorial/quick-start.md#recap
       }
     });
@@ -1245,7 +1245,7 @@ const serverMain = async () => {
               // console.log({ entry, req });
               const controller = action.execute(request.profile, entry);
               runningControllers.add(controller);
-              await new Promise((r) => setTimeout(r, 100));
+              await sleep(100);
               await controller.wait;
               runningControllers.delete(controller);
               finished += 1;
@@ -1364,8 +1364,7 @@ const serverMain = async () => {
             });
           }
         }
-        const LOOP_INTERVAL = 1000; // loop interval, not SSE sending interval
-        await new Promise((resolve) => setTimeout(resolve, LOOP_INTERVAL));
+        await sleep(1000); // loop interval, not SSE sending interval
       }
       r.end();
       return;
@@ -1377,7 +1376,7 @@ const serverMain = async () => {
 
   let port = 9393; // todo: read from config store
   server.on("listening", () => {
-    serverPort.set(port);
+    serverPort.resolve(port);
     console.log(server.address());
     // todo: save into config store
   });
