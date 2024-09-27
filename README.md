@@ -72,8 +72,9 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [x] 考虑前端如何传状态到后端？答：需要的时候实现 get-profile，add-profile 等操作即可。
 - [x] i18n 如何设计？~~参考 typescript(typescript 的方案实现复杂)~~ ，参考 https://github.com/ivanhofer/typesafe-i18n/tree/main/packages/detectors
 - [x] 与扩展互操作。导出到扩展，提供工具函数 (比如提供固定 locale=en-US) ~~(浏览器使用 import map，node 使用 module import hook)~~ 直接使用 globalThis 插进去
-- [ ] CSS 与交互初步，成为一个能用的东西
+- [ ] CSS 与交互初步，成为一个能用的东西 抄 https://mui.com/material-ui/react-button/
 - [ ] 官方扩展 zcodecs
+- [ ] 暂时先用内置 mirror 列表，以后可以考虑国内放一个或多个固定地址来存 mirror 的列表
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
 - [ ] 多弄一个扩展，展示用，一共至少要两个吧
 - [ ] 关于扩展建议 out extension 的设计
@@ -131,7 +132,8 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - 对 node / electron 都支持，node 支持开个 http 服务器到浏览器打开。
   - 以无 electron 环境的 node 为基准来开发，之后移植到 electron 会比较方便。node 大致是 electron 的子集。
 - 核心/前端/扩展 均使用原生 html css js，采用 es module。类型检查使用 `// @ts-check` 和 jsdoc。
-  - 使用 原生 js + `@ts-check` 而不是直接 typescript 的原因，是 typescript 需要转译，在需要支持扩展的情况下，得内置一个 tsc 或者其他编译器，整个流程非常麻烦。我希望使用 `// @ts-check` 和 jsdoc 来实现类似的规范开发的效果。如果扩展作者自己愿意用 ts，那就让他们自己转译。
+  - 使用 原生 js + jsdoc/tsdoc + `@ts-check` 而不是直接 typescript 的原因，是 typescript 需要转译，在需要支持扩展的情况下，得内置一个 tsc 或者其他编译器，整个流程非常麻烦。我希望使用 `// @ts-check` 和 jsdoc 来实现类似的规范开发的效果。如果扩展作者自己愿意用 ts，那就让他们自己转译。
+- core -> extension -> action -> profile
 
 ## 扩展中的二进制
 
@@ -146,14 +148,12 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - linux 要求环境必须为主流的环境，保证 glibc，libgcc，libstdc++，libz 可用。其他依赖应当静态链接。标准是 docker debian:12。
 - win 大多数时候使用 msys2 mingw，某些时候可能会需要 msys2 cygwin 比如 rsync，也尽量不要依赖 vc runtime。
 - win arm64 可以用 linux arm64 跑 wine。windows 可能需要支持 win arm64，以后可以当成宣传的卖点？
-- mac 只支持 arm64
+- mac 目前只支持 arm64。
 
 ```sh
 # https://stackoverflow.com/a/73388939
 nm --dynamic --undefined-only --with-symbol-versions ./jpegxl | grep GLIBC | sed -e 's#.\+@##' | sort --unique
 ```
-
-注意 ffmpeg 的 release 保留策略，要用每个月的最后一次 build https://github.com/BtbN/FFmpeg-Builds?tab=readme-ov-file#release-retention-policy
 
 ## 其他
 

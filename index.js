@@ -166,21 +166,26 @@ import stream from "node:stream";
   error: any;
 }} GetStatusResponseEvent
 @typedef {{
+  assert: typeof assert;
+  debounce: typeof debounce;
+  sleep: typeof sleep;
   locale: keyof i18nRes;
-}} ClevertUtils
+}} ClevertUtils Will be passed to `globalThis.clevertUtils`.
 */
 
 const i18nRes = (() => {
   const enus = {
     title: () => "Clevert - Universal file converter platform",
+    tasksEmpty: () => "No tasks",
   };
-  /** @type {typeof enus} */
+  /** @type {Readonly<typeof enus>} */
   const zhcn = {
     title: () => "Clevert - 通用的文件转换平台",
+    tasksEmpty: () => "没有任务",
   };
   // todo: use llm to do translate
   return {
-    "en-US": enus,
+    "en-US": /** @type {Readonly<typeof enus>} */ (enus),
     "zh-CN": zhcn,
   }; // thanks to vscode, typesafe-i18n and more // http://www.lingoes.net/en/translator/langcode.htm
 })();
@@ -220,9 +225,23 @@ const debounce = (f, ms) => {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const [html, css] = [String.raw, String.raw];
-const pageCss = () => css`
+const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
+  @media not (prefers-color-scheme: dark) {
+    body {
+      --bg: #fff;
+      --fg: #000;
+      --border: 1px solid #888;
+    }
+  }
+  @media (prefers-color-scheme: dark) {
+    body {
+      --bg: #000;
+      --fg: #fff;
+      --border: 1px solid #666;
+    }
+  }
   /* 约定，需要显示和隐藏的东西，默认显示，有 off 才隐藏 */
-  /* 这里是临时的做法，省得写 xxx.off */
+  /* 这里是临时的做法? 省得写 xxx.off */
   .off {
     visibility: hidden;
   }
@@ -235,6 +254,7 @@ const pageCss = () => css`
     height: 100vh;
     margin: 0;
     font-family: system-ui;
+    background: var(--bg);
   }
   body > div {
     position: fixed;
@@ -264,6 +284,11 @@ const pageCss = () => css`
   header > button:active {
     background: #777f;
   }
+  #tasks:empty::after {
+    content: "${i18n.tasksEmpty()}";
+    display: block;
+    text-align: center;
+  }
 `;
 const pageHtml = (lang) => html`
   <!DOCTYPE html>
@@ -277,7 +302,7 @@ const pageHtml = (lang) => html`
       <!-- module script defer by default -->
       <script type="module" src="/index.js"></script>
       <style>
-        ${pageCss()}
+        ${pageCss(i18nRes[lang])}
       </style>
     </head>
     <body></body>
@@ -286,6 +311,9 @@ const pageHtml = (lang) => html`
 const pageMain = async () => {
   /** @type {ClevertUtils} */
   const cu = {
+    assert,
+    debounce,
+    sleep,
     locale: /** @type {keyof i18nRes} */ (document.documentElement.lang),
   };
   globalThis.clevertUtils = cu;
@@ -330,7 +358,7 @@ const pageMain = async () => {
     } else if (e.kind === "run-action-success") {
       $tips.textContent = "Success";
     } else if (e.kind === "run-action-error") {
-      $tips.textContent = "Error: " + e.error;
+      $tips.textContent = "Error: " + JSON.stringify(e.error);
     } else if (e.kind === "install-extension-progress") {
       // const [$stop, $pin] = $operations.children;
       $title.textContent = e.title;
@@ -553,6 +581,7 @@ const pageMain = async () => {
         method: "POST",
         body: JSON.stringify(request),
       });
+      $toTasks.click();
     };
   };
 
@@ -580,6 +609,7 @@ const pageMain = async () => {
         method: "POST",
         body: JSON.stringify(request),
       });
+      $toTasks.click();
     };
   };
   r$market();
@@ -687,6 +717,9 @@ const serverMain = async () => {
 
   /** @type {ClevertUtils} */
   const cu = {
+    assert,
+    debounce,
+    sleep,
     locale: config.locale,
   };
   globalThis.clevertUtils = cu;
@@ -1442,30 +1475,6 @@ if (globalThis.document) {
 }
 
 /*
-const dirProvider = (options) => {
-  const inputs = fs
-    .readdirSync(options.inputDir, { recursive: options.inputRecursive })
-    .map((item) => path.join(options.inputDir, item))
-    .filter((item) => !options.inputOnlyFile || fs.statSync(item).isFile());
-  const outputs = inputs.map((input) => {
-    const relative = path.relative(options.inputDir, input);
-    const parsed = path.parse(path.join(options.outputDir, relative));
-    delete parsed.base;
-    parsed.name = options.outputPrefix + parsed.name + options.outputSuffix;
-    if (options.outputExtName) parsed.ext = "." + options.outputExtName;
-    const item = path.format(parsed);
-    const dir = path.dirname(item);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    return item;
-  });
-  return [...Array(inputs.length)].map((_, i) => ({
-    inputs: [inputs[i]],
-    outputs: [outputs[i]],
-    options: options.options(inputs[i], outputs[i]),
-  }));
-};
-
-const action = (await import("./extension-ffmpeg.js")).actions["to-m4a"];
 const orders = dirProvider({
   inputDir: "./dist/i",
   inputRecursive: true,
@@ -1486,14 +1495,9 @@ const orders = dirProvider({
 // https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
 
 // /** @type {0} */ (process.exit());
-
 // type Boxify<T> = { [K in keyof T]: Box<T> };
 
 // https://medium.com/@felixrieseberg/javascript-on-the-desktop-fast-and-slow-2b744dfb8b55
-// https://www.typescriptlang.org/docs/handbook/jsdoc-supported-types.html
 // https://registry.npmmirror.com/binary.html?path=electron/
 // http://127.0.0.1:9439/extensions/zcodecs/index.js
 // /home/kkocdko/misc/code/clevert/temp/_test_res/i
-
-// core -> extension -> action -> profile
-// 暂时先用内置 mirror 列表，以后可以考虑国内放一个或多个固定地址来存 mirror 的列表

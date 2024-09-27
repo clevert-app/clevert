@@ -11,20 +11,17 @@ const consts = globalThis.process && {
 
 const i18nRes = (() => {
   const enus = {
-    description: () =>
-      "Includes ect, webp, jpeg-xl and other cutting-edge codecs",
+    description: () => "Includes ect, webp, jpeg-xl and other modern codecs",
   };
-  /** @type {typeof enus} */
+  /** @type {Readonly<typeof enus>} */
   const zhcn = {
-    description: () => "包含了 ect，webp，jpeg-xl 等先进编码器",
+    description: () => "包含了 ect，webp，jpeg-xl 等现代编码器",
   };
-  // todo: use llm to do translate
   return {
-    "en-US": enus,
+    "en-US": /** @type {Readonly<typeof enus>} */ (enus),
     "zh-CN": zhcn,
-  }; // thanks to vscode, typesafe-i18n and more // http://www.lingoes.net/en/translator/langcode.htm
+  };
 })();
-
 const i18n = i18nRes[cu.locale];
 
 // https://effectivetypescript.com/2023/09/27/closure-compiler/

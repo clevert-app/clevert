@@ -18,7 +18,7 @@ export default /** @type {Extension} */ ({
       platforms: ["linux-x64"], // 匹配平台，非当前平台不下载
       kind: "raw",
       path: "./yt-dlp",
-      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.08.06/yt-dlp",
+      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.09.27/yt-dlp",
     },
   ],
   actions: [
