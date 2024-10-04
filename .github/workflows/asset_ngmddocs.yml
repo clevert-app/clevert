@@ -12,8 +12,6 @@ jobs:
           curl -L https://github.com/angular/material.angular.io/archive/refs/heads/main.tar.gz | tar -zx --strip-components 1
           yarn install --immutable
           yarn prod-build
-          mv dist out
-          mv out/material.angular.io dist
           zip -r -9 dist.zip dist
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -22,3 +20,6 @@ jobs:
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
           tag_name: "${{ 'asset_ngmddocs_20241006_' }}${{ github.run_id }}" # 19.0.0-next.2
           files: dist.zip
+# Angular's material design 3 as the sample for us.
+# For users, it has most of the features.
+# For developers, it's huge and complex. So we just use it as ui sample.
