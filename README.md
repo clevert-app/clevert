@@ -73,6 +73,8 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [x] i18n 如何设计？~~参考 typescript(typescript 的方案实现复杂)~~ ，参考 https://github.com/ivanhofer/typesafe-i18n/tree/main/packages/detectors
 - [x] 与扩展互操作。导出到扩展，提供工具函数 (比如提供固定 locale=en-US) ~~(浏览器使用 import map，node 使用 module import hook)~~ 直接使用 globalThis 插进去
 - [ ] CSS 与交互初步，成为一个能用的东西 抄 https://mui.com/material-ui/react-button/
+- [ ] Rename `wait -> promise`
+- [ ] 需要权衡实现难度和界面易用性，先画图
 - [ ] 官方扩展 zcodecs
 - [ ] 暂时先用内置 mirror 列表，以后可以考虑国内放一个或多个固定地址来存 mirror 的列表
 - [ ] 多来源镜像下载 不多源并行了，找个快点的镜像就可以了，自动选择镜像什么的 cat ../a.tar.gz | ../7z -si -tgzip -so x | ../7z -si -ttar x
@@ -91,6 +93,8 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 
 ## 扩展与营销灵感
 
+- https://www.icebeer.top/用%E3%80%8C枯萎%E3%80%8D的技术做水平的思考/
+- https://v2ex.com/t/1077985#r_15344339 (注意评论)
 - https://v2ex.com/t/1042387
 - https://v2ex.com/t/1073426
 - https://v2ex.com/t/1065469

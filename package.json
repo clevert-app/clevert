@@ -6,6 +6,6 @@
     "index.js"
   ],
   "scripts": {
-    "start": "exit ; python -m http.server -b 127.0.0.1 9439 > /dev/null 2>&1 & ; clear ; node --trace-uncaught index.js ; electron index.js"
+    "start": "exit ; node --trace-uncaught index.js ; electron index.js"
   }
 }
