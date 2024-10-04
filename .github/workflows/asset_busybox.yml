@@ -9,8 +9,8 @@ jobs:
     steps:
       - name: Build
         run: |
-          curl -o busybox.deb -L https://snapshot.debian.org/archive/debian/20240824T143345Z/pool/main/b/busybox/busybox-static_1.36.1-9%2Bb1_amd64.deb
-          ar p busybox.deb data.tar.xz | tar -xJ
+          curl -o busybox.tar.zst -L https://mirror.pkgbuild.com/extra/os/x86_64/busybox-1.36.1-2-x86_64.pkg.tar.zst
+          tar -xf busybox.tar.zst
           mv usr/bin/busybox busybox
           zip -9 linux-x64.zip busybox
       - name: Verify
@@ -24,15 +24,15 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_busybox_20240829_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_busybox_20241008_' }}${{ github.run_id }}"
           files: linux-x64.zip
   linux-arm64:
     runs-on: warp-ubuntu-2204-arm64-2x
     steps:
       - name: Build
         run: |
-          curl -o busybox.deb -L https://snapshot.debian.org/archive/debian/20240824T143345Z/pool/main/b/busybox/busybox-static_1.36.1-9%2Bb1_arm64.deb
-          ar p busybox.deb data.tar.xz | tar -xJ
+          curl -o busybox.tar.xz -L http://mirror.archlinuxarm.org/aarch64/extra/busybox-1.36.1-2-aarch64.pkg.tar.xz
+          tar -xf busybox.tar.xz
           mv usr/bin/busybox busybox
           zip -9 linux-arm64.zip busybox
       - name: Verify
@@ -46,7 +46,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_busybox_20240829_' }}${{ github.run_id }}"
+          tag_name: "${{ 'asset_busybox_20241008_' }}${{ github.run_id }}"
           files: linux-arm64.zip
   mac-arm64:
     runs-on: macos-14
@@ -66,7 +66,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_busybox_20240829_' }}${{ github.run_id }}" # 1.20.0 , it's so old, but works
+          tag_name: "${{ 'asset_busybox_20241008_' }}${{ github.run_id }}" # 1.20.0 , it's so old, but works
           files: mac-arm64.zip
   win-x64:
     runs-on: windows-2022
@@ -75,7 +75,7 @@ jobs:
         shell: C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start -e {0}
         run: |
           pacman -S --noconfirm zip
-          curl -o busybox.exe -L https://frippery.org/files/busybox/busybox-w64-FRP-5398-g89ae34445.exe
+          curl -o busybox.exe -L https://frippery.org/files/busybox/busybox-w64-FRP-5467-g9376eebd8.exe
           zip -9 win-x64.zip busybox.exe
       - name: Verify
         shell: C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start -e {0}
@@ -88,7 +88,7 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_busybox_20240829_' }}${{ github.run_id }}" # acturally, it's based on 1.37 master
+          tag_name: "${{ 'asset_busybox_20241008_' }}${{ github.run_id }}" # acturally, it's based on 1.37 master
           files: win-x64.zip
   win-arm64:
     runs-on: windows-2022
@@ -97,7 +97,7 @@ jobs:
         shell: C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start -e {0}
         run: |
           pacman -S --noconfirm zip
-          curl -o busybox.exe -L https://frippery.org/files/busybox/busybox-w64a-FRP-5398-g89ae34445.exe
+          curl -o busybox.exe -L https://frippery.org/files/busybox/busybox-w64a-FRP-5467-g9376eebd8.exe
           zip -9 win-arm64.zip busybox.exe
       - name: Verify
         shell: C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start -e {0}
@@ -110,6 +110,6 @@ jobs:
         with:
           prerelease: true
           body: "`github.workflow_sha = ${{ github.workflow_sha }}`"
-          tag_name: "${{ 'asset_busybox_20240829_' }}${{ github.run_id }}" # acturally, it's based on 1.37 master
+          tag_name: "${{ 'asset_busybox_20241008_' }}${{ github.run_id }}" # acturally, it's based on 1.37 master
           files: win-arm64.zip
 # just download from other sources, version number is current date, may have different busybox version, see above to find the real version
