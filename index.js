@@ -1290,10 +1290,10 @@ const serverMain = async () => {
     }
 
     if (r.req.url?.startsWith("/extensions/")) {
-      const relative = r.req.url.split("/extensions/")[1];
-      if (relative.endsWith("/index.js")) {
-        const extensionIndexJsPath = solvePath(PATH_EXTENSIONS, relative);
-        const buffer = await fsp.readFile(extensionIndexJsPath);
+      const relative = r.req.url.slice("/extensions/".length);
+      const path = solvePath(PATH_EXTENSIONS, relative);
+      if (r.req.url.endsWith("/index.js")) {
+        const buffer = await fsp.readFile(path);
         const response = excludeImports(buffer.toString(), /^node:.+$/);
         r.setHeader("Content-Type", "text/javascript; charset=utf-8");
         r.writeHead(200);
@@ -1442,6 +1442,17 @@ const serverMain = async () => {
       r.end();
       await beforeQuit();
       process.exit();
+      return;
+    }
+
+    if (r.req.url?.startsWith("/static/")) {
+      const relative = r.req.url.slice("/static/".length);
+      const path = solvePath(relative);
+      const fsStream = fs.createReadStream(path).on("error", (error) => {
+        r.writeHead(400); // this endpoint is just used for testing, so visitor should ensure the url is valid
+        r.end(JSON.stringify(error)); // listen and write errors into response instead of panic
+      });
+      fsStream.pipe(r);
       return;
     }
 
