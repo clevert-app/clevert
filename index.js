@@ -226,13 +226,16 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const [html, css] = [String.raw, String.raw];
 const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
-  @media not (prefers-color-scheme: dark) {
+  /* initial theme, contains all vars */
+  @media (min-width: 1px) {
     body {
       --bg: #fff;
       --fg: #000;
       --border: 1px solid #888;
+      --radius: 4px;
     }
   }
+  /* initial theme for dark mode */
   @media (prefers-color-scheme: dark) {
     body {
       --bg: #000;
@@ -240,8 +243,8 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
       --border: 1px solid #666;
     }
   }
-  /* 约定，需要显示和隐藏的东西，默认显示，有 off 才隐藏 */
-  /* 这里是临时的做法? 省得写 xxx.off */
+  /* todo: custom theme like "html.theme-abc { body { } }" */
+  /* agreement: default to be visable, and hide with ".off" class */
   .off {
     visibility: hidden;
   }
@@ -290,7 +293,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     text-align: center;
   }
 `;
-const pageHtml = (lang) => html`
+const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
   <!DOCTYPE html>
   <html lang="${lang}">
     <head>
@@ -298,11 +301,11 @@ const pageHtml = (lang) => html`
       <meta name="viewport" content="width=device-width" />
       <meta name="color-scheme" content="light dark" />
       <link rel="icon" href="data:" />
-      <title>Clevert</title>
+      <title>${i18n.title()}</title>
       <!-- module script defer by default -->
       <script type="module" src="/index.js"></script>
       <style>
-        ${pageCss(i18nRes[lang])}
+        ${pageCss(i18n)}
       </style>
     </head>
     <body></body>
@@ -319,7 +322,6 @@ const pageMain = async () => {
   globalThis.clevertUtils = cu;
 
   const i18n = i18nRes[cu.locale];
-  document.title = i18n.title();
 
   // $tasks
   const $tasks = document.createElement("div");
@@ -1078,8 +1080,7 @@ const serverMain = async () => {
         withFileTypes: true,
         recursive: true,
       })) {
-        const parentPath = v.parentPath ?? v.path; // https://nodejs.org/api/fs.html#class-fsdirent
-        const input = solvePath(parentPath, v.name);
+        const input = solvePath(v.parentPath, v.name);
         let output = path.relative(inputDir, input);
         if (opts.outputExtension) {
           const extname = path.extname(input); // includes the dot char
@@ -1105,7 +1106,7 @@ const serverMain = async () => {
     if (r.req.url === "/") {
       r.setHeader("Content-Type", "text/html; charset=utf-8");
       r.writeHead(200);
-      r.end(pageHtml(config.locale));
+      r.end(pageHtml(i18n, config.locale));
       return;
     }
 
