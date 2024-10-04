@@ -1,21 +1,27 @@
 // @ts-check
+
+// This is an example extension, shows almost all you need to know to write an extension.
+
 /** @import { Extension, ClevertUtils } from "../../index.js" */
 import child_process from "node:child_process";
 import path from "node:path";
 
 const cu = /** @type {ClevertUtils} */ (globalThis.clevertUtils);
 
+// simple trick that eval only in nodejs
 const consts = globalThis.process && {
-  exe: path.join(import.meta.dirname, "zcodecs"), // 这个不太好用依赖注入搞?因为 import.meta.url 只在当前文件中才能拿到正确的
+  exe: path.join(import.meta.dirname, "zcodecs"), // can't be implemented inside ClevertUtils because we need current module's import.meta
 };
 
 const i18nRes = (() => {
   const enus = {
     description: () => "Includes ect, webp, jpeg-xl and other modern codecs",
+    cjpegliDescription: () => "Advanced JPEG encoder",
   };
   /** @type {Readonly<typeof enus>} */
   const zhcn = {
-    description: () => "包含了 ect，webp，jpeg-xl 等现代编码器",
+    description: () => "包含了 ect, webp, jpeg-xl 等现代编解码器",
+    cjpegliDescription: () => "先进的 JPEG 编码器",
   };
   return {
     "en-US": /** @type {Readonly<typeof enus>} */ (enus),
@@ -24,45 +30,37 @@ const i18nRes = (() => {
 })();
 const i18n = i18nRes[cu.locale];
 
-// https://effectivetypescript.com/2023/09/27/closure-compiler/
-// https://github.com/microsoft/TypeScript/issues/41825
-// https://nodejs.org/api/module.html#customization-hooks
-
-// 设计成导出一整个的形式，单个单个导出没法做 type check
+// export the whole object because type check is inconvenient if we use many individual exports
 export default /** @type {Extension} */ ({
-  id: "zcodecs", // 保证唯一，让商店去保证。以后商店上架就是在这里放个 json
-  version: "0.1.0", // 必须遵循 https://semver.org
-  name: "zcodecs name", // 以后可以做 i18n
+  id: "zcodecs", // must be unique in whole extension market, can contains '-' but must not contains '_'
+  version: "0.1.0", // must obey https://semver.org
+  name: "zcodecs",
   description: i18n.description(),
-  dependencies: [], // 可以填写其他的 extension 的 id (这个功能需要扩展商店)（注意考虑 semver？）
+  dependencies: [], // can be "some-what_1.2"
   assets: [
     {
-      platforms: ["linux-x64"], // 匹配平台，非当前平台不下载
-      // 如果是zip，那就直接用我们的js的unzip实现，如果不是，那就麻烦了，就要搞一个 archives 扩展，集成7zip， https://github.com/libarchive/libarchive 等等，用来解压
-      kind: "zip", // 比如可以做 tar --strip-components 这样的
-      path: "./", // 从扩展文件夹路径开始算
-      // url 就直接填 github，然后让核心去做镜像加速
-      url: "https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip",
+      platforms: ["linux-x64"],
+      kind: "zip",
+      path: "./", // start from the extension dir
+      url: "https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip", // just place github.com address here and the core will do auto-mirroring
     },
   ],
-  // action 和 profile 某种程度上是有重合的，比如可以造一个全能action，然后根据profile做不同动作。但是这是不好的实践。
-  // 而且，同个扩展可能有不同的 action kind，比如既可以当转换器，也可以当daemon，那就必然要多个 action。所以我建议不同主要功能，拆分不同action
+  // there's some overlap between action and profile, you can write an all-in-one action and custom based on the profile, but this is bad practice? we may supports this as an generic extension. Moreover, one extension may have different action "kind", like as both a converter and a daemon, which requires more than one action, so splitting different actions by different usage is suggested
   actions: [
     // Action 的设计，是有一个 ui(profile)=>controller, 有一个 execute(profile,entry)=>controller
     // ui 不应该返回所有 entry，至少在大多数情况不应该。因为文件夹里可能有大量文件。这里我们选择 ui 只出 profile，而 entries 由核心根据 `kind: "converter"` 出。发到后端得请求应该是 entriesGenOptions 或者别的名字。
     // 这里的设计还有一些不确定性，但是可以确定的是，profile 和 entries 必然分开，entries 是每次调用变动的，profile 是不变的
     {
       id: "cjpegli",
-      name: "cjpegli name",
-      description: "cjpegli description",
+      name: "cjpegli",
+      description: i18n.cjpegliDescription(),
       kind: "common-files", // 这里允许使用 daemon，number sequence，plain 等不同种类。
       // 涉及到一个矛盾，就是如果把文件相关功能收归核心，那就减少了灵活性。如果用核心 export 给扩展 import，那扩展就可能对核心做 hack 才能实现功能，不可避免会 breaking
       // 倾向于收归核心。有个问题是 "扩展建议 out extension" 的设计
       // 比如 out-dir 可以给 yt-dlp, out-dir 的时候，要求返回的 ui controller 里有 entries 函数
       // 还有一个设想，比如 a.pdf b.pdf 提取图片到 out/a/XXX.png out/b/XXX.png 这要怎么处理？
       ui: (profile) => {
-        // 这个函数在前端跑，画界面
-        // 不能用 select  multiple， 在移动端显示效果不一样
+        // don't use <select multiple>, it's weird in mobile browser
         const css = String.raw;
         const $profile = document.createElement("div");
         $profile.classList.add("profile");
@@ -106,56 +104,30 @@ export default /** @type {Extension} */ ({
         };
       },
       execute: (profile, { input, output }) => {
-        // 这个函数在后端跑，要求不 block 主线程，只能 async。如果要 block 请自行开 worker
-        // 后续提供调用其他 action 的功能？
+        // todo: ability to call other actions?
         const child = child_process.spawn(consts.exe, [
           "cjpegli",
           input.main[0],
           output.main[0],
           "-q",
           String(profile.quality),
+          "-p",
+          String(profile.progressiveLevel),
         ]);
-        // console.log([
-        //   "cjpegli",
-        //   input.main[0],
-        //   output.main[0],
-        //   "-q",
-        //   String(profile.quality),
-        // ]);
-        let progressValue = 0;
-        child.stderr.on("data", (/** @type {Buffer} */ data) => {
-          const chunk = data.toString();
-          progressValue = 0.01; // 比较明显能看出来，不要是整数
-        });
-        // child.stdout.on("data", (/** @type {Buffer} */ data) => {
-        //   const chunk = data.toString();
-        //   console.log({ stdout: chunk });
-        // });
-        // child.stderr.on("data", (/** @type {Buffer} */ data) => {
-        //   const chunk = data.toString();
-        //   console.log({ stderr: chunk });
-        // });
+        const { promise, resolve, reject } = Promise.withResolvers();
+        child.on("error", (err) => reject(err));
+        child.on("exit", (code) => (code ? reject(code) : resolve(code)));
         return {
-          progress: () => {
-            return progressValue;
-          },
+          progress: () => 0,
           stop: () => {
             child.kill("SIGTERM");
           },
-          wait: new Promise((resolve, reject) => {
-            child.on("error", (err) => reject(err));
-            child.on("exit", (code) => (code ? reject({ code }) : resolve()));
-            // child.on("exit", (code) => {
-            //   setTimeout(() => {
-            //     code ? reject({ code }) : resolve(undefined);
-            //   }, Math.random() * 2000);
-            // });
-          }),
+          wait: promise,
         };
       },
     },
   ],
-  // 设计上，profile 应该是非开发者也能保存的一个纯 JSON。action 是扩展开发者编写的
+  // a profile should be a pure json that can be store by non-developers
   profiles: [
     // 一些预设的 profile，弱类型
     // 约定：对于相同的 action, 这个profile列表中 profile.id == action.id 的就是默认的
@@ -166,7 +138,8 @@ export default /** @type {Extension} */ ({
       actionId: "cjpegli",
       extensionId: "zcodecs",
       extensionVersion: "0.1.0",
-      quality: 75,
+      quality: 68,
+      progressiveLevel: 0,
       // 用户：我上次output dir 到这，这次还想要到这，存profile 里，所以 entries 选项放在profile 里而不是固定在 action里
       // 对 entries 的选项 给出建议?
       // 用户要求能筛选输入文件扩展名，原生文件选择器 inputExtensionFilter: []
@@ -177,4 +150,3 @@ export default /** @type {Extension} */ ({
     },
   ],
 });
-// https://opensource.googleblog.com/2024/04/introducing-jpegli-new-jpeg-coding-library.html
