@@ -5,12 +5,12 @@ permissions:
   contents: write
 jobs:
   any:
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     steps:
       - name: Build
         run: |
           curl -L https://github.com/angular/material.angular.io/archive/refs/heads/main.tar.gz | tar -zx --strip-components 1
-          yarn install
+          yarn install --immutable
           yarn prod-build
           mv dist out
           mv out/material.angular.io dist
