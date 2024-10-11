@@ -922,71 +922,54 @@ const serverMain = async () => {
 
   /**
    * Exclude the static `import` declaration matches `regexp`. Will be `// excluded: import xxx form ...`.
-   * @param {string} sourceCode
+   * @param {string} src
    * @param {RegExp} regexp
    */
-  const excludeImports = (sourceCode, regexp) => {
+  const excludeImports = (src, regexp) => {
     let ret = "";
-    let position = 0;
+    let i = 0;
     while (true) {
-      if (sourceCode.startsWith("import", position)) {
-        let start = position;
+      if (src.startsWith("import", i)) {
+        let start = i;
         let end = start;
         loop1: while (true) {
           for (const quote of ["'", '"']) {
-            if (sourceCode[start] === quote) {
+            if (src[start] === quote) {
               start++;
-              end = sourceCode.indexOf(quote, start);
+              end = src.indexOf(quote, start);
               break loop1;
             }
           }
           start++;
         }
-        const moduleName = sourceCode.slice(start, end);
+        const moduleName = src.slice(start, end);
         const rangeEnd = end + "'".length;
         if (regexp.test(moduleName)) {
           const mark = "// excluded: ";
-          ret += mark + sourceCode.slice(position, rangeEnd).replace(/\n/g, "\n" + mark);
-          position = rangeEnd;
+          ret += mark + src.slice(i, rangeEnd).replace(/\n/g, "\n" + mark);
+          i = rangeEnd;
         } // else { do nothing }
-      } else if (sourceCode.startsWith("//", position)) {
+      } else if (src.startsWith("//", i)) {
         // do nothing
-      } else if (sourceCode.startsWith("/*", position)) {
-        const rangeEnd = sourceCode.indexOf("*/", position) + "*/".length;
-        ret += sourceCode.slice(position, rangeEnd);
-        position = rangeEnd;
+      } else if (src.startsWith("/*", i)) {
+        const rangeEnd = src.indexOf("*/", i) + "*/".length;
+        ret += src.slice(i, rangeEnd);
+        i = rangeEnd;
         continue;
-      } else if (sourceCode[position] === "\n" || sourceCode[position] === "\t" || sourceCode[position] === " ") {
-        ret += sourceCode[position];
-        position++;
+      } else if (src[i] === "\n" || src[i] === "\t" || src[i] === " ") {
+        ret += src[i];
+        i++;
         continue;
       } else {
         break; // exit the imports
       }
-      const nextPosition = sourceCode.indexOf("\n", position) + 1;
-      ret += sourceCode.slice(position, nextPosition);
-      position = nextPosition;
+      const nextI = src.indexOf("\n", i) + 1;
+      ret += src.slice(i, nextI);
+      i = nextI;
     }
-    ret += sourceCode.slice(position);
+    ret += src.slice(i);
     return ret;
   };
-
-  const ei1 = `  /**/ import a from "node:what"
-import {some
-} from "node:fs" /* shat */
-// is this?
-  /**/  import omg from 'node:path'
-import normal from 'what'
-   import foo from 'what'
-import 'node:nameonly'
-
-console.log(234) // exit the imports
-
-import illegalButFun from "node:haha" // should not be process anymore
-
-`;
-  console.log(excludeImports(ei1, /^node:/));
-  /** @type {0} */ (process.exit());
 
   /**
    * Solve path, like path.resolve, with support of home dir prefix `~/`.
@@ -1119,7 +1102,7 @@ import illegalButFun from "node:haha" // should not be process anymore
 
     if (r.req.url === "/index.js") {
       const buffer = await fsp.readFile(import.meta.filename);
-      const response = excludeImports(buffer.toString(), /^node:.+$/);
+      const response = excludeImports(buffer.toString(), /^node:/);
       r.setHeader("Content-Type", "text/javascript; charset=utf-8");
       r.writeHead(200);
       r.end(response);
@@ -1302,7 +1285,7 @@ import illegalButFun from "node:haha" // should not be process anymore
       const path = solvePath(PATH_EXTENSIONS, relative);
       if (r.req.url.endsWith("/index.js")) {
         const buffer = await fsp.readFile(path);
-        const response = excludeImports(buffer.toString(), /^node:.+$/);
+        const response = excludeImports(buffer.toString(), /^node:/);
         r.setHeader("Content-Type", "text/javascript; charset=utf-8");
         r.writeHead(200);
         r.end(response);
