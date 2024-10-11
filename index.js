@@ -926,24 +926,19 @@ const serverMain = async () => {
    * @param {RegExp} regexp
    */
   const excludeImports = (sourceCode, regexp) => {
-    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import
-    // we dont support the "string name import" in reference just match quotas, and ensure the "import" keyword in line beginning, and ensure imports in the head of file
     let ret = "";
     let position = 0;
     while (true) {
       if (sourceCode.startsWith("import", position)) {
         let start = position;
         let end = start;
-        while (true) {
-          if (sourceCode[start] === "'") {
-            start++;
-            end = sourceCode.indexOf("'", start);
-            break;
-          }
-          if (sourceCode[start] === '"') {
-            start++;
-            end = sourceCode.indexOf('"', start);
-            break;
+        loop1: while (true) {
+          for (const quote of ["'", '"']) {
+            if (sourceCode[start] === quote) {
+              start++;
+              end = sourceCode.indexOf(quote, start);
+              break loop1;
+            }
           }
           start++;
         }
@@ -951,27 +946,22 @@ const serverMain = async () => {
         const rangeEnd = end + "'".length;
         if (regexp.test(moduleName)) {
           const mark = "// excluded: ";
-          ret +=
-            mark +
-            sourceCode.slice(position, rangeEnd).replace(/\n/g, "\n" + mark);
+          ret += mark + sourceCode.slice(position, rangeEnd).replace(/\n/g, "\n" + mark);
           position = rangeEnd;
-        } else {
-          // do nothing
-        }
+        } // else { do nothing }
       } else if (sourceCode.startsWith("//", position)) {
         // do nothing
       } else if (sourceCode.startsWith("/*", position)) {
         const rangeEnd = sourceCode.indexOf("*/", position) + "*/".length;
         ret += sourceCode.slice(position, rangeEnd);
         position = rangeEnd;
-      } else if (
-        sourceCode.startsWith("\n", position) ||
-        sourceCode.startsWith("\t", position) ||
-        sourceCode.startsWith(" ", position)
-      ) {
-        // must not be start with these for useful statements, like "\n  import xxx ..."
+        continue;
+      } else if (sourceCode[position] === "\n" || sourceCode[position] === "\t" || sourceCode[position] === " ") {
+        ret += sourceCode[position];
+        position++;
+        continue;
       } else {
-        break;
+        break; // exit the imports
       }
       const nextPosition = sourceCode.indexOf("\n", position) + 1;
       ret += sourceCode.slice(position, nextPosition);
@@ -980,6 +970,23 @@ const serverMain = async () => {
     ret += sourceCode.slice(position);
     return ret;
   };
+
+  const ei1 = `  /**/ import a from "node:what"
+import {some
+} from "node:fs" /* shat */
+// is this?
+  /**/  import omg from 'node:path'
+import normal from 'what'
+   import foo from 'what'
+import 'node:nameonly'
+
+console.log(234) // exit the imports
+
+import illegalButFun from "node:haha" // should not be process anymore
+
+`;
+  console.log(excludeImports(ei1, /^node:/));
+  /** @type {0} */ (process.exit());
 
   /**
    * Solve path, like path.resolve, with support of home dir prefix `~/`.
