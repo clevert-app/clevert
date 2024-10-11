@@ -224,7 +224,7 @@ const debounce = (f, ms) => {
  */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const [html, css] = [String.raw, String.raw];
+const [html, css] = [String.raw, String.raw]; // https://github.com/0x00000001A/es6-string-html
 const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   /* initial theme, contains all vars */
   @media (min-width: 1px) {
@@ -803,13 +803,13 @@ const serverMain = async () => {
    * Read request body then parse json.
    * @param {http.IncomingMessage} req
    */
-  const readReq = async (req) => {
-    return new Promise((resolve, reject) => {
-      let body = "";
-      req.on("data", (chunk) => (body += chunk));
-      req.on("end", () => resolve(JSON.parse(body)));
-      req.on("error", (error) => reject(error));
-    });
+  const readReq = (req) => {
+    const { resolve, reject, promise } = Promise.withResolvers();
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => resolve(JSON.parse(body)));
+    req.on("error", (error) => reject(error));
+    return promise;
   };
 
   /**
@@ -997,26 +997,23 @@ const serverMain = async () => {
    * Writing to stream, returns promise, auto care about the backpressure. Use [this](https://nodejs.org/api/stream.html#streamreadabletowebstreamreadable-options) when stable.
    * @param {stream.Writable} stream
    * @param {any} chunk
-   * @returns {Promise<void>}
    */
   const streamWrite = (stream, chunk) => {
-    return new Promise((resolve, reject) => {
-      let resolveCount = 0;
-      const resolveOnce = () => {
-        resolveCount++;
-        if (resolveCount === 2) {
-          resolve();
-        }
-      };
-      const lowPressure = stream.write(chunk, (error) =>
-        error ? reject(error) : resolveOnce()
-      );
-      if (lowPressure) {
-        resolveOnce();
-      } else {
-        stream.once("drain", resolveOnce);
-      }
-    });
+    const { resolve, reject, promise } = Promise.withResolvers();
+    let resolveCount = 0;
+    const resolveOnce = () => {
+      resolveCount++;
+      if (resolveCount === 2) /** @type {any} */ (resolve)();
+    };
+    const lowPressure = stream.write(chunk, (error) =>
+      error ? reject(error) : resolveOnce()
+    );
+    if (lowPressure) {
+      resolveOnce();
+    } else {
+      stream.once("drain", resolveOnce);
+    }
+    return promise;
   };
 
   /**
