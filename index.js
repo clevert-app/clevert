@@ -654,7 +654,7 @@ const pageMain = async () => {
   }
 };
 const serverMain = async () => {
-  const electronImport = import("electron"); // as early as possible // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _electron ; echo '{"name":"@types/electron"}' > _electron/package.json ; curl -o _electron/index.d.ts -L https://cdn.jsdelivr.net/npm/electron/electron.d.ts ; npm i -D ./_electron
+  const electronImport = import("electron"); // as early as possible // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _electron ; echo '{"name":"@types/electron"}' > _electron/package.json ; curl -o _electron/index.d.ts -L unpkg.com/electron/electron.d.ts ; npm i -D ./_electron
   electronImport.catch(() => {});
 
   const PATH_EXTENSIONS = "./temp/extensions";
@@ -1486,6 +1486,9 @@ if (globalThis.document) {
   serverMain(); // wrap it in function, avoid top-level await, see https://github.com/electron/electron/issues/40719
 }
 
+// /** @type {0} */ (process.exit());
+// type Boxify<T> = { [K in keyof T]: Box<T> };
+
 /*
 const orders = dirProvider({
   inputDir: "./dist/i",
@@ -1506,10 +1509,5 @@ const orders = dirProvider({
 // https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js#L40
 // https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
 
-// /** @type {0} */ (process.exit());
-// type Boxify<T> = { [K in keyof T]: Box<T> };
-
-// https://medium.com/@felixrieseberg/javascript-on-the-desktop-fast-and-slow-2b744dfb8b55
-// https://registry.npmmirror.com/binary.html?path=electron/
 // http://127.0.0.1:9439/extensions/zcodecs/index.js
 // /home/kkocdko/misc/code/clevert/temp/_test_res/i

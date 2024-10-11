@@ -93,6 +93,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 
 ## 扩展与营销灵感
 
+- https://github.com/pemistahl/grex?tab=readme-ov-file#8-webassembly-support
 - https://www.icebeer.top/用%E3%80%8C枯萎%E3%80%8D的技术做水平的思考/
 - https://v2ex.com/t/1077985#r_15344339 (注意评论)
 - https://v2ex.com/t/1042387
@@ -179,6 +180,10 @@ b:[]
 }
 
 https://indiehackertools.net/
+
+https://medium.com/@felixrieseberg/javascript-on-the-desktop-fast-and-slow-2b744dfb8b55
+
+https://registry.npmmirror.com/binary.html?path=electron/
 
 <!-- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="background:#009688;stroke:#fff;stroke-width:10px"><path style="filter: drop-shadow(-2px 6px 1px #077);" d="M110 10 70 30l40 80-40-80-20 10 40 80-40-80-20 10 40 80-40-80-30-60 30 60"/></svg> -->
 
