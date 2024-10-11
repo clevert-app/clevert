@@ -187,6 +187,132 @@ https://registry.npmmirror.com/binary.html?path=electron/
 
 <!-- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="background:#009688;stroke:#fff;stroke-width:10px"><path style="filter: drop-shadow(-2px 6px 1px #077);" d="M110 10 70 30l40 80-40-80-20 10 40 80-40-80-20 10 40 80-40-80-30-60 30 60"/></svg> -->
 
+<!--
+# old clevert presets
+
+current = 'ffmpeg_comp_low'
+
+[presets.global]
+threads_count = 1
+input_list = ['input']
+output_dir = 'output'
+# output_force = true
+# output_suffix = '_out'
+pipe = '<inherit>'
+
+[presets.any2fdkaac]
+program = '/home/kkocdko/misc/apps/any2fdkaac'
+args_template = '{input_file} {output_file}'
+output_extension = 'm4a'
+
+[presets.cwebp]
+program = 'D:\Libraries\libwebp\libwebp_1.0.0\bin\cwebp.exe'
+args_template = '-m 6 -metadata none {input_file} -o {output_file} -q 50'
+output_extension = 'webp'
+
+[presets.cwebp_lossless]
+parent = 'cwebp'
+args_template = '-lossless -m 6 -sharp_yuv -metadata none {input_file} -o {output_file}'
+
+[presets.cwebp_lossless_noalpha]
+parent = 'cwebp'
+args_template = '-lossless -m 6 -sharp_yuv -metadata none -noalpha {input_file} -o {output_file}'
+
+[presets.ffmpeg]
+program = '/home/kkocdko/misc/apps/ffmpeg'
+
+[presets.ffmpeg_comp_low]
+parent = 'ffmpeg'
+output_extension = 'mp4'
+args_template = '-i {input_file} -c:v libx264 -crf 32 -preset veryslow -r 30 -ac 1 -b:a 64k {output_file}'
+# -ac 1
+# -threads 4
+
+[presets.ffmpeg_comp_mid]
+parent = 'ffmpeg'
+output_extension = 'mp4'
+args_template = '-i {input_file} -c:v libx264 -crf 24 -preset veryslow -b:a 128k {output_file}'
+
+[presets.ffmpeg_xw]
+parent = 'ffmpeg'
+output_extension = 'mp4'
+args_template = '-i {input_file} -c:v libx264 -crf 24 -preset 8 -b:a 160k {output_file}'
+
+[presets.ffmpeg_xw2]
+parent = 'ffmpeg'
+output_extension = 'mp4'
+args_template = '-i {input_file} -c:v libx264 -crf 32 -preset 8 -filter:a "volume=4.0" -b:a 64k {output_file}'
+# -filter:a "volume=0.5"
+
+[presets.ffmpeg_m4a]
+parent = 'ffmpeg'
+args_template = '-y -i {input_file} -vn -c:a libfdk_aac -b:a 192k -ac 1 {output_file}'
+output_extension = 'm4a'
+# -ac 1
+
+[presets.ffmpeg_mp3]
+parent = 'ffmpeg'
+args_template = '-i {input_file} -c:a libmp3lame -b:a 192k -q:a 0 {output_file}'
+output_extension = 'mp3'
+
+[presets.ffmpeg_copy]
+parent = 'ffmpeg'
+args_template = '-i {input_file} -c copy {output_file}'
+
+[presets.ffmpeg_copy_audio]
+parent = 'ffmpeg'
+args_template = '-i {input_file} -vn -c:a copy {output_file}'
+output_extension = 'm4a'
+
+[presets.ffmpeg_slice]
+parent = 'ffmpeg'
+args_template = '-i {input_file} -ss 00:47:46.00 -to 00:57:16.00 -c copy {output_file}'
+
+# [presets.ffmpeg_concat]
+# ffmpeg -f concat -i list.txt -c copy output.mkv
+# list.txt:
+# file 'p1.mkv'
+# file 'p2.mkv'
+
+[presets.guetzli]
+program = 'D:\Libraries\guetzli\guetzli.exe'
+args_template = '--quality 90 {input_file} {output_file}'
+output_extension = 'jpeg'
+
+[presets.pngquant]
+program = '/home/kkocdko/misc/apps/pngquant'
+output_extension = 'png'
+
+[presets.pngquant_docs]
+parent = 'pngquant'
+args_template = '--speed 1 --quality 0-5 --posterize 4 --nofs -f 8 -o {output_file} {input_file}'
+
+[presets.pngquant_pics]
+parent = 'pngquant'
+args_template = '--speed 1 --quality 20-100 --nofs -o {output_file} {input_file}'
+
+[presets.inkscape]
+program = 'Z:\Inkscape_1.1.1\bin\inkscape.exe'
+
+[presets.inkscape_svg2png]
+parent = 'inkscape'
+args_template = '--export-type png --export-width 2560 --export-background #ffffff -o {output_file} {input_file}'
+output_extension = 'png'
+
+[presets.inkscape_pdf2svg]
+parent = 'inkscape'
+args_template = '--export-type svg --pdf-poppler --pdf-page {repeat_num} -o {output_file} {input_file}'
+output_extension = 'svg'
+output_serial = true
+# repeat_count = 50
+
+[presets.waifu2x] # github.com/nihui/waifu2x-ncnn-vulkan
+program = '.\Waifu2x_20210521\waifu2x-ncnn-vulkan.exe'
+args_template = '-i {input_file} -o {output_file} -n 3 -s 1'
+output_extension = 'png'
+threads_count = 1
+
+-->
 </details>
 
 ## Translation
