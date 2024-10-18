@@ -122,7 +122,7 @@ export default /** @type {Extension} */ ({
           stop: () => {
             child.kill("SIGTERM");
           },
-          wait: promise,
+          promise,
         };
       },
     },

@@ -28,7 +28,7 @@ import stream from "node:stream";
 @typedef {{
   progress: () => number;
   stop: () => void;
-  wait: Promise<void>;
+  promise: Promise<void>;
 }} ActionExecuteController
 @typedef {{
   id: string;
@@ -109,7 +109,7 @@ import stream from "node:stream";
   timing: () => RunActionTiming;
   progress: () => RunActionProgress;
   stop: () => void;
-  wait: Promise<any>;
+  promise: Promise<any>;
 }} RunActionController
 @typedef {{
   title: string;
@@ -129,7 +129,7 @@ import stream from "node:stream";
 @typedef {{
   title: string;
   progress: () => InstallExtensionProgress;
-  wait: Promise<any>;
+  promise: Promise<any>;
 }} InstallExtensionController
 @typedef {{
   title: string;
@@ -1123,7 +1123,7 @@ const serverMain = async () => {
       let tempStreams = /** @type {Set<fs.WriteStream>} */ (new Set());
       let tempPaths = /** @type {Set<string>} */ (new Set());
 
-      const wait = (async () => {
+      const promise = (async () => {
         const indexJsResponse = await fetch(request.url, {
           redirect: "follow",
           signal: abortController.signal,
@@ -1206,7 +1206,7 @@ const serverMain = async () => {
         }
       })();
 
-      wait.catch(async () => {
+      promise.catch(async () => {
         abortController.abort();
         // then delete the temporary files here
         // 先关 stream 再删文件
@@ -1225,7 +1225,7 @@ const serverMain = async () => {
       installExtensionControllers.set(nextId(), {
         title: request.title,
         progress: () => ({ download: { finished, amount } }),
-        wait: wait,
+        promise,
       });
 
       r.end();
@@ -1312,7 +1312,7 @@ const serverMain = async () => {
       const runningControllers = /** @type {Set<ActionExecuteController>} */ (
         new Set()
       );
-      const wait = Promise.all(
+      const promise = Promise.all(
         [...Array(request.parallel)].map((_, i) =>
           (async () => {
             for (let entry; (entry = entries.shift()); ) {
@@ -1320,14 +1320,14 @@ const serverMain = async () => {
               const controller = action.execute(request.profile, entry);
               runningControllers.add(controller);
               await sleep(100);
-              await controller.wait;
+              await controller.promise;
               runningControllers.delete(controller);
               finished += 1;
             }
           })()
         )
       );
-      wait.catch(() => {}); // avoid UnhandledPromiseRejection
+      promise.catch(() => {}); // avoid UnhandledPromiseRejection
       const beginTime = Math.trunc(Date.now() / 1000);
       runActionControllers.set(nextId(), {
         title: request.title,
@@ -1350,7 +1350,7 @@ const serverMain = async () => {
             runningControllers.delete(controller);
           }
         },
-        wait,
+        promise,
       });
       r.end();
       return;
@@ -1383,14 +1383,14 @@ const serverMain = async () => {
           });
           if (!waitingIds.has(id)) {
             waitingIds.add(id);
-            let wait = controller.wait; // if not in `waitingIds`, create new promises to `wait` this `controller`
-            wait = wait.then(() => {
+            let promise = controller.promise; // if not in `waitingIds`, create new promises to `wait` this `controller`
+            promise = promise.then(() => {
               send({ kind: "run-action-success", id });
             });
-            wait = wait.catch((error) => {
+            promise = promise.catch((error) => {
               send({ kind: "run-action-error", id, error });
             });
-            wait = wait.finally(() => {
+            promise = promise.finally(() => {
               preventedIds.add(id); // now the `controller` is exited, so we add it to `preventedIds` to skip following query, but this will not interrupt the `wait.then`, `wait.catch` above, so every `/get-status` request will receive at lease once `run-action-success` or `run-action-error`
             });
           }
@@ -1407,14 +1407,14 @@ const serverMain = async () => {
           });
           if (!waitingIds.has(id)) {
             waitingIds.add(id);
-            let wait = controller.wait;
-            wait = wait.then(() => {
+            let promise = controller.promise;
+            promise = promise.then(() => {
               send({ kind: "install-extension-success", id });
             });
-            wait = wait.catch((error) => {
+            promise = promise.catch((error) => {
               send({ kind: "install-extension-error", id, error });
             });
-            wait = wait.finally(() => {
+            promise = promise.finally(() => {
               preventedIds.add(id);
             });
           }
