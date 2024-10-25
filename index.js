@@ -177,11 +177,17 @@ const i18nRes = (() => {
   const enus = {
     title: () => "Clevert - Universal file converter platform",
     tasksEmpty: () => "No tasks",
+    toTasks: () => "Tasks",
+    toHome: () => "Home",
+    toMarket: () => "Market",
   };
   /** @type {Readonly<typeof enus>} */
   const zhcn = {
     title: () => "Clevert - 通用的文件转换平台",
     tasksEmpty: () => "没有任务",
+    toTasks: () => "任务",
+    toHome: () => "主页",
+    toMarket: () => "商店",
   };
   // todo: use llm to do translate
   return {
@@ -245,7 +251,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   /* todo: custom theme like "html.theme-abc { body { } }" */
   /* agreement: default to be visable, and hide with ".off" class */
-  .off {
+  body > div.off {
     visibility: hidden;
   }
   *,
@@ -257,11 +263,12 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     height: 100vh;
     margin: 0;
     font-family: system-ui;
+    font-size: 14px;
     background: var(--bg);
   }
   body > div {
     position: fixed;
-    top: 36px;
+    top: 40px;
     left: 0;
     right: 0;
     bottom: 0;
@@ -271,27 +278,66 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     top: 0;
     left: 0;
     right: 0;
-    height: 36px;
-    display: flex;
-    padding: 4px;
-    gap: 4px;
-    background: #7777;
   }
   header > button {
-    background: #7777;
+    background: #00000000;
     border: none;
+    border-radius: 6px;
+    margin: 6px -7px 6px 6px;
+    padding: 6.5px 12px 7.5px;
+    font-size: 14px;
+    line-height: 1;
+    position: relative;
+    transition: background-color 0.2s;
+  }
+  /* the separator */
+  header > button:not(:first-child)::before {
+    content: "";
+    display: inline-block;
+    height: 17px;
+    width: 1px;
+    background: #666;
+    position: absolute;
+    top: 5.5px;
+    left: 0;
+    transition: opacity 0.2s;
+  }
+  /* hide the inside separator, cover the outside separator */
+  header > button:not(.off) {
+    background: #444;
+    z-index: 1;
+  }
+  header > button:not(.off)::before {
+    background: #444;
   }
   header > button:hover {
-    background: #7779;
+    background: #555;
+    z-index: 2;
+  }
+  header > button:hover::before {
+    background: #555;
   }
   header > button:active {
-    background: #777f;
+    background: #666;
+    z-index: 2;
+    transition: background-color 0s;
+  }
+  header > button:active::before {
+    background: #666;
+    transition: background-color 0s;
   }
   #tasks:empty::after {
     content: "${i18n.tasksEmpty()}";
     display: block;
     text-align: center;
   }
+  /*
+  @media (pointer: coarse) {
+    :hover {
+      all: revert-layer;
+    }
+  }
+  */
 `;
 const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
   <!DOCTYPE html>
@@ -367,7 +413,7 @@ const pageMain = async () => {
       $tips.textContent = `${e.progress.download.finished}/${e.progress.download.amount} Bytes`;
     } else if (e.kind === "install-extension-success") {
       $tips.textContent = "Success";
-      r$profiles();
+      r$home();
     } else if (e.kind === "install-extension-error") {
       $tips.textContent = "Error: " + JSON.stringify(e.error);
     } else {
@@ -375,16 +421,16 @@ const pageMain = async () => {
     }
   };
 
-  // $profiles
-  const $profiles = document.createElement("div"); // 选择 extension，action，profile 等. 其实用户眼中应该全都是 profile，所有的目标都是 profile
-  document.body.appendChild($profiles);
-  $profiles.id = "profiles";
-  $profiles.classList.add("off");
+  // $home
+  const $home = document.createElement("div"); // 选择 extension，action，profile 等. 其实用户眼中应该全都是 profile，所有的目标都是 profile
+  document.body.appendChild($home);
+  $home.id = "home";
+  $home.classList.add("off");
   /** @type {ListExtensionsResponse} */
   let extensionsList = [];
   // $query
   const $query = document.createElement("div");
-  $profiles.appendChild($query);
+  $home.appendChild($query);
   $query.classList.add("query");
   const $queryInput = document.createElement("input");
   $query.appendChild($queryInput);
@@ -420,7 +466,7 @@ const pageMain = async () => {
   };
   // $choices
   const $choices = document.createElement("ul");
-  $profiles.appendChild($choices);
+  $home.appendChild($choices);
   const r$choices = () => {
     $choices.replaceChildren();
     if ($queryConditionExtensions.classList.contains("checked")) {
@@ -452,7 +498,7 @@ const pageMain = async () => {
             method: "POST",
             body: JSON.stringify(request),
           });
-          r$profiles();
+          r$home();
         };
       }
     } else {
@@ -477,21 +523,21 @@ const pageMain = async () => {
           $remove.title = "Remove";
           $choice.onclick = async () => {
             r$action(profile.extensionId, profile.extensionVersion, profile.id);
-            $profiles.classList.add("off");
+            $home.classList.add("off");
             $action.classList.remove("off");
           };
         }
       }
     }
   };
-  const r$profiles = async () => {
+  const r$home = async () => {
     const response = await fetch("/list-extensions")
       .then((r) => r.json())
       .then((a) => /** @type {ListExtensionsResponse} */ (a));
     extensionsList = response;
     r$choices();
   };
-  r$profiles();
+  r$home();
 
   // $action
   const $action = document.createElement("div"); // 在选择好 action 之后，装入这个元素中
@@ -559,7 +605,7 @@ const pageMain = async () => {
     }
     // todo: custom entries for yt-dlp
     const controller = action.ui(profile);
-    assert(controller.profileRoot.localName === "div");
+    assert(controller.profileRoot.localName === "form");
     assert(controller.profileRoot.classList.contains("profile"));
     $action.appendChild(controller.profileRoot);
     const $operations = document.createElement("div");
@@ -622,35 +668,47 @@ const pageMain = async () => {
   $top.id = "top";
   const $toTasks = document.createElement("button");
   $top.appendChild($toTasks);
-  $toTasks.textContent = "Tasks";
+  $toTasks.classList.add("off");
+  $toTasks.textContent = i18n.toTasks();
   $toTasks.onclick = () => {
+    $toTasks.classList.remove("off");
+    $toHome.classList.add("off");
+    $toMarket.classList.add("off");
     $tasks.classList.remove("off");
-    $profiles.classList.add("off");
+    $home.classList.add("off");
     $action.classList.add("off");
     $market.classList.add("off");
   };
-  const $toProfiles = document.createElement("button");
-  $top.appendChild($toProfiles);
-  $toProfiles.textContent = "Profiles";
-  $toProfiles.onclick = () => {
+  const $toHome = document.createElement("button");
+  $top.appendChild($toHome);
+  $toHome.classList.add("off");
+  $toHome.textContent = i18n.toHome();
+  $toHome.onclick = () => {
+    $toTasks.classList.add("off");
+    $toHome.classList.remove("off");
+    $toMarket.classList.add("off");
     $tasks.classList.add("off");
-    $profiles.classList.remove("off");
+    $home.classList.remove("off");
     $action.classList.add("off");
     $market.classList.add("off");
   };
   const $toMarket = document.createElement("button");
   $top.appendChild($toMarket);
-  $toMarket.textContent = "Market";
+  $toMarket.classList.add("off");
+  $toMarket.textContent = i18n.toMarket();
   $toMarket.onclick = () => {
+    $toTasks.classList.add("off");
+    $toHome.classList.add("off");
+    $toMarket.classList.remove("off");
     $tasks.classList.add("off");
-    $profiles.classList.add("off");
+    $home.classList.add("off");
     $action.classList.add("off");
     $market.classList.remove("off");
   };
 
   // main
   {
-    $market.classList.remove("off");
+    $toHome.click();
   }
 };
 const serverMain = async () => {

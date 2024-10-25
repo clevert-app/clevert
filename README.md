@@ -78,6 +78,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [x] i18n 如何设计？~~参考 typescript(typescript 的方案实现复杂)~~ ，参考 https://github.com/ivanhofer/typesafe-i18n/tree/main/packages/detectors
 - [x] 与扩展互操作。导出到扩展，提供工具函数 (比如提供固定 locale=en-US) ~~(浏览器使用 import map，node 使用 module import hook)~~ 直接使用 globalThis 插进去
 - [x] Rename `wait -> promise`
+- [ ] 扩展允许跳过安装依赖，比如使用系统自己的 python
 - [ ] 确定 UI 设计参考 https://ui.shadcn.com/docs/components/radio-group 和 https://material.angular.io/components/radio/overview
 - [ ] 引入图标
 - [ ] 强制扩展使用统一风格
@@ -102,6 +103,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 
 ## 扩展与营销灵感
 
+- https://v2ex.com/t/1084071#reply39
 - https://github.com/pemistahl/grex?tab=readme-ov-file#8-webassembly-support
 - https://www.icebeer.top/用%E3%80%8C枯萎%E3%80%8D的技术做水平的思考/
 - https://v2ex.com/t/1077985#r_15344339 (注意评论)

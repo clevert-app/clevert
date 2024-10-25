@@ -31,7 +31,8 @@ const i18nRes = (() => {
 const i18n = i18nRes[cu.locale];
 
 // export the whole object because type check is inconvenient if we use many individual exports
-export default /** @type {Extension} */ ({
+/** @type {Extension} */
+export default {
   id: "zcodecs", // must be unique in whole extension market, can contains '-' but must not contains '_'
   version: "0.1.0", // must obey https://semver.org
   name: "zcodecs",
@@ -61,19 +62,26 @@ export default /** @type {Extension} */ ({
       // 还有一个设想，比如 a.pdf b.pdf 提取图片到 out/a/XXX.png out/b/XXX.png 这要怎么处理？
       ui: (profile) => {
         // don't use <select multiple>, it's weird in mobile browser
-        const css = String.raw;
-        const $profile = document.createElement("div");
+        const $profile = document.createElement("form");
         $profile.classList.add("profile");
+        const css = String.raw;
         $profile.appendChild(document.createElement("style")).textContent = css`
           #action .profile {
-            display: block;
+            display: block; /* or grid or others */
+          }
+          #action .profile label {
+            display: grid;
+            max-width: 180px;
+            gap: 4px;
           }
         `;
         const $qualityLabel = $profile.appendChild(
           document.createElement("label")
         );
         $qualityLabel.textContent = "quality(0-100):";
-        const $quality = $profile.appendChild(document.createElement("input"));
+        const $quality = $qualityLabel.appendChild(
+          document.createElement("input")
+        );
         $quality.type = "number";
         $quality.value = profile.quality;
         return {
@@ -149,4 +157,4 @@ export default /** @type {Extension} */ ({
       },
     },
   ],
-});
+};

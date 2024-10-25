@@ -7,18 +7,31 @@ const consts = globalThis.process && {
   exe: path.join(import.meta.dirname, "yt-dlp"),
 };
 
-export default /** @type {Extension} */ ({
+/** @type {Extension} */
+export default {
   id: "yt-dlp",
   version: "0.1.0",
   name: "yt-dlp",
   description: "yt-dlp description",
-  dependencies: [],
+  dependencies: [], // python
   assets: [
     {
-      platforms: ["linux-x64"], // 匹配平台，非当前平台不下载
+      platforms: ["linux-x64"],
       kind: "raw",
       path: "./yt-dlp",
-      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.09.27/yt-dlp",
+      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.10.22/yt-dlp",
+    },
+    {
+      platforms: ["mac-arm64"],
+      kind: "raw",
+      path: "./yt-dlp",
+      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.10.22/yt-dlp_macos",
+    },
+    {
+      platforms: ["win-x64"],
+      kind: "raw",
+      path: "./yt-dlp.exe",
+      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.10.22/yt-dlp_x86.exe",
     },
   ],
   actions: [
@@ -114,7 +127,7 @@ export default /** @type {Extension} */ ({
           stop: () => {
             child.kill("SIGTERM");
           },
-          wait: new Promise((resolve, reject) => {
+          promise: new Promise((resolve, reject) => {
             child.on("error", (err) => reject(err));
             child.on("exit", (code) => (code ? reject({ code }) : resolve()));
             // child.on("exit", (code) => {
@@ -142,4 +155,4 @@ export default /** @type {Extension} */ ({
       },
     },
   ],
-});
+};
