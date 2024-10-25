@@ -49,18 +49,18 @@ export default {
         // <option value="parrot">Parrot</option>
         // </select>
         const css = String.raw;
-        const $profile = document.createElement("form");
-        $profile.classList.add("profile");
-        $profile.appendChild(document.createElement("style")).textContent = css`
-          #action .profile {
+        const $root = document.createElement("form");
+        $root.classList.add("root");
+        $root.appendChild(document.createElement("style")).textContent = css`
+          #action .root {
             display: block;
           }
         `;
-        const $qualityLabel = $profile.appendChild(
+        const $qualityLabel = $root.appendChild(
           document.createElement("label")
         );
         $qualityLabel.textContent = "quality(0-100):";
-        const $quality = $profile.appendChild(document.createElement("input"));
+        const $quality = $root.appendChild(document.createElement("input"));
         $quality.type = "number";
         $quality.value = profile.quality;
         return {
@@ -78,7 +78,7 @@ export default {
           //     },
           //   ];
           // },
-          profileRoot: $profile,
+          root: $root,
           // 用函数取出，少用什么 getter setter
           profile: () => {
             // 可能不能这样写，可能会带上 entries？

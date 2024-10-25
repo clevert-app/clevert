@@ -778,6 +778,11 @@ const pageMain = async () => {
     assert(controller.root.localName === "form");
     assert(controller.root.classList.contains("root"));
     $action.appendChild(controller.root);
+    new MutationObserver((mutations, observer) => {
+      if (controller.root.parentNode !== null) return;
+      observer.disconnect();
+      controller.root.dispatchEvent(new CustomEvent("post-remove"));
+    }).observe($action, { childList: true });
     const $operations = document.createElement("div");
     $operations.classList.add("operations");
     $action.appendChild($operations);
