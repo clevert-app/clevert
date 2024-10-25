@@ -268,10 +268,11 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > div {
     position: fixed;
-    top: 40px;
+    top: 42px;
     left: 0;
     right: 0;
     bottom: 0;
+    padding: 6px 12px 12px;
   }
   header {
     position: fixed;
@@ -280,49 +281,24 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     right: 0;
   }
   header > button {
-    background: #00000000;
+    background: #000;
     border: none;
     border-radius: 6px;
-    margin: 6px -7px 6px 6px;
-    padding: 6.5px 12px 7.5px;
+    margin: 6px -2px 6px 6px;
+    padding: 8px 12px;
     font-size: 14px;
     line-height: 1;
     position: relative;
     transition: background-color 0.2s;
   }
-  /* the separator */
-  header > button:not(:first-child)::before {
-    content: "";
-    display: inline-block;
-    height: 17px;
-    width: 1px;
-    background: #666;
-    position: absolute;
-    top: 5.5px;
-    left: 0;
-    transition: opacity 0.2s;
-  }
   /* hide the inside separator, cover the outside separator */
   header > button:not(.off) {
-    background: #444;
-    z-index: 1;
-  }
-  header > button:not(.off)::before {
     background: #444;
   }
   header > button:hover {
     background: #555;
-    z-index: 2;
-  }
-  header > button:hover::before {
-    background: #555;
   }
   header > button:active {
-    background: #666;
-    z-index: 2;
-    transition: background-color 0s;
-  }
-  header > button:active::before {
     background: #666;
     transition: background-color 0s;
   }
@@ -331,13 +307,6 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     display: block;
     text-align: center;
   }
-  /*
-  @media (pointer: coarse) {
-    :hover {
-      all: revert-layer;
-    }
-  }
-  */
 `;
 const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
   <!DOCTYPE html>
