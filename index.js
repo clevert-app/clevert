@@ -180,6 +180,10 @@ const i18nRes = (() => {
     toTasks: () => "Tasks",
     toHome: () => "Home",
     toMarket: () => "Market",
+    showRecent: () => "Recent",
+    showByName: () => "By Name",
+    showExtensions: () => "Extensions",
+    showProfiles: () => "Profiles",
   };
   /** @type {Readonly<typeof enus>} */
   const zhcn = {
@@ -188,6 +192,10 @@ const i18nRes = (() => {
     toTasks: () => "任务",
     toHome: () => "主页",
     toMarket: () => "商店",
+    showRecent: () => "最近",
+    showByName: () => "按名称",
+    showExtensions: () => "扩展",
+    showProfiles: () => "配置",
   };
   // todo: use llm to do translate
   return {
@@ -250,14 +258,42 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     }
   }
   /* todo: custom theme like "html.theme-abc { body { } }" */
-  /* agreement: default to be visable, and hide with ".off" class */
-  body > div.off {
-    visibility: hidden;
-  }
   *,
   *::before,
   *::after {
     box-sizing: border-box;
+  }
+  button {
+    position: relative;
+    padding: 8px 12px;
+    font-size: 14px;
+    line-height: 1;
+    background: #000;
+    border: none;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+  }
+  button:not(.off) {
+    background: #444;
+  }
+  button:hover {
+    background: #555;
+  }
+  button:active {
+    background: #666;
+    transition: background-color 0s;
+  }
+  input[type="text"],
+  input[type="number"],
+  input:not([type]) {
+    width: 140px;
+    padding: 5px 8px 5px 14px;
+    font-size: 14px;
+    line-height: 20px;
+    background: #333;
+    border: none;
+    border-radius: 6px;
+    outline: none;
   }
   body {
     height: 100vh;
@@ -269,43 +305,38 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > div {
     position: fixed;
     top: 42px;
-    left: 0;
     right: 0;
     bottom: 0;
+    left: 0;
     padding: 6px 12px 12px;
+  }
+  /* agreement: default to be visable, and hide with ".off" class */
+  body > div.off {
+    visibility: hidden;
+  }
+  #home > button {
+    padding: 6px 12px;
+    margin-right: 4px;
+  }
+  #home > .separator {
+    margin: 4px;
+  }
+  #tasks:empty::after {
+    display: block;
+    text-align: center;
+    content: "${i18n.tasksEmpty()}";
+  }
+  #market > input {
+    margin-right: 4px;
   }
   header {
     position: fixed;
     top: 0;
-    left: 0;
     right: 0;
+    left: 0;
   }
   header > button {
-    background: #000;
-    border: none;
-    border-radius: 6px;
-    margin: 6px -2px 6px 6px;
-    padding: 8px 12px;
-    font-size: 14px;
-    line-height: 1;
-    position: relative;
-    transition: background-color 0.2s;
-  }
-  /* hide the inside separator, cover the outside separator */
-  header > button:not(.off) {
-    background: #444;
-  }
-  header > button:hover {
-    background: #555;
-  }
-  header > button:active {
-    background: #666;
-    transition: background-color 0s;
-  }
-  #tasks:empty::after {
-    content: "${i18n.tasksEmpty()}";
-    display: block;
-    text-align: center;
+    margin: 6px calc(4px - 6px) 6px 6px;
   }
 `;
 const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
@@ -397,40 +428,46 @@ const pageMain = async () => {
   $home.classList.add("off");
   /** @type {ListExtensionsResponse} */
   let extensionsList = [];
-  // $query
-  const $query = document.createElement("div");
-  $home.appendChild($query);
-  $query.classList.add("query");
-  const $queryInput = document.createElement("input");
-  $query.appendChild($queryInput);
-  $queryInput.oninput = debounce(() => r$choices(), 700);
-  const $queryReset = document.createElement("button");
-  $query.appendChild($queryReset);
-  $queryReset.textContent = "×";
-  $queryReset.title = "Reset";
-  $queryReset.onclick = () => {
-    $queryInput.value = "";
-    for (const el of $queryBar.children) {
-      el.classList.remove("checked");
-    }
+  // $showRecent
+  const $showRecent = document.createElement("button");
+  $home.appendChild($showRecent);
+  $showRecent.textContent = i18n.showRecent();
+  $showRecent.onclick = () => {
+    $showRecent.classList.remove("off");
+    $showByName.classList.add("off");
     r$choices();
   };
-  const $queryBar = document.createElement("div"); // to contains some conditions like "extension:zcodecs" "file:png"
-  $query.appendChild($queryBar);
-  // $queryConditionExtensions
-  const $queryConditionExtensions = document.createElement("button"); // only show extensions, do not show profiles
-  $queryBar.appendChild($queryConditionExtensions);
-  $queryConditionExtensions.textContent = "all-extensions";
-  $queryConditionExtensions.title = "Show all extensions";
-  $queryConditionExtensions.onclick = () => {
-    $queryInput.value = "";
-    if (!$queryConditionExtensions.classList.contains("checked")) {
-      // because this condition is exclusive
-      for (const el of $queryBar.children) {
-        el.classList.remove("checked");
-      }
-    }
-    $queryConditionExtensions.classList.toggle("checked");
+  // $showByName
+  const $showByName = document.createElement("button");
+  $home.appendChild($showByName);
+  $showByName.classList.add("off");
+  $showByName.textContent = i18n.showByName();
+  $showByName.onclick = () => {
+    $showRecent.classList.add("off");
+    $showByName.classList.remove("off");
+    r$choices();
+  };
+  // separator
+  $home.appendChild(document.createElement("span")).classList.add("separator");
+  // $showExtensions
+  const $showExtensions = document.createElement("button");
+  $home.appendChild($showExtensions);
+  $showExtensions.textContent = i18n.showExtensions();
+  $showExtensions.onclick = () => {
+    $showExtensions.classList.remove("off");
+    $showProfiles.classList.add("off");
+    $showProfiles.dataset.extensionId = "";
+    $showProfiles.dataset.extensionVersion = "";
+    r$choices();
+  };
+  // $showProfiles
+  const $showProfiles = document.createElement("button");
+  $home.appendChild($showProfiles);
+  $showProfiles.classList.add("off");
+  $showProfiles.textContent = i18n.showProfiles();
+  $showProfiles.onclick = () => {
+    $showExtensions.classList.add("off");
+    $showProfiles.classList.remove("off");
     r$choices();
   };
   // $choices
@@ -438,10 +475,15 @@ const pageMain = async () => {
   $home.appendChild($choices);
   const r$choices = () => {
     $choices.replaceChildren();
-    if ($queryConditionExtensions.classList.contains("checked")) {
+    if (!$showExtensions.classList.contains("off")) {
       for (const extension of extensionsList) {
         const $choice = document.createElement("figure");
         $choices.appendChild($choice);
+        $choice.onclick = () => {
+          $showProfiles.dataset.extensionId = extension.id;
+          $showProfiles.dataset.extensionVersion = extension.version;
+          $showProfiles.click();
+        };
         const $name = document.createElement("b");
         $choice.appendChild($name);
         $name.textContent = extension.name;
@@ -470,8 +512,16 @@ const pageMain = async () => {
           r$home();
         };
       }
-    } else {
+    } else if (!$showProfiles.classList.contains("off")) {
       for (const extension of extensionsList) {
+        if ($showProfiles.dataset.extensionId) {
+          if (
+            extension.id !== $showProfiles.dataset.extensionId ||
+            extension.version !== $showProfiles.dataset.extensionVersion
+          ) {
+            continue;
+          }
+        }
         for (const profile of extension.profiles) {
           const $choice = document.createElement("figure");
           $choices.appendChild($choice);
@@ -497,6 +547,8 @@ const pageMain = async () => {
           };
         }
       }
+    } else {
+      assert(false, "unexpected state");
     }
   };
   const r$home = async () => {
@@ -611,10 +663,10 @@ const pageMain = async () => {
     // todo: add real market
     const $url = document.createElement("input");
     $market.appendChild($url);
-    $url.placeholder = "url";
+    $url.placeholder = "URL";
     const $install = document.createElement("button");
     $market.appendChild($install);
-    $install.textContent = "install";
+    $install.textContent = "Install";
     $install.onclick = async () => {
       assert($url.value.trim() !== "");
       /** @type {InstallExtensionRequest} */
