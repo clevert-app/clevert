@@ -244,56 +244,81 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   @media (min-width: 1px) {
     body {
       --bg: #fff;
+      --bg3: #00000033;
+      --bg4: #00000044;
+      --bg5: #00000055;
+      --bg6: #00000066;
       --fg: #000;
-      --border: 1px solid #888;
-      --radius: 4px;
     }
   }
   /* initial theme for dark mode */
   @media (prefers-color-scheme: dark) {
     body {
       --bg: #000;
+      --bg2: #ffffff22;
+      --bg3: #ffffff33;
+      --bg4: #ffffff44;
+      --bg5: #ffffff55;
+      --bg6: #ffffff66;
       --fg: #fff;
-      --border: 1px solid #666;
     }
   }
-  /* todo: custom theme like "html.theme-abc { body { } }" */
+  /* todo: custom themes like "html.theme-abc { body { } }" */
   *,
   *::before,
   *::after {
     box-sizing: border-box;
   }
-  button {
+  /* agreement: apply style to multi elements by css selector, not by util class */
+  button,
+  #home figure {
     position: relative;
     padding: 8px 12px;
     font-size: 14px;
     line-height: 1;
-    background: #000;
+    background: var(--bg4);
     border: none;
     border-radius: 6px;
     transition: background-color 0.2s;
   }
-  button:not(.off) {
-    background: #444;
+  #home figure {
+    background: var(--bg3);
   }
-  button:hover {
-    background: #555;
+  #home > button.off:not(:hover):not(:active),
+  header > button.off:not(:hover):not(:active) {
+    background: #0000;
   }
-  button:active {
-    background: #666;
+  button:hover,
+  #home figure:hover {
+    background: var(--bg5);
+  }
+  #home figure:hover {
+    background: var(--bg4);
+  }
+  button:active,
+  #home figure:active {
+    background: var(--bg6);
     transition: background-color 0s;
+  }
+  #home figure:active {
+    background: var(--bg5);
   }
   input[type="text"],
   input[type="number"],
   input:not([type]) {
-    width: 140px;
     padding: 5px 8px 5px 14px;
     font-size: 14px;
     line-height: 20px;
-    background: #333;
+    background: var(--bg3);
     border: none;
     border-radius: 6px;
     outline: none;
+    transition: background-color 0.2s;
+  }
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  input:not([type]):focus {
+    background: var(--bg4);
   }
   body {
     height: 100vh;
@@ -301,6 +326,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     font-family: system-ui;
     font-size: 14px;
     background: var(--bg);
+    color: var(--fg);
   }
   body > div {
     position: fixed;
@@ -319,12 +345,56 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     margin-right: 4px;
   }
   #home > .separator {
-    margin: 4px;
+    display: inline-block;
+    width: 8px;
+  }
+  #home > ul {
+    display: grid;
+    gap: 6px;
+    padding: 0;
+    margin: 12px 0 0;
+  }
+  #home figure {
+    position: relative;
+    padding: 10px 14px 12px;
+    margin: 0;
+  }
+  /* todo: animation for removing extension */
+  #home figure > b {
+    font-size: 17px;
+    font-weight: normal;
+    line-height: 1;
+  }
+  #home figure > sub {
+    margin-left: 8px;
+    vertical-align: baseline;
+  }
+  #home figure > p {
+    margin: 8px 0 0;
+    line-height: 1;
+  }
+  #home figure > button {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    padding: 8px;
+  }
+  #home figure > button:not(:hover):not(:active) {
+    background: none;
+  }
+  #action .entries {
+    display: flex;
+    gap: 6px;
+  }
+  #tasks {
+    overflow: auto;
   }
   #tasks:empty::after {
     display: block;
     text-align: center;
     content: "${i18n.tasksEmpty()}";
+    font-size: 16px;
+    margin: 8px;
   }
   #market > input {
     margin-right: 4px;
@@ -336,8 +406,12 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     left: 0;
   }
   header > button {
-    margin: 6px calc(4px - 6px) 6px 6px;
+    margin: 8px 0 8px 4px;
   }
+  header > button:first-child {
+    margin-left: 12px;
+  }
+  /* todo: about hover, https://stackoverflow.com/a/30303898 */
 `;
 const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
   <!DOCTYPE html>
@@ -375,7 +449,7 @@ const pageMain = async () => {
   $tasks.id = "tasks";
   $tasks.classList.add("off");
   new EventSource("/get-status").onmessage = async (message) => {
-    const e = /** @type {GetStatusResponseEvent} */ (JSON.parse(message.data));
+    const e = /** @type {GetStatusResponseEvent} */ (JSON.parse(message.data)); // agreement: the only sse endpoint, only one
     /** @type {HTMLElement | null} */
     let $task = $tasks.querySelector(`section[data-id="${e.id}"]`);
     if (!$task) {
@@ -456,8 +530,8 @@ const pageMain = async () => {
   $showExtensions.onclick = () => {
     $showExtensions.classList.remove("off");
     $showProfiles.classList.add("off");
-    $showProfiles.dataset.extensionId = "";
-    $showProfiles.dataset.extensionVersion = "";
+    delete $showProfiles.dataset.extensionId;
+    delete $showProfiles.dataset.extensionVersion;
     r$choices();
   };
   // $showProfiles
@@ -492,14 +566,15 @@ const pageMain = async () => {
         $choice.appendChild($version);
         $version.textContent = extension.version;
         $version.title = "Extension version";
-        const $description = document.createElement("span");
+        const $description = document.createElement("p");
         $choice.appendChild($description);
         $description.textContent = extension.description;
         const $remove = document.createElement("button");
         $choice.appendChild($remove);
         $remove.textContent = "×";
         $remove.title = "Remove";
-        $remove.onclick = async () => {
+        $remove.onclick = async (e) => {
+          e.stopPropagation();
           /** @type {RemoveExtensionRequest} */
           const request = {
             id: extension.id,
@@ -533,13 +608,17 @@ const pageMain = async () => {
           $choice.appendChild($version);
           $version.textContent = profile.extensionVersion;
           $version.title = "Extension version";
-          const $description = document.createElement("span");
+          const $description = document.createElement("p");
           $choice.appendChild($description);
           $description.textContent = profile.description;
           const $remove = document.createElement("button");
           $choice.appendChild($remove);
           $remove.textContent = "×";
           $remove.title = "Remove";
+          $remove.onclick = async (e) => {
+            e.stopPropagation();
+            assert(false, "todo");
+          };
           $choice.onclick = async () => {
             r$action(profile.extensionId, profile.extensionVersion, profile.id);
             $home.classList.add("off");
@@ -671,7 +750,11 @@ const pageMain = async () => {
       assert($url.value.trim() !== "");
       /** @type {InstallExtensionRequest} */
       const request = {
-        title: "Install extension from " + $url.value,
+        title:
+          "Install extension from " +
+          ($url.value.length > 12 + 19 + 1
+            ? $url.value.slice(0, 12) + "…" + $url.value.slice(-19)
+            : $url.value),
         url: $url.value,
       };
       await fetch("/install-extension", {
@@ -814,7 +897,7 @@ const serverMain = async () => {
   };
 
   const electronRun = electronImport.then(async (electron) => {
-    const { app, BrowserWindow, nativeTheme, screen } = electron;
+    const { app, BrowserWindow, nativeTheme, screen } = electron; // agreement: keep electron optional, as a simple webview, users can choose node + browser
     app.commandLine.appendSwitch("no-sandbox"); // cause devtools error /dev/shm ... on linux
     app.commandLine.appendSwitch("disable-gpu-sandbox");
     const createWindow = async () => {
@@ -970,7 +1053,7 @@ const serverMain = async () => {
   /**
    * From [node-machine-id](https://github.com/automation-stack/node-machine-id/tree/f580f9f20668582e9087d92cea2511c972f2e6aa). MIT License.
    *
-   * We plan to add vip/subscription verification in the future while keeping this project open source. So the verification is just a "gentleman’s agreement" for normal users. Developers can still skip it, like the `shapez.io` game.
+   * We plan to add vip/subscription verification in the future while keeping this project open source. So the verification is just "gentleman’s agreements" for normal users. Developers can still skip it, like the `shapez.io` game.
    */
   // prettier-ignore
   const machineId = () => {
@@ -1171,8 +1254,8 @@ const serverMain = async () => {
 
     if (r.req.url === "/") {
       r.setHeader("Content-Type", "text/html; charset=utf-8");
-      r.writeHead(200);
-      r.end(pageHtml(i18n, config.locale));
+      r.writeHead(200); // agreement: don't use chained call like r.writeHead(200).end("whatever")
+      r.end(pageHtml(i18n, config.locale)); // agreement: use vanilla html+css+js, esm, @ts-check, jsdoc, get rid of ts transpile, node 22 added built-in ts but not at browser in the foreseeable future
       return;
     }
 
@@ -1366,7 +1449,7 @@ const serverMain = async () => {
         r.writeHead(200);
         r.end(response);
       } else {
-        assert(false, "todo"); // add mime guess and more
+        assert(false, "todo"); // todo: mime guess and more?
       }
       return;
     }
