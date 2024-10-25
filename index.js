@@ -236,6 +236,36 @@ const debounce = (f, ms) => {
  */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Listen for the element to be inserted into dom tree.
+ * @param {HTMLElement} el
+ * @param {() => void} f
+ */
+const onInsert = (el, f) => {
+  el.style.animationName = "oninsert";
+  const listener = () => {
+    el.removeEventListener("animationstart", listener);
+    f();
+  };
+  el.addEventListener("animationstart", listener);
+};
+
+/**
+ * Listen for the element to be removed from dom tree.
+ * @param {HTMLElement} el
+ * @param {() => void} f
+ */
+const onRemove = (el, f) => {
+  onInsert(el, () => {
+    assert(el.parentNode !== null);
+    new MutationObserver((mutations, observer) => {
+      if (el.parentNode !== null) return; // not removed, skip
+      observer.disconnect();
+      f();
+    }).observe(el.parentNode, { childList: true });
+  });
+};
+
 const [html, css] = [String.raw, String.raw]; // https://github.com/0x00000001A/es6-string-html
 const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   /* initial theme, contains all vars */
@@ -262,6 +292,9 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     }
   }
   /* todo: custom themes like "html.theme-abc { body { } }" */
+  /* https://stackoverflow.com/a/24095217 , http://www.backalleycoder.com/2012/04/25/i-want-a-damnodeinserted/ */
+  @keyframes oninsert {
+  }
   *,
   *::before,
   *::after {
