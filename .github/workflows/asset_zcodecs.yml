@@ -163,7 +163,7 @@ jobs:
           tar -cf zcodecs.tar --dereference zcodecs
   linux-x64:
     needs: prepare
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04 # don't worry, we use debian 12 (docker gcc:14-bookworm) below
     steps:
       - uses: actions/cache/restore@v4
         with:

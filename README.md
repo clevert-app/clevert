@@ -7,7 +7,7 @@ The universal file converter platform.
 <details>
 <summary>笔记</summary>
 
-- http://127.0.0.1:9439/extensions/jpegxl/index.js
+- http://127.0.0.1:9393/static/extensions/zcodecs/index.js
 
 ```sh
 sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources
@@ -23,6 +23,11 @@ printf "deb [trusted=yes] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 mai
 apt update
 apt install -y cmake g++ make
 apt install -y clang-18/llvm-toolchain-jammy-18
+
+目标，让 clang generate 出比 gcc 快的 binary
+https://llvm.org/docs/Vectorizers.html
+https://wiki.gentoo.org/wiki/GCC_optimization/zh-cn
+google: clang auto vectorize gcc
 ```
 
 ## 编译优化
@@ -73,6 +78,9 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [x] i18n 如何设计？~~参考 typescript(typescript 的方案实现复杂)~~ ，参考 https://github.com/ivanhofer/typesafe-i18n/tree/main/packages/detectors
 - [x] 与扩展互操作。导出到扩展，提供工具函数 (比如提供固定 locale=en-US) ~~(浏览器使用 import map，node 使用 module import hook)~~ 直接使用 globalThis 插进去
 - [x] Rename `wait -> promise`
+- [ ] 确定 UI 设计参考 https://ui.shadcn.com/docs/components/radio-group 和 https://material.angular.io/components/radio/overview
+- [ ] 引入图标
+- [ ] 强制扩展使用统一风格
 - [ ] CSS 与交互初步，成为一个能用的东西 抄 https://mui.com/material-ui/react-button/
 - [ ] 需要权衡实现难度和界面易用性，先画图
 - [ ] 官方扩展 zcodecs
@@ -90,6 +98,7 @@ clear ; ~/misc/apps/hyperfine -w 1 -r 5 './ect -3 ect_test_set/*'
 - [ ] 上线
 - [ ] 能否命令行使用？给一些用户不使用 gui 的可能？以后再做
 - [ ] 支持 gtk webkit？tauri？
+- [ ] 以后如果要多扩展同时展示，可以使用 css block 来保证不冲突 全局可以影响扩展，但是扩展不能影响全局
 
 ## 扩展与营销灵感
 
