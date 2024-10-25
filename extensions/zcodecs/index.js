@@ -62,20 +62,20 @@ export default {
       // 还有一个设想，比如 a.pdf b.pdf 提取图片到 out/a/XXX.png out/b/XXX.png 这要怎么处理？
       ui: (profile) => {
         // don't use <select multiple>, it's weird in mobile browser
-        const $profile = document.createElement("form");
-        $profile.classList.add("profile");
+        const $root = document.createElement("form");
+        $root.classList.add("root");
         const css = String.raw;
-        $profile.appendChild(document.createElement("style")).textContent = css`
-          #action .profile {
+        $root.appendChild(document.createElement("style")).textContent = css`
+          #action .root {
             display: block; /* or grid or others */
           }
-          #action .profile label {
+          #action .root label {
             display: grid;
             max-width: 180px;
             gap: 4px;
           }
         `;
-        const $qualityLabel = $profile.appendChild(
+        const $qualityLabel = $root.appendChild(
           document.createElement("label")
         );
         $qualityLabel.textContent = "quality(0-100):";
@@ -99,7 +99,7 @@ export default {
           //     },
           //   ];
           // },
-          profileRoot: $profile,
+          root: $root,
           // 用函数取出，少用什么 getter setter
           profile: () => {
             // 可能不能这样写，可能会带上 entries？

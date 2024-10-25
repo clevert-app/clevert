@@ -19,17 +19,15 @@ import stream from "node:stream";
   path: string;
 }} Asset For "raw", "gzip" and "xz", the `.path` is the file path; for others, the `.path` is the directory path.
 @typedef {{
-  entriesRoot?: HTMLElement;
-  entries?: () => any;
-  profileRoot: HTMLElement;
+  root: HTMLElement;
   profile: () => any;
-  preview: (input: any) => void;
-}} ActionUiController Named "controller" because it looks like [AbortController](https://developer.mozilla.org/en-US/docs/Web/API/AbortController) .
+  entries?: () => any;
+}} ActionUiController The `entries()` will be used if action kind is `custom`.
 @typedef {{
   progress: () => number;
   stop: () => void;
   promise: Promise<void>;
-}} ActionExecuteController
+}} ActionExecuteController Named "controller" because it looks like `AbortController`.
 @typedef {{
   id: string;
   name: string;
@@ -92,9 +90,9 @@ import stream from "node:stream";
   outputExtension: string;
 }} EntriesCommonFiles The most common.
 @typedef {{
-  kind: "plain";
+  kind: "custom";
   entries: any[];
-}} EntriesPlain Just `entries` itself, may useful for `yt-dlp` and other scenario that a file comes from nowhere.
+}} EntriesCustom Just `entries` itself, may useful for `yt-dlp` and other scenario that a file comes from nowhere.
 @typedef {{
   begin: number;
   expectedEnd: number;
@@ -117,7 +115,7 @@ import stream from "node:stream";
   extensionVersion: string;
   actionId: string;
   profile: any;
-  entries: EntriesPlain | EntriesCommonFiles | EntriesNumberSequence;
+  entries: EntriesCustom | EntriesCommonFiles | EntriesNumberSequence;
   parallel: number;
 }} RunActionRequest
 @typedef {{
@@ -271,7 +269,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
-  #home figure {
+  #home li {
     position: relative;
     padding: 8px 12px;
     font-size: 14px;
@@ -281,7 +279,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     border-radius: 6px;
     transition: background-color 0.2s;
   }
-  #home figure {
+  #home li {
     background: var(--bg3);
   }
   #home > button.off:not(:hover):not(:active),
@@ -289,18 +287,18 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     background: #0000;
   }
   button:hover,
-  #home figure:hover {
+  #home li:hover {
     background: var(--bg5);
   }
-  #home figure:hover {
+  #home li:hover {
     background: var(--bg4);
   }
   button:active,
-  #home figure:active {
+  #home li:active {
     background: var(--bg6);
     transition: background-color 0s;
   }
-  #home figure:active {
+  #home li:active {
     background: var(--bg5);
   }
   input[type="text"],
@@ -312,7 +310,6 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     background: var(--bg3);
     border: none;
     border-radius: 6px;
-    outline: none;
     transition: background-color 0.2s;
   }
   input[type="text"]:focus,
@@ -354,32 +351,33 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     padding: 0;
     margin: 12px 0 0;
   }
-  #home figure {
+  #home li {
     position: relative;
     padding: 10px 14px 12px;
     margin: 0;
+    list-style: none;
   }
   /* todo: animation for removing extension */
-  #home figure > b {
+  #home li > b {
     font-size: 17px;
     font-weight: normal;
     line-height: 1;
   }
-  #home figure > sub {
+  #home li > sub {
     margin-left: 8px;
     vertical-align: baseline;
   }
-  #home figure > p {
+  #home li > p {
     margin: 8px 0 0;
     line-height: 1;
   }
-  #home figure > button {
+  #home li > button {
     position: absolute;
     top: 6px;
     right: 6px;
     padding: 8px;
   }
-  #home figure > button:not(:hover):not(:active) {
+  #home li > button:not(:hover):not(:active) {
     background: none;
   }
   #action .entries {
@@ -411,7 +409,11 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   header > button:first-child {
     margin-left: 12px;
   }
+  header > button.to-action:empty {
+    visibility: hidden;
+  }
   /* todo: about hover, https://stackoverflow.com/a/30303898 */
+  /* todo: use box-shadow instead of background on hover? */
 `;
 const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
   <!DOCTYPE html>
@@ -551,8 +553,9 @@ const pageMain = async () => {
     $choices.replaceChildren();
     if (!$showExtensions.classList.contains("off")) {
       for (const extension of extensionsList) {
-        const $choice = document.createElement("figure");
+        const $choice = document.createElement("li");
         $choices.appendChild($choice);
+        $choice.tabIndex = 0;
         $choice.onclick = () => {
           $showProfiles.dataset.extensionId = extension.id;
           $showProfiles.dataset.extensionVersion = extension.version;
@@ -598,8 +601,9 @@ const pageMain = async () => {
           }
         }
         for (const profile of extension.profiles) {
-          const $choice = document.createElement("figure");
+          const $choice = document.createElement("li");
           $choices.appendChild($choice);
+          $choice.tabIndex = 0;
           const $name = document.createElement("b");
           $choice.appendChild($name);
           $name.textContent = profile.name;
@@ -621,8 +625,8 @@ const pageMain = async () => {
           };
           $choice.onclick = async () => {
             r$action(profile.extensionId, profile.extensionVersion, profile.id);
-            $home.classList.add("off");
-            $action.classList.remove("off");
+            $toAction.textContent = "〉" + profile.name;
+            $toAction.click();
           };
         }
       }
@@ -638,6 +642,39 @@ const pageMain = async () => {
     r$choices();
   };
   r$home();
+
+  // $market
+  const $market = document.createElement("div");
+  document.body.appendChild($market);
+  $market.id = "market";
+  $market.classList.add("off");
+  const r$market = async () => {
+    // todo: add real market
+    const $url = document.createElement("input");
+    $market.appendChild($url);
+    $url.placeholder = "URL";
+    const $install = document.createElement("button");
+    $market.appendChild($install);
+    $install.textContent = "Install";
+    $install.onclick = async () => {
+      assert($url.value.trim() !== "");
+      /** @type {InstallExtensionRequest} */
+      const request = {
+        title:
+          "Install extension from " +
+          ($url.value.length > 12 + 19 + 1
+            ? $url.value.slice(0, 12) + "…" + $url.value.slice(-19)
+            : $url.value),
+        url: $url.value,
+      };
+      await fetch("/install-extension", {
+        method: "POST",
+        body: JSON.stringify(request),
+      });
+      $toTasks.click();
+    };
+  };
+  r$market();
 
   // $action
   const $action = document.createElement("div"); // 在选择好 action 之后，装入这个元素中
@@ -688,14 +725,14 @@ const pageMain = async () => {
         };
         return entries;
       };
-    } else if (action.kind === "plain") {
+    } else if (action.kind === "custom") {
       // todo
       const $entries = document.createElement("div");
       $action.appendChild($entries);
       getEntries = () => {
-        /** @type {EntriesPlain} */
+        /** @type {EntriesCustom} */
         const entries = {
-          kind: "plain",
+          kind: "custom",
           entries: [],
         };
         return entries;
@@ -705,9 +742,9 @@ const pageMain = async () => {
     }
     // todo: custom entries for yt-dlp
     const controller = action.ui(profile);
-    assert(controller.profileRoot.localName === "form");
-    assert(controller.profileRoot.classList.contains("profile"));
-    $action.appendChild(controller.profileRoot);
+    assert(controller.root.localName === "form");
+    assert(controller.root.classList.contains("root"));
+    $action.appendChild(controller.root);
     const $operations = document.createElement("div");
     $operations.classList.add("operations");
     $action.appendChild($operations);
@@ -729,42 +766,10 @@ const pageMain = async () => {
         method: "POST",
         body: JSON.stringify(request),
       });
+      $toAction.textContent = "";
       $toTasks.click();
     };
   };
-
-  // $market
-  const $market = document.createElement("div");
-  document.body.appendChild($market);
-  $market.id = "market";
-  $market.classList.add("off");
-  const r$market = async () => {
-    // todo: add real market
-    const $url = document.createElement("input");
-    $market.appendChild($url);
-    $url.placeholder = "URL";
-    const $install = document.createElement("button");
-    $market.appendChild($install);
-    $install.textContent = "Install";
-    $install.onclick = async () => {
-      assert($url.value.trim() !== "");
-      /** @type {InstallExtensionRequest} */
-      const request = {
-        title:
-          "Install extension from " +
-          ($url.value.length > 12 + 19 + 1
-            ? $url.value.slice(0, 12) + "…" + $url.value.slice(-19)
-            : $url.value),
-        url: $url.value,
-      };
-      await fetch("/install-extension", {
-        method: "POST",
-        body: JSON.stringify(request),
-      });
-      $toTasks.click();
-    };
-  };
-  r$market();
 
   // $top
   const $top = document.createElement("header"); // 如果要移动端，就**不可能**侧栏了。而顶栏在桌面端也可以忍受
@@ -778,6 +783,7 @@ const pageMain = async () => {
     $toTasks.classList.remove("off");
     $toHome.classList.add("off");
     $toMarket.classList.add("off");
+    $toAction.classList.add("off");
     $tasks.classList.remove("off");
     $home.classList.add("off");
     $action.classList.add("off");
@@ -791,6 +797,7 @@ const pageMain = async () => {
     $toTasks.classList.add("off");
     $toHome.classList.remove("off");
     $toMarket.classList.add("off");
+    $toAction.classList.add("off");
     $tasks.classList.add("off");
     $home.classList.remove("off");
     $action.classList.add("off");
@@ -804,10 +811,29 @@ const pageMain = async () => {
     $toTasks.classList.add("off");
     $toHome.classList.add("off");
     $toMarket.classList.remove("off");
+    $toAction.classList.add("off");
     $tasks.classList.add("off");
     $home.classList.add("off");
     $action.classList.add("off");
     $market.classList.remove("off");
+  };
+  const $toAction = document.createElement("button");
+  $top.appendChild($toAction);
+  $toAction.classList.add("to-action");
+  $toAction.classList.add("off");
+  $toAction.textContent = "";
+  $toAction.onclick = () => {
+    if ($toAction.textContent === "") {
+      return;
+    }
+    $toTasks.classList.add("off");
+    $toHome.classList.add("off");
+    $toMarket.classList.add("off");
+    $toAction.classList.remove("off");
+    $tasks.classList.add("off");
+    $home.classList.add("off");
+    $action.classList.remove("off");
+    $market.classList.add("off");
   };
 
   // main
@@ -1598,11 +1624,11 @@ const serverMain = async () => {
     if (r.req.url?.startsWith("/static/")) {
       const relative = r.req.url.slice("/static/".length);
       const path = solvePath(relative);
-      const fsStream = fs.createReadStream(path).on("error", (error) => {
+      const fileStream = fs.createReadStream(path).on("error", (error) => {
         r.writeHead(400); // this endpoint is just used for testing, so visitor should ensure the url is valid
         r.end(JSON.stringify(error)); // listen and write errors into response instead of panic
       });
-      fsStream.pipe(r);
+      fileStream.pipe(r);
       return;
     }
 
@@ -1635,9 +1661,6 @@ if (globalThis.document) {
   serverMain(); // wrap it in function, avoid top-level await, see https://github.com/electron/electron/issues/40719
 }
 
-// /** @type {0} */ (process.exit());
-// type Boxify<T> = { [K in keyof T]: Box<T> };
-
 /*
 const orders = dirProvider({
   inputDir: "./dist/i",
@@ -1649,14 +1672,12 @@ const orders = dirProvider({
   outputSuffix: "_out",
   outputFlat: false,
   absolute: false,
-  options: () => ({
-    some: 1,
-  }),
+  options: () => ({ some: 1 }),
 });
+void process.exit();
+type Boxify<T> = { [K in keyof T]: Box<T> };
+ln extensions/zcodecs/index.js temp/extensions/zcodecs_0.1.0/index.js
+/home/kkocdko/misc/code/clevert/temp/_test_res/i
+https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js#L40
+https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
 */
-
-// https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js#L40
-// https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
-
-// http://127.0.0.1:9439/extensions/zcodecs/index.js
-// /home/kkocdko/misc/code/clevert/temp/_test_res/i

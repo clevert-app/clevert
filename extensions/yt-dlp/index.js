@@ -49,7 +49,7 @@ export default {
         // <option value="parrot">Parrot</option>
         // </select>
         const css = String.raw;
-        const $profile = document.createElement("div");
+        const $profile = document.createElement("form");
         $profile.classList.add("profile");
         $profile.appendChild(document.createElement("style")).textContent = css`
           #action .profile {
