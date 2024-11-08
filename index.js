@@ -1110,13 +1110,9 @@ const serverMain = async () => {
     try {
       for await (const chunk of response.body) {
         onChunk(chunk.byteLength);
-        await new Promise((resolve, reject) => {
-          const lowPressure = fileStream.write(chunk, (error) => {
-            if (error) reject(error);
-            else if (lowPressure) resolve(lowPressure);
-            else fileStream.once("drain", resolve);
-          });
-        });
+        if (fileStream.errored) throw fileStream.errored;
+        if (fileStream.write(chunk)) continue;
+        await new Promise((resolve) => fileStream.once("drain", resolve));
       }
     } finally {
       await new Promise((resolve) => fileStream.close(resolve));
@@ -1308,6 +1304,7 @@ const serverMain = async () => {
               }
             );
             await promise;
+            await fs.promises.rm(assetTemp, { force: true });
           } else {
             var /** @type {never} */ _ = asset.kind; // exhaustiveness
           }
