@@ -19,19 +19,19 @@ export default {
       platforms: ["linux-x64"],
       kind: "raw",
       path: "./yt-dlp",
-      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.10.22/yt-dlp",
+      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.11.04/yt-dlp",
     },
     {
       platforms: ["mac-arm64"],
       kind: "raw",
       path: "./yt-dlp",
-      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.10.22/yt-dlp_macos",
+      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.11.04/yt-dlp_macos",
     },
     {
       platforms: ["win-x64"],
       kind: "raw",
       path: "./yt-dlp.exe",
-      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.10.22/yt-dlp_x86.exe",
+      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.11.04/yt-dlp_x86.exe",
     },
   ],
   actions: [
@@ -39,7 +39,7 @@ export default {
       id: "yt-dlp",
       name: "yt-dlp name",
       description: "yt-dlp description",
-      kind: "common-files", // 这里允许使用 daemon，number sequence，plain 等不同种类。
+      kind: "custom", // 这里允许使用 daemon，number sequence，plain 等不同种类。
       ui: (profile) => {
         // 这个函数在前端跑，画界面
         // 不能用 select  multiple， 在移动端显示效果不一样
@@ -85,8 +85,8 @@ export default {
             profile.quality = Number($quality.value);
             return profile;
           },
-          preview: (input) => {
-            // 这边可以做预览，就是在文件列表里选择的时候会被调用
+          entries: () => {
+            return [];
           },
         };
       },

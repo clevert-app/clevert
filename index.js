@@ -1,12 +1,10 @@
 // @ts-check
 /// <reference lib="esnext" />
 import fs from "node:fs";
-import fsp from "node:fs/promises";
 import path from "node:path";
 import http from "node:http";
-import events from "node:events";
-import zlib from "node:zlib";
 import stream from "node:stream";
+import child_process from "node:child_process";
 
 /**
 @typedef {
@@ -21,7 +19,7 @@ import stream from "node:stream";
 @typedef {{
   root: HTMLElement;
   profile: () => any;
-  entries?: () => any;
+  entries?: () => any[];
 }} ActionUiController The `entries()` will be used if action kind is `custom`.
 @typedef {{
   progress: () => number;
@@ -241,11 +239,12 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   /* initial theme, contains all vars */
   @media (min-width: 1px) {
     body {
-      --bg: #fff;
-      --bg3: #00000033;
-      --bg4: #00000044;
-      --bg5: #00000055;
-      --bg6: #00000066;
+      --bg: #faf9fd;
+      --bg2: #82a3ee1a;
+      --bg3: #82a3ee2f;
+      --bg4: #82a3ee44; /* dae2f9 = faf9fd*(1-(0x44/0xff)) + 7492e8*(0x44/0xff) , from https://material.angular.io/components/button-toggle/examples */
+      --bg5: #82a3ee59;
+      --bg6: #8597c666; /* cbd2e7 */
       --fg: #000;
     }
   }
@@ -267,6 +266,9 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   *::after {
     box-sizing: border-box;
   }
+  :focus {
+    outline: none; /* disable all outlines as many sites do, users who need key nav will use extensions themselves */
+  }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
   #home li {
@@ -274,6 +276,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     padding: 8px 12px;
     font-size: 14px;
     line-height: 1;
+    color: var(--fg);
     background: var(--bg4);
     border: none;
     border-radius: 6px;
@@ -282,8 +285,8 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   #home li {
     background: var(--bg3);
   }
-  #home > button.off:not(:hover):not(:active),
-  header > button.off:not(:hover):not(:active) {
+  #home > button.off:not(:hover, :active),
+  header > button.off:not(:hover, :active) {
     background: #0000;
   }
   button:hover,
@@ -315,15 +318,15 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   input[type="text"]:focus,
   input[type="number"]:focus,
   input:not([type]):focus {
-    background: var(--bg4);
+    background: var(--bg5);
   }
   body {
     height: 100vh;
     margin: 0;
     font-family: system-ui;
     font-size: 14px;
-    background: var(--bg);
     color: var(--fg);
+    background: var(--bg);
   }
   body > div {
     position: fixed;
@@ -377,7 +380,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     right: 6px;
     padding: 8px;
   }
-  #home li > button:not(:hover):not(:active) {
+  #home li > button:not(:hover, :active) {
     background: none;
   }
   #action .entries {
@@ -389,10 +392,10 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   #tasks:empty::after {
     display: block;
+    margin: 8px;
+    font-size: 16px;
     text-align: center;
     content: "${i18n.tasksEmpty()}";
-    font-size: 16px;
-    margin: 8px;
   }
   #market > input {
     margin-right: 4px;
@@ -555,7 +558,6 @@ const pageMain = async () => {
       for (const extension of extensionsList) {
         const $choice = document.createElement("li");
         $choices.appendChild($choice);
-        $choice.tabIndex = 0;
         $choice.onclick = () => {
           $showProfiles.dataset.extensionId = extension.id;
           $showProfiles.dataset.extensionVersion = extension.version;
@@ -603,7 +605,6 @@ const pageMain = async () => {
         for (const profile of extension.profiles) {
           const $choice = document.createElement("li");
           $choices.appendChild($choice);
-          $choice.tabIndex = 0;
           const $name = document.createElement("b");
           $choice.appendChild($name);
           $name.textContent = profile.name;
@@ -726,21 +727,18 @@ const pageMain = async () => {
         return entries;
       };
     } else if (action.kind === "custom") {
-      // todo
-      const $entries = document.createElement("div");
-      $action.appendChild($entries);
       getEntries = () => {
+        assert(controller.entries);
         /** @type {EntriesCustom} */
         const entries = {
           kind: "custom",
-          entries: [],
+          entries: controller.entries(),
         };
         return entries;
       };
     } else {
       assert(false, "todo");
     }
-    // todo: custom entries for yt-dlp
     const controller = action.ui(profile);
     assert(controller.root.localName === "form");
     assert(controller.root.classList.contains("root"));
@@ -853,23 +851,23 @@ const serverMain = async () => {
   const PATH_EXTENSIONS = "./temp/extensions";
   const PATH_CACHE = "./temp/cache";
   const PATH_CONFIG = "./temp/config.json";
-  await fsp.mkdir(PATH_EXTENSIONS, { recursive: true });
-  await fsp.mkdir(PATH_CACHE, { recursive: true });
+  await fs.promises.mkdir(PATH_EXTENSIONS, { recursive: true });
+  await fs.promises.mkdir(PATH_CACHE, { recursive: true });
 
   /**
    * Open a json file and returns mapping object. Like [valtio](https://github.com/pmndrs/valtio).
    * @param {fs.PathLike} path
    */
   const openJsonMmap = async (path) => {
-    await fsp.access(path).catch(() => fsp.writeFile(path, "{}")); // create if not exist
-    const file = await fsp.open(path, "r+"); // we do not care about the `.close`
+    if (!fs.existsSync(path)) fs.writeFileSync(path, "{}"); // create if not exist
+    const file = await fs.promises.open(path, "r+"); // we do not care about the `.close`
     let locked = false;
     const syncToFile = debounce(async () => {
       if (locked) return syncToFile(); // avoid race, see docs of `.write`
       locked = true;
       const data = JSON.stringify(ret, null, 2) + "\n";
       const { bytesWritten } = await file.write(data, 0); // do not use `.writeFile`
-      await file.truncate(bytesWritten); // write then truncate, do not reverse
+      await file.truncate(bytesWritten); // truncate after write, do not reverse
       locked = false;
     }, 50); // 50ms is enough for most machines, and the JSON.stringify is sync which can delay the await sleep in electron's app.on("window-all-closed", ...)
     const ret = new Proxy(JSON.parse((await file.readFile()).toString()), {
@@ -1234,12 +1232,12 @@ const serverMain = async () => {
    * @param {string} dir
    */
   const chmod777 = async (dir) => {
-    for (const v of await fsp.readdir(dir, {
+    for (const v of await fs.promises.readdir(dir, {
       withFileTypes: true,
       recursive: true,
     })) {
       if (!v.isFile()) continue;
-      await fsp.chmod(solvePath(v.parentPath, v.name), 0o777); // https://stackoverflow.com/a/20769157
+      await fs.promises.chmod(solvePath(v.parentPath, v.name), 0o777); // https://stackoverflow.com/a/20769157
       // todo: what about windows?
     }
   };
@@ -1256,7 +1254,7 @@ const serverMain = async () => {
       const entries = [];
       const inputDir = solvePath(opts.inputDir);
       const outputDir = solvePath(opts.outputDir);
-      for (const v of await fsp.readdir(inputDir, {
+      for (const v of await fs.promises.readdir(inputDir, {
         withFileTypes: true,
         recursive: true,
       })) {
@@ -1291,7 +1289,7 @@ const serverMain = async () => {
     }
 
     if (r.req.url === "/index.js") {
-      const buffer = await fsp.readFile(import.meta.filename);
+      const buffer = await fs.promises.readFile(import.meta.filename);
       const response = excludeImports(buffer.toString(), /^node:/);
       r.setHeader("Content-Type", "text/javascript; charset=utf-8");
       r.writeHead(200);
@@ -1328,9 +1326,9 @@ const serverMain = async () => {
           indexJsResponse.headers.get("Content-Length") || "0"
         );
         // for await (const chunk of response.body) downloaded += chunk.length;
-        const indexJsTempPath = solvePath(PATH_CACHE, nextId() + ".js");
-        tempPaths.add(indexJsTempPath);
-        const indexJsTempStream = fs.createWriteStream(indexJsTempPath);
+        const indexJsTemp = solvePath(PATH_CACHE, nextId() + ".js");
+        tempPaths.add(indexJsTemp);
+        const indexJsTempStream = fs.createWriteStream(indexJsTemp);
         tempStreams.add(indexJsTempStream);
         for await (const chunk of indexJsResponse.body) {
           finished += chunk.length;
@@ -1338,16 +1336,19 @@ const serverMain = async () => {
         }
         await new Promise((resolve) => indexJsTempStream.end(resolve)); // use .end() instead of .close() https://github.com/nodejs/node/issues/2006
         const extension = /** @type {Extension} */ (
-          (await import(indexJsTempPath)).default
+          (await import(indexJsTemp)).default
         );
         const extensionDir = solvePath(
           PATH_EXTENSIONS,
           extension.id + "_" + extension.version
         );
         tempPaths.add(extensionDir);
-        await fsp.rm(extensionDir, { recursive: true, force: true });
-        await fsp.mkdir(extensionDir, { recursive: true });
-        await fsp.rename(indexJsTempPath, solvePath(extensionDir, "index.js"));
+        await fs.promises.rm(extensionDir, { recursive: true, force: true });
+        await fs.promises.mkdir(extensionDir, { recursive: true });
+        await fs.promises.rename(
+          indexJsTemp,
+          solvePath(extensionDir, "index.js")
+        );
         // const tasks = []; // TODO: parallel
         for (const asset of extension.assets) {
           if (!asset.platforms.includes(CURRENT_PLATFORM)) {
@@ -1370,12 +1371,12 @@ const serverMain = async () => {
             : asset.kind === "zip"
             ? "zip"
             : assert(false, "unsupported asset kind");
-          const assetTempPath = solvePath(
+          const assetTemp = solvePath(
             PATH_CACHE,
             nextId() + "." + assetExtName
           );
-          tempPaths.add(assetTempPath);
-          const assetTempStream = fs.createWriteStream(assetTempPath);
+          tempPaths.add(assetTemp);
+          const assetTempStream = fs.createWriteStream(assetTemp);
           tempStreams.add(assetTempStream);
           for await (const chunk of assetResponse.body) {
             finished += chunk.length;
@@ -1383,13 +1384,13 @@ const serverMain = async () => {
           }
           await new Promise((resolve) => assetTempStream.end(resolve));
           if (asset.kind === "zip") {
-            const zip = new Zip({ file: assetTempPath });
+            const zip = new Zip({ file: assetTemp });
             await zip.extract(null, solvePath(extensionDir, asset.path));
             await zip.close();
-            await fsp.rm(assetTempPath);
+            await fs.promises.rm(assetTemp);
           } else if (asset.kind === "raw") {
-            await fsp.rename(
-              assetTempPath,
+            await fs.promises.rename(
+              assetTemp,
               solvePath(extensionDir, asset.path)
             );
           } else {
@@ -1407,7 +1408,7 @@ const serverMain = async () => {
           await new Promise((resolve) => v.end(resolve)); // 用 await 等一下，慢一些但是稳妥
         }
         for (const v of tempPaths) {
-          await fsp.rm(v, { force: true, recursive: true }); // 用 await 等一下，慢一些但是稳妥
+          await fs.promises.rm(v, { force: true, recursive: true }); // 用 await 等一下，慢一些但是稳妥
         }
       });
 
@@ -1433,7 +1434,7 @@ const serverMain = async () => {
         PATH_EXTENSIONS,
         request.id + "_" + request.version
       );
-      await fsp.rm(extensionDir, { recursive: true, force: true });
+      await fs.promises.rm(extensionDir, { recursive: true, force: true });
       r.end();
       return;
     }
@@ -1441,14 +1442,10 @@ const serverMain = async () => {
     if (r.req.url === "/list-extensions") {
       /** @type {ListExtensionsResponse} */
       const response = [];
-      for (const entry of await fsp.readdir(PATH_EXTENSIONS)) {
-        const extensionIndexJsPath = solvePath(
-          PATH_EXTENSIONS,
-          entry,
-          "index.js"
-        );
+      for (const entry of await fs.promises.readdir(PATH_EXTENSIONS)) {
+        const extensionIndexJs = solvePath(PATH_EXTENSIONS, entry, "index.js");
         const extension = /** @type {Extension} */ (
-          (await import(extensionIndexJsPath)).default
+          (await import(extensionIndexJs)).default
         );
         assert(entry === extension.id + "_" + extension.version);
         response.push({
@@ -1474,7 +1471,7 @@ const serverMain = async () => {
       const relative = r.req.url.slice("/extensions/".length);
       const path = solvePath(PATH_EXTENSIONS, relative);
       if (r.req.url.endsWith("/index.js")) {
-        const buffer = await fsp.readFile(path);
+        const buffer = await fs.promises.readFile(path);
         const response = excludeImports(buffer.toString(), /^node:/);
         r.setHeader("Content-Type", "text/javascript; charset=utf-8");
         r.writeHead(200);
@@ -1487,13 +1484,13 @@ const serverMain = async () => {
 
     if (r.req.url === "/run-action") {
       const request = /** @type {RunActionRequest} */ (await readReq(r.req));
-      const extensionIndexJsPath = solvePath(
+      const extensionIndexJs = solvePath(
         PATH_EXTENSIONS,
         request.extensionId + "_" + request.extensionVersion,
         "index.js"
       );
       const extension = /** @type {Extension} */ (
-        (await import(extensionIndexJsPath)).default
+        (await import(extensionIndexJs)).default
       );
       const action = extension.actions.find(
         (action) => action.id === request.actionId
@@ -1644,7 +1641,6 @@ const serverMain = async () => {
   server.on("listening", () => {
     serverPort.resolve(config.serverPort);
     console.log(server.address());
-    // todo: save into config store
   });
   server.on("error", (error) => {
     config.serverPort++;
