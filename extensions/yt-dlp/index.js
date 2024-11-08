@@ -17,19 +17,19 @@ export default {
   assets: [
     {
       platforms: ["linux-x64"],
-      kind: "raw",
+      kind: "bin",
       path: "./yt-dlp",
       url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.11.04/yt-dlp",
     },
     {
       platforms: ["mac-arm64"],
-      kind: "raw",
+      kind: "bin",
       path: "./yt-dlp",
       url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.11.04/yt-dlp_macos",
     },
     {
       platforms: ["win-x64"],
-      kind: "raw",
+      kind: "bin",
       path: "./yt-dlp.exe",
       url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.11.04/yt-dlp_x86.exe",
     },

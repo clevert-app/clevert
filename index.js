@@ -934,10 +934,7 @@ const serverMain = async () => {
         title: i18n.title(),
         autoHideMenuBar: true,
         backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
-        webPreferences: {
-          sandbox: false,
-          spellcheck: false,
-        },
+        webPreferences: { sandbox: false, spellcheck: false },
         width: config.windowWidth, // only (width,height), no (x,y), see https://kkocdko.site/post/202409161747
         height: config.windowHeight,
       });
@@ -1314,16 +1311,13 @@ const serverMain = async () => {
       })();
 
       promise.catch(async () => {
+        // in vscode, cancel is not supported, and it has auto cleaning, we follow this strategy
         // todo: needs fix, if user close app during installing. however this seems fine because everytime after launch the cache dir is cleaned, and what about the extensionDir?
         abortController.abort();
         for (const v of tempPaths) {
           await fs.promises.rm(v, { force: true, recursive: true });
         }
       });
-
-      // 不支持cancel，但是保证别的不出错？比如出错了自动删除。因为vscode也不支持cancel
-      // https://stackoverflow.com/a/49771109
-      // https://developer.mozilla.org/zh-CN/docs/Web/API/Server-sent_events/Using_server-sent_events
 
       installExtensionControllers.set(nextId(), {
         title: request.title,
