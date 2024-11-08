@@ -3,7 +3,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
-import stream from "node:stream";
 import child_process from "node:child_process";
 
 /**
@@ -12,10 +11,11 @@ import child_process from "node:child_process";
 } Platform We don't want new platforms currently. In the future, it should be ` "linux-x64" | "linux-arm64" | "mac-x64" | "mac-arm64" | "win-x64" | "win-arm64" `.
 @typedef {{
   platforms: Platform[];
-  kind: "raw" | "zip" | "gzip" | "xz" | "tar" | "tar-gzip" | "tar-xz";
   url: string;
+  kind: "bin" | "zip" | "tar" | "tar-gzip";
   path: string;
-}} Asset For "raw", "gzip" and "xz", the `.path` is the file path; for others, the `.path` is the directory path.
+  stripPath?: boolean;
+}} Asset For `kind:"bin"`, the `path` is file path, for others it's directory path.
 @typedef {{
   root: HTMLElement;
   profile: () => any;
@@ -496,7 +496,7 @@ const pageMain = async () => {
     } else if (e.kind === "install-extension-error") {
       $tips.textContent = "Error: " + JSON.stringify(e.error);
     } else {
-      const /** @type {never} */ _ = e; // exhaustiveness
+      var /** @type {never} */ _ = e; // exhaustiveness
     }
   };
 
@@ -1099,26 +1099,35 @@ const serverMain = async () => {
   };
 
   /**
-   * Writing to stream, returns promise, auto care about the backpressure. Use [this](https://nodejs.org/api/stream.html#streamreadabletowebstreamreadable-options) when stable.
-   * @param {stream.Writable} stream
-   * @param {any} chunk
+   * Download smartly.
+   *
+   * This function assumes the file stream is closed before return even if errors occur.
+   * @param {string | URL} url
+   * @param {fs.PathLike} path
+   * @param {AbortSignal} signal
+   * @param {(amountSize: number) => void} onStart
+   * @param {(chunkSize: number) => void} onChunk
    */
-  const streamWrite = (stream, chunk) => {
-    const { resolve, reject, promise } = Promise.withResolvers();
-    let resolveCount = 0;
-    const resolveOnce = () => {
-      resolveCount++;
-      if (resolveCount === 2) /** @type {any} */ (resolve)();
-    };
-    const lowPressure = stream.write(chunk, (error) =>
-      error ? reject(error) : resolveOnce()
-    );
-    if (lowPressure) {
-      resolveOnce();
-    } else {
-      stream.once("drain", resolveOnce);
+  const download = async (url, path, signal, onStart, onChunk) => {
+    // todo: smart mirror switching
+    const response = await fetch(url, { redirect: "follow", signal });
+    if (!response.body) throw new Error("body is null, url = " + url);
+    onStart(parseInt(response.headers.get("Content-Length") || "0"));
+    const fileStream = fs.createWriteStream(path, { signal });
+    try {
+      for await (const chunk of response.body) {
+        onChunk(chunk.byteLength);
+        await new Promise((resolve, reject) => {
+          const lowPressure = fileStream.write(chunk, (error) => {
+            if (error) reject(error);
+            else if (lowPressure) resolve(lowPressure);
+            else fileStream.once("drain", resolve);
+          });
+        });
+      }
+    } finally {
+      await new Promise((resolve) => fileStream.close(resolve));
     }
-    return promise;
   };
 
   /**
@@ -1225,30 +1234,17 @@ const serverMain = async () => {
       let finished = 0;
       let amount = 0;
       const abortController = new AbortController();
-      let tempStreams = /** @type {Set<fs.WriteStream>} */ (new Set());
-      let tempPaths = /** @type {Set<string>} */ (new Set());
-
+      const tempPaths = /** @type {Set<string>} */ new Set();
       const promise = (async () => {
-        const indexJsResponse = await fetch(request.url, {
-          redirect: "follow",
-          signal: abortController.signal,
-        });
-        if (!indexJsResponse.body) {
-          throw new Error("response.body is null, url = " + request.url);
-        }
-        amount += parseInt(
-          indexJsResponse.headers.get("Content-Length") || "0"
-        );
-        // for await (const chunk of response.body) downloaded += chunk.length;
         const indexJsTemp = solvePath(PATH_CACHE, nextId() + ".js");
         tempPaths.add(indexJsTemp);
-        const indexJsTempStream = fs.createWriteStream(indexJsTemp);
-        tempStreams.add(indexJsTempStream);
-        for await (const chunk of indexJsResponse.body) {
-          finished += chunk.length;
-          await streamWrite(indexJsTempStream, chunk);
-        }
-        await new Promise((resolve) => indexJsTempStream.end(resolve)); // use .end() instead of .close() https://github.com/nodejs/node/issues/2006
+        await download(
+          request.url,
+          indexJsTemp,
+          abortController.signal,
+          (amountSize) => (amount += amountSize),
+          (chunkSize) => (finished += chunkSize)
+        );
         const extension = /** @type {Extension} */ (
           (await import(indexJsTemp)).default
         );
@@ -1263,66 +1259,75 @@ const serverMain = async () => {
           indexJsTemp,
           solvePath(extensionDir, "index.js")
         );
-        // const tasks = []; // TODO: parallel
         for (const asset of extension.assets) {
           if (!asset.platforms.includes(CURRENT_PLATFORM)) {
             continue;
           }
-          const assetResponse = await fetch(asset.url, {
-            redirect: "follow",
-            signal: abortController.signal,
-          });
-          if (!assetResponse.body) {
-            throw new Error("response.body is null, url = " + asset.url);
-          }
-          amount += parseInt(
-            assetResponse.headers.get("Content-Length") || "0"
-          );
-          const assetExtName = false
-            ? assert(false)
-            : asset.kind === "raw"
-            ? "raw"
-            : asset.kind === "zip"
-            ? "zip"
-            : assert(false, "unsupported asset kind");
-          const assetTemp = solvePath(
-            PATH_CACHE,
-            nextId() + "." + assetExtName
-          );
+          let suffix; // must have a valid extension name, so tar can detect it
+          if (asset.kind === "bin") suffix = ".bin";
+          else if (asset.kind === "zip") suffix = ".zip";
+          else if (asset.kind === "tar") suffix = ".tar";
+          else if (asset.kind === "tar-gzip") suffix = ".tar.gz";
+          else var /** @type {never} */ _ = asset.kind; // exhaustiveness
+          assert(suffix);
+          const assetTemp = solvePath(PATH_CACHE, nextId() + suffix);
           tempPaths.add(assetTemp);
-          const assetTempStream = fs.createWriteStream(assetTemp);
-          tempStreams.add(assetTempStream);
-          for await (const chunk of assetResponse.body) {
-            finished += chunk.length;
-            await streamWrite(assetTempStream, chunk);
-          }
-          await new Promise((resolve) => assetTempStream.end(resolve));
-          if (asset.kind === "zip") {
-            const zip = new Zip({ file: assetTemp });
-            await zip.extract(null, solvePath(extensionDir, asset.path));
-            await zip.close();
-            await fs.promises.rm(assetTemp);
-          } else if (asset.kind === "raw") {
+          await download(
+            asset.url,
+            assetTemp,
+            abortController.signal,
+            (amountSize) => (amount += amountSize),
+            (chunkSize) => (finished += chunkSize)
+          );
+          if (asset.kind === "bin") {
             await fs.promises.rename(
               assetTemp,
               solvePath(extensionDir, asset.path)
             );
+          } else if (
+            asset.kind === "zip" ||
+            asset.kind === "tar" ||
+            asset.kind === "tar-gzip"
+          ) {
+            // needs either "bsdtar" (windows and mac) or "gnutar + unzip" (most of linux distros)
+            const extractDir = solvePath(extensionDir, asset.path);
+            await fs.promises.mkdir(extractDir, { recursive: true });
+            const { promise, resolve, reject } = Promise.withResolvers();
+            child_process.execFile(
+              "tar",
+              [
+                "-xf",
+                assetTemp,
+                "-C",
+                extractDir,
+                ...(asset.stripPath ? ["--strip-components=1"] : []),
+              ],
+              { env: { XZ_OPT: "-T0" } },
+              (error) => {
+                if (!error) return resolve(error);
+                if (asset.kind !== "zip") return reject(error);
+                assert(!asset.stripPath, "todo"); // todo: simulate tar --strip-components while using unzip
+                child_process.execFile(
+                  "unzip",
+                  [assetTemp, "-d", extractDir],
+                  (error) => (error ? reject(error) : resolve(error))
+                );
+              }
+            );
+            await promise;
           } else {
-            assert(false, "unsupported asset kind");
+            var /** @type {never} */ _ = asset.kind; // exhaustiveness
           }
+
           await chmod777(extensionDir);
         }
       })();
 
       promise.catch(async () => {
+        // todo: needs fix, if user close app during installing. however this seems fine because everytime after launch the cache dir is cleaned, and what about the extensionDir?
         abortController.abort();
-        // then delete the temporary files here
-        // 先关 stream 再删文件
-        for (const v of tempStreams) {
-          await new Promise((resolve) => v.end(resolve)); // 用 await 等一下，慢一些但是稳妥
-        }
         for (const v of tempPaths) {
-          await fs.promises.rm(v, { force: true, recursive: true }); // 用 await 等一下，慢一些但是稳妥
+          await fs.promises.rm(v, { force: true, recursive: true });
         }
       });
 
