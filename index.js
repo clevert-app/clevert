@@ -740,14 +740,14 @@ const pageMain = async () => {
       assert(false, "todo");
     }
     const controller = action.ui(profile);
-    assert(controller.root.localName === "form");
+    assert(controller.root.localName === "form"); // scoped the "name" attribute
     assert(controller.root.classList.contains("root"));
     $action.appendChild(controller.root);
     new MutationObserver((mutations, observer) => {
-      if (controller.root.parentNode !== null) return;
+      if (controller.root.parentNode) return;
       observer.disconnect();
       controller.root.dispatchEvent(new CustomEvent("post-remove"));
-    }).observe($action, { childList: true });
+    }).observe($action, { childList: true, subtree: false });
     const $operations = document.createElement("div");
     $operations.classList.add("operations");
     $action.appendChild($operations);
@@ -769,8 +769,9 @@ const pageMain = async () => {
         method: "POST",
         body: JSON.stringify(request),
       });
-      $toAction.textContent = "";
       $toTasks.click();
+      $toAction.textContent = "";
+      $action.replaceChildren();
     };
   };
 
@@ -826,9 +827,7 @@ const pageMain = async () => {
   $toAction.classList.add("off");
   $toAction.textContent = "";
   $toAction.onclick = () => {
-    if ($toAction.textContent === "") {
-      return;
-    }
+    assert($toAction.textContent !== "");
     $toTasks.classList.add("off");
     $toHome.classList.add("off");
     $toMarket.classList.add("off");
@@ -996,7 +995,7 @@ const serverMain = async () => {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => resolve(JSON.parse(body)));
-    req.on("error", (error) => reject(error));
+    req.on("error", reject);
     return promise;
   };
 
@@ -1025,18 +1024,12 @@ const serverMain = async () => {
     let i = 0;
     while (true) {
       if (src.startsWith("import", i)) {
-        let start = i;
-        let end = start;
-        loop1: while (true) {
-          for (const quote of ["'", '"']) {
-            if (src[start] === quote) {
-              start++;
-              end = src.indexOf(quote, start);
-              break loop1;
-            }
-          }
+        let start = i + "import".length;
+        while (!(src[start] === "'" || src[start] === '"')) {
           start++;
         }
+        let end = src.indexOf(src[start], start + 1);
+        start++;
         const moduleName = src.slice(start, end);
         const rangeEnd = end + "'".length;
         if (regexp.test(moduleName)) {
@@ -1462,7 +1455,7 @@ const serverMain = async () => {
       const send = (e) => r.write(`data: ${JSON.stringify(e)}\n\n`);
       const preventedIds = /** @type {Set<string>} */ (new Set());
       const waitingIds = /** @type {Set<string>} */ (new Set());
-      while (!r.closed) {
+      while (r.writable) {
         for (const [id, controller] of runActionControllers) {
           if (preventedIds.has(id)) {
             continue; // just skip if it's in `preventedIds`, like exited `controller`s

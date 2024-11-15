@@ -85,7 +85,7 @@ export default {
         $quality.type = "number";
         $quality.value = profile.quality;
         $root.addEventListener("post-remove", (e) => {
-          console.log(e);
+          // console.log(e);
         });
         return {
           // 给 yt-dlp 用
