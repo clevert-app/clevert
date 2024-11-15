@@ -24,7 +24,7 @@ jobs:
           mv index.html dist/extractstamp.html
           mv extractstamp.js dist/extractstamp.js
           rm -rf dist/*.png dist/*.svg dist/*.bak dist/assets
-          zip -9 all.zip dist/*
+          zip -j -9 all.zip dist/*
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
