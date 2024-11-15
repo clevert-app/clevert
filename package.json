@@ -6,6 +6,6 @@
     "index.js"
   ],
   "scripts": {
-    "start": "exit ; node --trace-uncaught index.js ; electron index.js"
+    "start": "exit && node --trace-uncaught index.js && electron index.js"
   }
 }

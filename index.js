@@ -1015,11 +1015,11 @@ const serverMain = async () => {
   };
 
   /**
-   * Exclude the static `import` declaration matches `regexp`. Will be `// excluded: import xxx form ...`.
+   * Exclude the static `import` declaration matches `pattern`. Will be `// excluded: import xxx form ...`.
    * @param {string} src
-   * @param {RegExp} regexp
+   * @param {RegExp} pattern
    */
-  const excludeImports = (src, regexp) => {
+  const excludeImports = (src, pattern) => {
     let ret = "";
     let i = 0;
     while (true) {
@@ -1028,13 +1028,13 @@ const serverMain = async () => {
         while (!(src[start] === "'" || src[start] === '"')) {
           start++;
         }
-        let end = src.indexOf(src[start], start + 1);
+        let end = src.indexOf(src[start], start + 1); // for better performance, avoid the unnecessary regexp
         start++;
         const moduleName = src.slice(start, end);
         const rangeEnd = end + "'".length;
-        if (regexp.test(moduleName)) {
+        if (pattern.test(moduleName)) {
           const mark = "// excluded: ";
-          ret += mark + src.slice(i, rangeEnd).replace(/\n/g, "\n" + mark);
+          ret += mark + src.slice(i, rangeEnd).replaceAll("\n", "\n" + mark);
           i = rangeEnd;
         } // else { do nothing }
       } else if (src.startsWith("//", i)) {
