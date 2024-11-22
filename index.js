@@ -1092,9 +1092,92 @@ const serverMain = async () => {
    * @param {(chunkSize: number) => void} onChunk
    */
   const download = async (url, path, signal, onStart, onChunk) => {
-    // todo: smart mirror switching
-    const response = await fetch(url, { redirect: "follow", signal });
-    if (!response.body) throw new Error("body is null, url = " + url);
+    /** @type {{mirrors:{[origin:string]:{bench:string,servers:string[]}}}} */
+    const that = /** @type {any} */ (download); // static variables
+    if (!that.mirrors) {
+      // the first is fastest, others are shuffled, if the first timeouted, trigger benchmark, then swap the fastest to first and retry
+      that.mirrors = Object.create(null);
+      that.mirrors["https://github.com"] = {
+        bench:
+          "/clevert-app/clevert/releases/download/asset_pgo_files_store/asset_ect_linux-x64_1716610476.zip",
+        servers: [
+          "https://github.com", // at initial, the official one is wished to be fastest
+          "https://gh.xiu2.us.kg/https://github.com",
+          "https://slink.ltd/https://github.com",
+          "https://gh-proxy.com/https://github.com",
+          "https://cors.isteed.cc/github.com",
+          "https://sciproxy.com/github.com",
+          "https://ghproxy.cc/https://github.com",
+          "https://cf.ghproxy.cc/https://github.com",
+          "https://www.ghproxy.cc/https://github.com",
+          "https://ghproxy.cn/https://github.com",
+          "https://www.ghproxy.cn/https://github.com",
+          "https://github.site",
+          "https://github.store",
+          "https://github.tmby.shop/https://github.com",
+          "https://github.moeyy.xyz/https://github.com",
+          "https://hub.whtrys.space",
+          "https://dgithub.xyz",
+          "https://gh-proxy.ygxz.in/https://github.com",
+          "https://download.ixnic.net",
+          "https://ghproxy.net/https://github.com",
+          "https://ghp.ci/https://github.com",
+          "https://kkgithub.com",
+          // from https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js
+        ],
+      };
+    }
+    // todo: detect is proxied or not, if proxy is enabled, use official github? or detect is github fast enough or not
+    const argUrl = Object.freeze(typeof url === "string" ? new URL(url) : url);
+    /** @type {Response | undefined} */
+    let response = undefined;
+    while (!response?.body) {
+      const mirror = that.mirrors[argUrl.origin];
+      if (mirror) {
+        url = mirror.servers[0] + argUrl.href.slice(argUrl.origin.length);
+      }
+      console.log({ mirror });
+      const controller = new AbortController();
+      signal.addEventListener("abort", () => controller.abort());
+      setTimeout(() => {
+        if (!response?.body) controller.abort("timeout");
+      }, 1400); // todo: reconsider the timeout value? dynamic change?
+      try {
+        /** @type {RequestInit} */
+        const options = { redirect: "follow", signal: controller.signal };
+        console.time("fetch");
+        response = await fetch(url, options);
+        console.timeEnd("fetch");
+        if (!response?.body) throw new Error("body is null, url = " + url);
+      } catch (error) {
+        console.log({ error });
+        console.timeEnd("fetch");
+        if (!mirror) throw error; // no mirrors, throw out
+        const controller = new AbortController();
+        /** @type {RequestInit} */
+        const options = { redirect: "follow", signal: controller.signal };
+        // perform fisher–yates shuffle
+        for (let i = mirror.servers.length; i != 0; ) {
+          const j = Math.trunc(Math.random() * i);
+          i--;
+          const v = mirror.servers[i];
+          mirror.servers[i] = mirror.servers[j];
+          mirror.servers[j] = v;
+        }
+        const fastest = await Promise.any(
+          mirror.servers.map(async (v, i) => {
+            const response = await fetch(v + mirror.bench, options);
+            assert((await response.arrayBuffer()).byteLength === 87458);
+            return i;
+          })
+        );
+        controller.abort();
+        const v = mirror.servers[fastest]; // swap to first
+        mirror.servers[fastest] = mirror.servers[0];
+        mirror.servers[0] = v;
+        console.log({ v });
+      }
+    }
     onStart(parseInt(response.headers.get("Content-Length") || "0"));
     const fileStream = fs.createWriteStream(path, { signal });
     try {
@@ -1108,6 +1191,17 @@ const serverMain = async () => {
       await new Promise((resolve) => fileStream.close(resolve));
     }
   };
+  /*
+  await download(
+    "https://github.com/clevert-app/clevert/releases/download/asset_pgo_files_store/asset_ect_linux-x64_1716610476.zip",
+    "./temp/a.zip",
+    new AbortController().signal,
+    (amountSize) => console.log({ amountSize }),
+    (chunkSize) => {}
+  );
+
+  void process.exit();
+  */
 
   /**
    * Get next unique id. Format = `1716887172_000123` = unix stamp + underscore + sequence number inside this second.
