@@ -1084,7 +1084,7 @@ const serverMain = async () => {
   /**
    * Download smartly.
    *
-   * This function assumes the file stream is closed before return even if errors occur.
+   * This function assumes the file stream is closed before return, even if errors occur.
    * @param {string | URL} url
    * @param {fs.PathLike} path
    * @param {AbortSignal} signal
@@ -1092,7 +1092,7 @@ const serverMain = async () => {
    * @param {(chunkSize: number) => void} onChunk
    */
   const download = async (url, path, signal, onStart, onChunk) => {
-    /** @type {{mirrors:{[origin:string]:{bench:string,servers:string[]}}}} */
+    /** @type {{mirrors:{[origin:string]:{bench:string,list:string[]}}}} */
     const that = /** @type {any} */ (download); // static variables
     if (!that.mirrors) {
       // the first is fastest, others are shuffled, if the first timeouted, trigger benchmark, then swap the fastest to first and retry
@@ -1100,7 +1100,7 @@ const serverMain = async () => {
       that.mirrors["https://github.com"] = {
         bench:
           "/clevert-app/clevert/releases/download/asset_pgo_files_store/asset_ect_linux-x64_1716610476.zip",
-        servers: [
+        list: [
           "https://github.com", // at initial, the official one is wished to be fastest
           "https://gh.xiu2.us.kg/https://github.com",
           "https://slink.ltd/https://github.com",
@@ -1127,55 +1127,46 @@ const serverMain = async () => {
         ],
       };
     }
-    // todo: detect is proxied or not, if proxy is enabled, use official github? or detect is github fast enough or not
-    const argUrl = Object.freeze(typeof url === "string" ? new URL(url) : url);
+    const initUrl = Object.freeze(typeof url === "string" ? new URL(url) : url);
     /** @type {Response | undefined} */
     let response = undefined;
     while (!response?.body) {
-      const mirror = that.mirrors[argUrl.origin];
+      const mirror = that.mirrors[initUrl.origin];
       if (mirror) {
-        url = mirror.servers[0] + argUrl.href.slice(argUrl.origin.length);
+        url = mirror.list[0] + initUrl.href.slice(initUrl.origin.length);
       }
-      console.log({ mirror });
-      const controller = new AbortController();
-      signal.addEventListener("abort", () => controller.abort());
-      setTimeout(() => {
-        if (!response?.body) controller.abort("timeout");
-      }, 1400); // todo: reconsider the timeout value? dynamic change?
       try {
+        const controller = new AbortController();
+        signal.addEventListener("abort", () => controller.abort()); // abort from upsteam
+        const timer = setTimeout(() => controller.abort("timeout"), 1400); // todo: reconsider the timeout value? dynamic change?
         /** @type {RequestInit} */
         const options = { redirect: "follow", signal: controller.signal };
-        console.time("fetch");
         response = await fetch(url, options);
-        console.timeEnd("fetch");
+        clearTimeout(timer);
         if (!response?.body) throw new Error("body is null, url = " + url);
       } catch (error) {
-        console.log({ error });
-        console.timeEnd("fetch");
         if (!mirror) throw error; // no mirrors, throw out
         const controller = new AbortController();
+        signal.addEventListener("abort", () => controller.abort()); // abort from upsteam
+        const timer = setTimeout(() => controller.abort("timeout"), 3000); // will throw out in below await statement
         /** @type {RequestInit} */
         const options = { redirect: "follow", signal: controller.signal };
         // perform fisher–yates shuffle
-        for (let i = mirror.servers.length; i != 0; ) {
+        for (let i = mirror.list.length; i != 0; ) {
           const j = Math.trunc(Math.random() * i);
           i--;
-          const v = mirror.servers[i];
-          mirror.servers[i] = mirror.servers[j];
-          mirror.servers[j] = v;
+          [mirror.list[i], mirror.list[j]] = [mirror.list[j], mirror.list[i]];
         }
-        const fastest = await Promise.any(
-          mirror.servers.map(async (v, i) => {
+        const n = await Promise.any(
+          mirror.list.map(async (v, i) => {
             const response = await fetch(v + mirror.bench, options);
             assert((await response.arrayBuffer()).byteLength === 87458);
             return i;
           })
         );
+        clearTimeout(timer);
         controller.abort();
-        const v = mirror.servers[fastest]; // swap to first
-        mirror.servers[fastest] = mirror.servers[0];
-        mirror.servers[0] = v;
-        console.log({ v });
+        [mirror.list[0], mirror.list[n]] = [mirror.list[n], mirror.list[0]]; // swap the fastest to first
       }
     }
     onStart(parseInt(response.headers.get("Content-Length") || "0"));
@@ -1183,7 +1174,7 @@ const serverMain = async () => {
     try {
       for await (const chunk of response.body) {
         onChunk(chunk.byteLength);
-        if (fileStream.errored) throw fileStream.errored;
+        assert(fileStream.writable);
         if (fileStream.write(chunk)) continue;
         await new Promise((resolve) => fileStream.once("drain", resolve));
       }
