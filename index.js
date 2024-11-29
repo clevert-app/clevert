@@ -1092,14 +1092,14 @@ const serverMain = async () => {
    * @param {(chunkSize: number) => void} onChunk
    */
   const download = async (url, path, signal, onStart, onChunk) => {
-    /** @type {{mirrors:{[origin:string]:{bench:string,list:string[]}}}} */
+    /** @type {{sources:Map<string,{timeout?:number;bench?:string;list?:string[]}>}} */
     const that = /** @type {any} */ (download); // static variables
-    if (!that.mirrors) {
+    if (!that.sources) {
       // the first is fastest, others are shuffled, if the first timeouted, trigger benchmark, then swap the fastest to first and retry
-      that.mirrors = Object.create(null);
-      that.mirrors["https://github.com"] = {
+      that.sources = new Map();
+      that.sources.set("https://github.com", {
         bench:
-          "/clevert-app/clevert/releases/download/asset_pgo_files_store/asset_ect_linux-x64_1716610476.zip",
+          "/electron/electron/releases/download/v33.2.1/electron-v33.2.1-win32-x64-toolchain-profile.zip",
         list: [
           "https://github.com", // at initial, the official one is wished to be fastest
           "https://gh.xiu2.us.kg/https://github.com",
@@ -1125,48 +1125,66 @@ const serverMain = async () => {
           "https://kkgithub.com",
           // from https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js
         ],
-      };
+      });
     }
+    const defaultTimeout = 900;
     const initUrl = Object.freeze(typeof url === "string" ? new URL(url) : url);
     /** @type {Response | undefined} */
     let response = undefined;
     while (!response?.body) {
-      const mirror = that.mirrors[initUrl.origin];
-      if (mirror) {
-        url = mirror.list[0] + initUrl.href.slice(initUrl.origin.length);
+      let source = that.sources.get(initUrl.origin);
+      if (!source) {
+        source = {};
+        that.sources.set(initUrl.origin, source);
+      }
+      if (!source.timeout) {
+        source.timeout = defaultTimeout;
+      }
+      if (source.list) {
+        url = source.list[0] + initUrl.href.slice(initUrl.origin.length);
       }
       try {
         const controller = new AbortController();
-        signal.addEventListener("abort", () => controller.abort()); // abort from upsteam
-        const timer = setTimeout(() => controller.abort("timeout"), 1400); // todo: reconsider the timeout value? dynamic change?
+        signal.addEventListener("abort", controller.abort); // abort from upsteam
+        const timer = setTimeout(() => {
+          controller.abort("timeout");
+        }, source.timeout);
         /** @type {RequestInit} */
         const options = { redirect: "follow", signal: controller.signal };
+        console.time("fetch")
         response = await fetch(url, options);
+        console.timeEnd("fetch")
         clearTimeout(timer);
         if (!response?.body) throw new Error("body is null, url = " + url);
       } catch (error) {
-        if (!mirror) throw error; // no mirrors, throw out
+        if (!source.list) throw error; // no mirrors, throw out
         const controller = new AbortController();
-        signal.addEventListener("abort", () => controller.abort()); // abort from upsteam
-        const timer = setTimeout(() => controller.abort("timeout"), 3000); // will throw out in below await statement
+        signal.addEventListener("abort", controller.abort);
+        const timer = setTimeout(() => {
+          controller.abort("timeout");
+        }, 5000); // it's too extreme if a 70k resource can't be finished within 5s
         /** @type {RequestInit} */
         const options = { redirect: "follow", signal: controller.signal };
         // perform fisher–yates shuffle
-        for (let i = mirror.list.length; i != 0; ) {
+        for (let i = source.list.length; i != 0; ) {
           const j = Math.trunc(Math.random() * i);
           i--;
-          [mirror.list[i], mirror.list[j]] = [mirror.list[j], mirror.list[i]];
+          [source.list[i], source.list[j]] = [source.list[j], source.list[i]];
         }
+        const beginTime = Date.now(); // accurate enough, performance.now() is unnecessary, see https://stackoverflow.com/a/60117746
         const n = await Promise.any(
-          mirror.list.map(async (v, i) => {
-            const response = await fetch(v + mirror.bench, options);
-            assert((await response.arrayBuffer()).byteLength === 87458);
+          source.list.map(async (v, i) => {
+            const response = await fetch(v + source.bench, options);
+            assert((await response.arrayBuffer()).byteLength === 75306);
             return i;
           })
         );
+        source.timeout = Date.now() - beginTime + defaultTimeout;
         clearTimeout(timer);
         controller.abort();
-        [mirror.list[0], mirror.list[n]] = [mirror.list[n], mirror.list[0]]; // swap the fastest to first
+        console.log("fastest = " + source.list[n]);
+        console.log("timeout = " + source.timeout);
+        [source.list[0], source.list[n]] = [source.list[n], source.list[0]]; // swap the fastest to first
       }
     }
     onStart(parseInt(response.headers.get("Content-Length") || "0"));
@@ -1182,15 +1200,17 @@ const serverMain = async () => {
       await new Promise((resolve) => fileStream.close(resolve));
     }
   };
+
   /*
+  let [tAmount, tFinished] = [0, 0];
+  setInterval(() => console.log({ tFinished, tAmount }), 700);
   await download(
-    "https://github.com/clevert-app/clevert/releases/download/asset_pgo_files_store/asset_ect_linux-x64_1716610476.zip",
+    "https://github.com/electron/electron/releases/download/v33.2.1/electron-v33.2.1-linux-x64.zip",
     "./temp/a.zip",
     new AbortController().signal,
-    (amountSize) => console.log({ amountSize }),
-    (chunkSize) => {}
+    (amountSize) => (tAmount = amountSize),
+    (chunkSize) => (tFinished += chunkSize)
   );
-
   void process.exit();
   */
 
