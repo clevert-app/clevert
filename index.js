@@ -1079,21 +1079,6 @@ const serverMain = async () => {
   };
 
   /**
-   * Thanks to [node-machine-id](https://github.com/automation-stack/node-machine-id/tree/f580f9f20668582e9087d92cea2511c972f2e6aa). MIT License.
-   */
-  const machineId = () => {
-    if (process.platform === "linux") {
-      return fs.readFileSync("/etc/machine-id", { encoding: "utf-8" }).trim(); // different platform have different format, but it's ok
-    } else if (process.platform === "darwin") {
-      const c = String.raw`ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID`;
-      return child_process.execSync(c, { encoding: "utf-8" }).split('"')[3];
-    } else if (process.platform === "win32") {
-      const c = String.raw`reg query HKLM\SOFTWARE\Microsoft\Cryptography /v MachineGuid`;
-      return child_process.execSync(c, { encoding: "utf-8" }).split(/\s/)[16];
-    } else assert(false, "unsupported platform");
-  };
-
-  /**
    * Exclude the static `import` declaration matches `pattern`. Will be `// excluded: import xxx form ...`.
    * @param {string} src
    * @param {RegExp} pattern
@@ -1231,7 +1216,10 @@ const serverMain = async () => {
     assert(false, "todo");
   };
 
-  /** @param {Parameters<http.RequestListener>[1]} r */
+  /**
+   * The handler for `http.createServer`.
+   * @param {Parameters<http.RequestListener>[1]} r Response & Request in `.req` field.
+   **/
   const requestHandler = async (r) => {
     const readJson = () => {
       const { resolve, reject, promise } = Promise.withResolvers();
