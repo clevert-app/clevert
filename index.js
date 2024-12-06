@@ -896,6 +896,7 @@ const serverMain = async () => {
     locale: /** @type {keyof i18nRes} */ (
       Intl.DateTimeFormat().resolvedOptions().locale
     ),
+    mirrorsEnabled: false,
     serverPort: 9393,
   });
   /** @type {typeof defaultConfig} */
@@ -985,6 +986,91 @@ const serverMain = async () => {
   const runActionControllers = new Map();
   /** @type {Map<string, InstallExtensionController>} */
   const installExtensionControllers = new Map();
+
+  const gfwDetector = fetch("https://www.google.com/generate_204"); // detect google instead of github because github interfered with by gfw has erratic behaviour, e.g. it works now but fails on future requests
+
+  const mirrors = Object.seal({
+    sources: {
+      "https://github.com": {
+        bench: {
+          suffix:
+            "/electron/electron/releases/download/v33.2.1/electron-v33.2.1-win32-x64-toolchain-profile.zip",
+          size: 75306,
+        },
+        list: [
+          "https://gh.xiu2.us.kg/https://github.com",
+          "https://slink.ltd/https://github.com",
+          "https://gh-proxy.com/https://github.com",
+          "https://cors.isteed.cc/github.com",
+          "https://sciproxy.com/github.com",
+          "https://ghproxy.cc/https://github.com",
+          "https://cf.ghproxy.cc/https://github.com",
+          "https://www.ghproxy.cc/https://github.com",
+          "https://ghproxy.cn/https://github.com",
+          "https://www.ghproxy.cn/https://github.com",
+          "https://github.site",
+          "https://github.store",
+          "https://github.tmby.shop/https://github.com",
+          "https://github.moeyy.xyz/https://github.com",
+          "https://hub.whtrys.space",
+          "https://dgithub.xyz",
+          "https://gh-proxy.ygxz.in/https://github.com",
+          "https://download.ixnic.net",
+          "https://ghproxy.net/https://github.com",
+          "https://ghp.ci/https://github.com",
+          "https://kkgithub.com",
+          // from https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js
+        ],
+      },
+    },
+    map: new Map([["https://from.example.com", "https://to.example.com"]]),
+    refresh: async () => {
+      for (const [origin, source] of Object.entries(mirrors.sources)) {
+        const controller = new AbortController();
+        const promises = source.list.map(async (prefix) => {
+          const response = await fetch(prefix + source.bench.suffix, {
+            redirect: "follow",
+            signal: controller.signal,
+          });
+          const size = (await response.arrayBuffer()).byteLength;
+          assert(size === source.bench.size);
+          controller.abort();
+          mirrors.map.set(origin, prefix); // console.log({ origin, prefix });
+        });
+        await Promise.any(promises).catch(() => {});
+      }
+    },
+  });
+
+  /**
+   * Download smartly. This function assumes the file stream is closed before return, even if errors occur.
+   * @param {string} url
+   * @param {fs.PathLike} path
+   * @param {AbortSignal} signal
+   * @param {(amountSize: number) => void} onStart
+   * @param {(chunkSize: number) => void} onChunk
+   */
+  const download = async (url, path, signal, onStart, onChunk) => {
+    const origin = new URL(url).origin;
+    const mirror = mirrors.map.get(origin);
+    if (mirror) {
+      url = mirror + url.slice(origin.length);
+    }
+    const response = await fetch(url, { redirect: "follow", signal });
+    assert(response.ok && response.body);
+    onStart(parseInt(response.headers.get("Content-Length") || "0"));
+    const fileStream = fs.createWriteStream(path, { signal });
+    try {
+      for await (const chunk of response.body) {
+        onChunk(chunk.byteLength);
+        assert(fileStream.writable);
+        if (fileStream.write(chunk)) continue;
+        await new Promise((resolve) => fileStream.once("drain", resolve));
+      }
+    } finally {
+      await new Promise((resolve) => fileStream.close(resolve));
+    }
+  };
 
   /**
    * Read request body then parse json.
@@ -1080,139 +1166,6 @@ const serverMain = async () => {
     }
     return path.join(...parts);
   };
-
-  /**
-   * Download smartly.
-   *
-   * This function assumes the file stream is closed before return, even if errors occur.
-   * @param {string | URL} url
-   * @param {fs.PathLike} path
-   * @param {AbortSignal} signal
-   * @param {(amountSize: number) => void} onStart
-   * @param {(chunkSize: number) => void} onChunk
-   */
-  const download = async (url, path, signal, onStart, onChunk) => {
-    /** @type {{sources:Map<string,{timeout?:number;bench?:string;list?:string[]}>}} */
-    const that = /** @type {any} */ (download); // static variables
-    if (!that.sources) {
-      // the first is fastest, others are shuffled, if the first timeouted, trigger benchmark, then swap the fastest to first and retry
-      that.sources = new Map();
-      that.sources.set("https://github.com", {
-        bench:
-          "/electron/electron/releases/download/v33.2.1/electron-v33.2.1-win32-x64-toolchain-profile.zip",
-        list: [
-          "https://github.com", // at initial, the official one is wished to be fastest
-          "https://gh.xiu2.us.kg/https://github.com",
-          "https://slink.ltd/https://github.com",
-          "https://gh-proxy.com/https://github.com",
-          "https://cors.isteed.cc/github.com",
-          "https://sciproxy.com/github.com",
-          "https://ghproxy.cc/https://github.com",
-          "https://cf.ghproxy.cc/https://github.com",
-          "https://www.ghproxy.cc/https://github.com",
-          "https://ghproxy.cn/https://github.com",
-          "https://www.ghproxy.cn/https://github.com",
-          "https://github.site",
-          "https://github.store",
-          "https://github.tmby.shop/https://github.com",
-          "https://github.moeyy.xyz/https://github.com",
-          "https://hub.whtrys.space",
-          "https://dgithub.xyz",
-          "https://gh-proxy.ygxz.in/https://github.com",
-          "https://download.ixnic.net",
-          "https://ghproxy.net/https://github.com",
-          "https://ghp.ci/https://github.com",
-          "https://kkgithub.com",
-          // from https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js
-        ],
-      });
-    }
-    const defaultTimeout = 900;
-    const initUrl = Object.freeze(typeof url === "string" ? new URL(url) : url);
-    /** @type {Response | undefined} */
-    let response = undefined;
-    while (!response?.body) {
-      let source = that.sources.get(initUrl.origin);
-      if (!source) {
-        source = {};
-        that.sources.set(initUrl.origin, source);
-      }
-      if (!source.timeout) {
-        source.timeout = defaultTimeout;
-      }
-      if (source.list) {
-        url = source.list[0] + initUrl.href.slice(initUrl.origin.length);
-      }
-      try {
-        const controller = new AbortController();
-        signal.addEventListener("abort", controller.abort); // abort from upsteam
-        const timer = setTimeout(() => {
-          controller.abort("timeout");
-        }, source.timeout);
-        /** @type {RequestInit} */
-        const options = { redirect: "follow", signal: controller.signal };
-        console.time("fetch")
-        response = await fetch(url, options);
-        console.timeEnd("fetch")
-        clearTimeout(timer);
-        if (!response?.body) throw new Error("body is null, url = " + url);
-      } catch (error) {
-        if (!source.list) throw error; // no mirrors, throw out
-        const controller = new AbortController();
-        signal.addEventListener("abort", controller.abort);
-        const timer = setTimeout(() => {
-          controller.abort("timeout");
-        }, 5000); // it's too extreme if a 70k resource can't be finished within 5s
-        /** @type {RequestInit} */
-        const options = { redirect: "follow", signal: controller.signal };
-        // perform fisher–yates shuffle
-        for (let i = source.list.length; i != 0; ) {
-          const j = Math.trunc(Math.random() * i);
-          i--;
-          [source.list[i], source.list[j]] = [source.list[j], source.list[i]];
-        }
-        const beginTime = Date.now(); // accurate enough, performance.now() is unnecessary, see https://stackoverflow.com/a/60117746
-        const n = await Promise.any(
-          source.list.map(async (v, i) => {
-            const response = await fetch(v + source.bench, options);
-            assert((await response.arrayBuffer()).byteLength === 75306);
-            return i;
-          })
-        );
-        source.timeout = Date.now() - beginTime + defaultTimeout;
-        clearTimeout(timer);
-        controller.abort();
-        console.log("fastest = " + source.list[n]);
-        console.log("timeout = " + source.timeout);
-        [source.list[0], source.list[n]] = [source.list[n], source.list[0]]; // swap the fastest to first
-      }
-    }
-    onStart(parseInt(response.headers.get("Content-Length") || "0"));
-    const fileStream = fs.createWriteStream(path, { signal });
-    try {
-      for await (const chunk of response.body) {
-        onChunk(chunk.byteLength);
-        assert(fileStream.writable);
-        if (fileStream.write(chunk)) continue;
-        await new Promise((resolve) => fileStream.once("drain", resolve));
-      }
-    } finally {
-      await new Promise((resolve) => fileStream.close(resolve));
-    }
-  };
-
-  /*
-  let [tAmount, tFinished] = [0, 0];
-  setInterval(() => console.log({ tFinished, tAmount }), 700);
-  await download(
-    "https://github.com/electron/electron/releases/download/v33.2.1/electron-v33.2.1-linux-x64.zip",
-    "./temp/a.zip",
-    new AbortController().signal,
-    (amountSize) => (tAmount = amountSize),
-    (chunkSize) => (tFinished += chunkSize)
-  );
-  void process.exit();
-  */
 
   /**
    * Get next unique id. Format = `1716887172_000123` = unix stamp + underscore + sequence number inside this second.
@@ -1612,6 +1565,13 @@ const serverMain = async () => {
         }
         await sleep(1000); // loop interval, not SSE sending interval
       }
+      r.end();
+      return;
+    }
+
+    if (r.req.url === "/refresh-mirrors") {
+      await mirrors.refresh();
+      r.writeHead(200);
       r.end();
       return;
     }
