@@ -1571,6 +1571,24 @@ const serverMain = async () => {
       return;
     }
 
+    if (r.req.url === "/show-open-dialog") {
+      /** @type {Electron.OpenDialogOptions} */
+      const request = await readJson();
+      const electron = await electronImport;
+      const response = await electron.dialog.showOpenDialog(request);
+      r.end(JSON.stringify(response));
+      return;
+    }
+
+    if (r.req.url === "/show-save-dialog") {
+      /** @type {Electron.SaveDialogOptions} */
+      const request = await readJson();
+      const electron = await electronImport;
+      const response = await electron.dialog.showSaveDialog(request);
+      r.end(JSON.stringify(response));
+      return;
+    }
+
     if (r.req.url === "/quit") {
       r.end();
       await beforeQuit();
