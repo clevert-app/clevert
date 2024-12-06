@@ -1420,7 +1420,7 @@ const serverMain = async () => {
     if (r.req.url?.startsWith("/extensions/")) {
       const relative = r.req.url.slice("/extensions/".length);
       const path = solvePath(PATH_EXTENSIONS, relative);
-      if (r.req.url.endsWith("/index.js")) {
+      if (relative === "index.js") {
         const buffer = await fs.promises.readFile(path);
         const response = excludeImports(buffer.toString(), /^node:/);
         r.setHeader("Content-Type", "text/javascript; charset=utf-8");
