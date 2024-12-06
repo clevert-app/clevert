@@ -235,6 +235,7 @@ const debounce = (f, ms) => {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const [html, css] = [String.raw, String.raw]; // https://github.com/0x00000001A/es6-string-html
+
 const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   /* initial theme, contains all vars */
   @media (min-width: 1px) {
@@ -418,6 +419,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   /* todo: about hover, https://stackoverflow.com/a/30303898 */
   /* todo: use box-shadow instead of background on hover? */
 `;
+
 const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
   <!DOCTYPE html>
   <html lang="${lang}">
@@ -436,6 +438,7 @@ const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
     <body></body>
   </html>
 `;
+
 const pageMain = async () => {
   /** @type {ClevertUtils} */
   const cu = {
@@ -843,6 +846,7 @@ const pageMain = async () => {
     $toHome.click();
   }
 };
+
 const serverMain = async () => {
   const electronImport = import("electron"); // as early as possible // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _electron ; echo '{"name":"@types/electron"}' > _electron/package.json ; curl -o _electron/index.d.ts -L unpkg.com/electron/electron.d.ts ; npm i -D ./_electron
   electronImport.catch(() => {});
@@ -889,6 +893,7 @@ const serverMain = async () => {
     return ret;
   };
 
+  // agreement: keep these configs as flat as possible, so we can easily merge and upgrade it
   const defaultConfig = Object.seal({
     windowWidth: 800,
     windowHeight: 600,
@@ -988,6 +993,7 @@ const serverMain = async () => {
   const installExtensionControllers = new Map();
 
   const gfwDetector = fetch("https://www.google.com/generate_204"); // detect google instead of github because github interfered with by gfw has erratic behaviour, e.g. it works now but fails on future requests
+  gfwDetector.catch(() => console.log("gfw detected"));
 
   const mirrors = Object.seal({
     sources: {
@@ -1225,21 +1231,20 @@ const serverMain = async () => {
     assert(false, "todo");
   };
 
-  const server = http.createServer(async (_, r) => {
+  /** @param {Parameters<http.RequestListener>[1]} r */
+  const requestHandler = async (r) => {
     const readJson = () => {
       const { resolve, reject, promise } = Promise.withResolvers();
       let body = "";
       r.req.on("data", (chunk) => (body += chunk)); // in my testing, register the listener after a delay will not miss events
-      r.req.on("end", () => resolve(JSON.parse(body)));
-      r.req.on("error", reject);
-      return promise;
+      r.req.on("end", resolve).on("error", reject);
+      return promise.then(() => JSON.parse(body)); // export the json parse error to outer, instead of throw inside "end" event listener
     };
 
     r.setHeader("Cache-Control", "no-store");
 
     if (r.req.url === "/") {
-      r.setHeader("Content-Type", "text/html; charset=utf-8");
-      r.writeHead(200); // agreement: don't use chained call like r.writeHead(200).end("whatever")
+      r.setHeader("Content-Type", "text/html; charset=utf-8"); // agreement: don't use chained call like r.setHeader(xxx).end("whatever")
       r.end(pageHtml(i18n, config.locale)); // agreement: use vanilla html+css+js, esm, @ts-check, jsdoc, get rid of ts transpile, node 22 added built-in ts but not at browser in the foreseeable future
       return;
     }
@@ -1248,20 +1253,19 @@ const serverMain = async () => {
       const buffer = await fs.promises.readFile(import.meta.filename);
       const response = excludeImports(buffer.toString(), /^node:/);
       r.setHeader("Content-Type", "text/javascript; charset=utf-8");
-      r.writeHead(200);
       r.end(response);
       return;
     }
 
     if (r.req.url === "/favicon.ico") {
       r.setHeader("Content-Type", "image/png");
-      r.writeHead(200);
       r.end();
       return;
     }
 
     if (r.req.url === "/install-extension") {
-      const request = /** @type {InstallExtensionRequest} */ (await readJson());
+      /** @type {InstallExtensionRequest} */
+      const request = await readJson();
       let finished = 0;
       let amount = 0;
       const abortController = new AbortController();
@@ -1375,7 +1379,8 @@ const serverMain = async () => {
     }
 
     if (r.req.url === "/remove-extension") {
-      const request = /** @type {RemoveExtensionRequest} */ (await readJson());
+      /** @type {RemoveExtensionRequest} */
+      const request = await readJson();
       const extensionDir = solvePath(
         PATH_EXTENSIONS,
         request.id + "_" + request.version
@@ -1408,7 +1413,6 @@ const serverMain = async () => {
         });
       }
       r.setHeader("Content-Type", "application/json; charset=utf-8");
-      r.writeHead(200);
       r.end(JSON.stringify(response));
       return;
     }
@@ -1420,7 +1424,6 @@ const serverMain = async () => {
         const buffer = await fs.promises.readFile(path);
         const response = excludeImports(buffer.toString(), /^node:/);
         r.setHeader("Content-Type", "text/javascript; charset=utf-8");
-        r.writeHead(200);
         r.end(response);
       } else {
         assert(false, "todo"); // todo: mime guess and more?
@@ -1429,7 +1432,8 @@ const serverMain = async () => {
     }
 
     if (r.req.url === "/run-action") {
-      const request = /** @type {RunActionRequest} */ (await readJson());
+      /** @type {RunActionRequest} */
+      const request = await readJson();
       const extensionIndexJs = solvePath(
         PATH_EXTENSIONS,
         request.extensionId + "_" + request.extensionVersion,
@@ -1500,7 +1504,7 @@ const serverMain = async () => {
 
     if (r.req.url === "/get-status") {
       r.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-      r.writeHead(200);
+      r.writeHead(200); // agreement: only use exhibit writeHead() when necessary, like here we needs the browser to know the connection is healthy immediately
       /** @param {GetStatusResponseEvent} e */
       const send = (e) => r.write(`data: ${JSON.stringify(e)}\n\n`);
       const preventedIds = /** @type {Set<string>} */ (new Set());
@@ -1563,13 +1567,11 @@ const serverMain = async () => {
 
     if (r.req.url === "/refresh-mirrors") {
       await mirrors.refresh();
-      r.writeHead(200);
       r.end();
       return;
     }
 
     if (r.req.url === "/quit") {
-      r.writeHead(200);
       r.end();
       await beforeQuit();
       process.exit();
@@ -1589,8 +1591,19 @@ const serverMain = async () => {
 
     r.writeHead(404);
     r.end();
-  });
+  };
 
+  const server = http.createServer(async (_, r) => {
+    try {
+      await requestHandler(r);
+    } catch (error) {
+      console.warn(error);
+      try {
+        r.writeHead(500); // if it's already called inside requestHandler(), the "can't set headers after they are sent" will be thrown
+        r.end();
+      } catch (_) {} // just ignore errors here
+    }
+  });
   server.on("listening", () => {
     serverPort.resolve(config.serverPort);
     console.log(server.address());
@@ -1609,6 +1622,7 @@ const serverMain = async () => {
   });
   server.listen(config.serverPort, "127.0.0.1");
 };
+
 if (globalThis.document) {
   pageMain();
 } else {
