@@ -1073,19 +1073,6 @@ const serverMain = async () => {
   };
 
   /**
-   * Read request body then parse json.
-   * @param {http.IncomingMessage} req
-   */
-  const readReq = (req) => {
-    const { resolve, reject, promise } = Promise.withResolvers();
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", () => resolve(JSON.parse(body)));
-    req.on("error", reject);
-    return promise;
-  };
-
-  /**
    * Thanks to [node-machine-id](https://github.com/automation-stack/node-machine-id/tree/f580f9f20668582e9087d92cea2511c972f2e6aa). MIT License.
    */
   const machineId = () => {
@@ -1239,6 +1226,15 @@ const serverMain = async () => {
   };
 
   const server = http.createServer(async (_, r) => {
+    const readJson = () => {
+      const { resolve, reject, promise } = Promise.withResolvers();
+      let body = "";
+      r.req.on("data", (chunk) => (body += chunk)); // in my testing, register the listener after a delay will not miss events
+      r.req.on("end", () => resolve(JSON.parse(body)));
+      r.req.on("error", reject);
+      return promise;
+    };
+
     r.setHeader("Cache-Control", "no-store");
 
     if (r.req.url === "/") {
@@ -1265,9 +1261,7 @@ const serverMain = async () => {
     }
 
     if (r.req.url === "/install-extension") {
-      const request = /** @type {InstallExtensionRequest} */ (
-        await readReq(r.req)
-      );
+      const request = /** @type {InstallExtensionRequest} */ (await readJson());
       let finished = 0;
       let amount = 0;
       const abortController = new AbortController();
@@ -1381,9 +1375,7 @@ const serverMain = async () => {
     }
 
     if (r.req.url === "/remove-extension") {
-      const request = /** @type {RemoveExtensionRequest} */ (
-        await readReq(r.req)
-      );
+      const request = /** @type {RemoveExtensionRequest} */ (await readJson());
       const extensionDir = solvePath(
         PATH_EXTENSIONS,
         request.id + "_" + request.version
@@ -1437,7 +1429,7 @@ const serverMain = async () => {
     }
 
     if (r.req.url === "/run-action") {
-      const request = /** @type {RunActionRequest} */ (await readReq(r.req));
+      const request = /** @type {RunActionRequest} */ (await readJson());
       const extensionIndexJs = solvePath(
         PATH_EXTENSIONS,
         request.extensionId + "_" + request.extensionVersion,
