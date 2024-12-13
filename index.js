@@ -180,6 +180,8 @@ const i18nRes = (() => {
     homeShowByName: () => "By Name",
     homeShowExtensions: () => "Extensions",
     homeShowProfiles: () => "Profiles",
+    homeMenuDelete: () => "Delete",
+    homeMenuInfo: () => "Info",
     homeMoreOperations: () => "More operations",
   };
   /** @type {Readonly<typeof enus>} */
@@ -193,6 +195,8 @@ const i18nRes = (() => {
     homeShowByName: () => "按名称",
     homeShowExtensions: () => "扩展",
     homeShowProfiles: () => "配置",
+    homeMenuDelete: () => "删除",
+    homeMenuInfo: () => "详细信息",
     homeMoreOperations: () => "更多操作",
   };
   // todo: use llm to do translate
@@ -255,11 +259,11 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   @media (prefers-color-scheme: dark) {
     body {
       --bg: #000;
-      --bg2: #ffffff22;
-      --bg3: #ffffff33;
-      --bg4: #ffffff44;
-      --bg5: #ffffff55;
-      --bg6: #ffffff66;
+      --bg2: #222222;
+      --bg3: #333333;
+      --bg4: #444444;
+      --bg5: #555555;
+      --bg6: #666666;
       --fg: #fff;
     }
   }
@@ -286,7 +290,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
-  body > .home li section {
+  body > .home section {
     position: relative;
     padding: 8px 12px;
     font-size: 14px;
@@ -297,6 +301,8 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     border-radius: 6px;
     transition: background-color 0.2s;
   }
+  body > .home section + button:not(:hover, :active),
+  body > .home menu button:not(:hover, :active),
   body > .home > button.off:not(:hover, :active),
   body > .top > button.off:not(:hover, :active) {
     background: #0000;
@@ -356,29 +362,29 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     padding: 0;
     margin: 12px 0 0;
   }
-  body > .home li {
+  body > .home ul li {
     position: relative;
     list-style: none;
   }
-  body > .home li section {
+  body > .home section {
     padding: 10px 14px 12px;
     background: var(--bg3);
   }
   /* todo: animation for removing extension */
-  body > .home li b {
+  body > .home section b {
     font-size: 17px;
     font-weight: normal;
     line-height: 1;
   }
-  body > .home li sub {
+  body > .home section sub {
     margin-left: 8px;
     vertical-align: baseline;
   }
-  body > .home li p {
+  body > .home section p {
     margin: 8px 0 0;
     line-height: 1;
   }
-  body > .home li button {
+  body > .home section + button {
     position: absolute;
     top: 6px;
     right: 6px;
@@ -387,15 +393,26 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     padding: 0;
     font-size: 18px;
     font-weight: bold;
-    background: none;
   }
-  body > .home li button:hover,
-  body > .home li section:hover {
+  body > .home section:hover {
     background: var(--bg4);
   }
-  body > .home li button:active,
-  body > .home li section:active {
+  body > .home section:active {
     background: var(--bg5);
+  }
+  body > .home menu {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    margin: 0;
+    padding: 4px;
+    background: var(--bg2);
+    border-radius: 6px;
+    min-width: 96px;
+  }
+  body > .home menu button {
+    width: 100%;
+    text-align: left;
   }
   body > .market > input {
     margin-right: 4px;
@@ -589,17 +606,34 @@ const pageMain = async () => {
         $more.title = i18n.homeMoreOperations();
         $more.onclick = async (e) => {
           e.stopPropagation();
-          assert(false, "todo");
-          // /** @type {RemoveExtensionRequest} */
-          // const request = {
-          //   id: extension.id,
-          //   version: extension.version,
-          // };
-          // await fetch("/remove-extension", {
-          //   method: "POST",
-          //   body: JSON.stringify(request),
-          // });
-          // r$home();
+          const $menu = document.createElement("menu");
+          $choice.appendChild($menu);
+          const removeMenu = () => {
+            $menu.remove();
+            removeEventListener("click", removeMenu);
+          };
+          addEventListener("click", removeMenu);
+          const $delete = document.createElement("button");
+          $menu.appendChild(document.createElement("li")).appendChild($delete);
+          $delete.textContent = i18n.homeMenuDelete();
+          $delete.onclick = async () => {
+            /** @type {RemoveExtensionRequest} */
+            const request = {
+              id: extension.id,
+              version: extension.version,
+            };
+            await fetch("/remove-extension", {
+              method: "POST",
+              body: JSON.stringify(request),
+            });
+            r$home();
+          };
+          const $info = document.createElement("button");
+          $menu.appendChild(document.createElement("li")).appendChild($info);
+          $info.textContent = i18n.homeMenuInfo();
+          $info.onclick = async () => {
+            assert(false, "todo");
+          };
         };
       }
     } else if (!$showProfiles.classList.contains("off")) {
@@ -639,7 +673,19 @@ const pageMain = async () => {
           $more.title = i18n.homeMoreOperations();
           $more.onclick = async (e) => {
             e.stopPropagation();
-            assert(false, "todo");
+            const $menu = document.createElement("menu");
+            $choice.appendChild($menu);
+            const removeMenu = () => {
+              $menu.remove();
+              removeEventListener("click", removeMenu);
+            };
+            addEventListener("click", removeMenu);
+            const $delete = document.createElement("button");
+            $menu.appendChild(document.createElement("li")).appendChild($delete);
+            $delete.textContent = i18n.homeMenuDelete();
+            $delete.onclick = async () => {
+              assert(false, "todo: delete user defined profile");
+            }; 
           };
         }
       }
