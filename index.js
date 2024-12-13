@@ -180,6 +180,7 @@ const i18nRes = (() => {
     homeShowByName: () => "By Name",
     homeShowExtensions: () => "Extensions",
     homeShowProfiles: () => "Profiles",
+    homeMenuShare: () => "Share",
     homeMenuDelete: () => "Delete",
     homeMenuInfo: () => "Info",
     homeMoreOperations: () => "More operations",
@@ -195,6 +196,7 @@ const i18nRes = (() => {
     homeShowByName: () => "按名称",
     homeShowExtensions: () => "扩展",
     homeShowProfiles: () => "配置",
+    homeMenuShare: () => "分享",
     homeMenuDelete: () => "删除",
     homeMenuInfo: () => "详细信息",
     homeMoreOperations: () => "更多操作",
@@ -613,6 +615,12 @@ const pageMain = async () => {
             removeEventListener("click", removeMenu);
           };
           addEventListener("click", removeMenu);
+          const $share = document.createElement("button");
+          $menu.appendChild(document.createElement("li")).appendChild($share);
+          $share.textContent = i18n.homeMenuShare();
+          $share.onclick = async () => {
+            assert(false, "todo");
+          };
           const $delete = document.createElement("button");
           $menu.appendChild(document.createElement("li")).appendChild($delete);
           $delete.textContent = i18n.homeMenuDelete();
@@ -683,11 +691,23 @@ const pageMain = async () => {
             removeEventListener("click", removeMenu);
           };
           addEventListener("click", removeMenu);
+          const $share = document.createElement("button");
+          $menu.appendChild(document.createElement("li")).appendChild($share);
+          $share.textContent = i18n.homeMenuShare();
+          $share.onclick = async () => {
+            assert(false, "todo");
+          };
           const $delete = document.createElement("button");
           $menu.appendChild(document.createElement("li")).appendChild($delete);
           $delete.textContent = i18n.homeMenuDelete();
           $delete.onclick = async () => {
             assert(false, "todo: delete user defined profile");
+          };
+          const $info = document.createElement("button");
+          $menu.appendChild(document.createElement("li")).appendChild($info);
+          $info.textContent = i18n.homeMenuInfo();
+          $info.onclick = async () => {
+            assert(false, "todo");
           };
         };
       }
