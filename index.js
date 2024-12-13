@@ -637,6 +637,7 @@ const pageMain = async () => {
         };
       }
     } else if (!$showProfiles.classList.contains("off")) {
+      const profiles = /** @type {Profile[]} */ ([]);
       for (const extension of extensionsList) {
         if ($showProfiles.dataset.extensionId) {
           if (
@@ -646,48 +647,49 @@ const pageMain = async () => {
             continue;
           }
         }
-        for (const profile of extension.profiles) {
-          const $choice = document.createElement("li");
-          $choices.appendChild($choice);
-          const $content = document.createElement("section");
-          $choice.appendChild($content);
-          $content.onclick = async () => {
-            r$action(profile.extensionId, profile.extensionVersion, profile.id);
-            $toAction.textContent = "〉" + profile.name;
-            $toAction.click();
+        profiles.push(...extension.profiles);
+      }
+      for (const profile of profiles) {
+        const $choice = document.createElement("li");
+        $choices.appendChild($choice);
+        const $content = document.createElement("section");
+        $choice.appendChild($content);
+        $content.onclick = async () => {
+          r$action(profile.extensionId, profile.extensionVersion, profile.id);
+          $toAction.textContent = "〉" + profile.name;
+          $toAction.click();
+        };
+        const $name = document.createElement("b");
+        $content.appendChild($name);
+        $name.textContent = profile.name;
+        $name.title = profile.id;
+        const $version = document.createElement("sub");
+        $content.appendChild($version);
+        $version.textContent = profile.extensionVersion;
+        $version.title = "Extension version";
+        const $description = document.createElement("p");
+        $content.appendChild($description);
+        $description.textContent = profile.description;
+        const $more = document.createElement("button");
+        $choice.appendChild($more);
+        $more.textContent = "···";
+        $more.title = i18n.homeMoreOperations();
+        $more.onclick = async (e) => {
+          e.stopPropagation();
+          const $menu = document.createElement("menu");
+          $choice.appendChild($menu);
+          const removeMenu = () => {
+            $menu.remove();
+            removeEventListener("click", removeMenu);
           };
-          const $name = document.createElement("b");
-          $content.appendChild($name);
-          $name.textContent = profile.name;
-          $name.title = profile.id;
-          const $version = document.createElement("sub");
-          $content.appendChild($version);
-          $version.textContent = profile.extensionVersion;
-          $version.title = "Extension version";
-          const $description = document.createElement("p");
-          $content.appendChild($description);
-          $description.textContent = profile.description;
-          const $more = document.createElement("button");
-          $choice.appendChild($more);
-          $more.textContent = "···";
-          $more.title = i18n.homeMoreOperations();
-          $more.onclick = async (e) => {
-            e.stopPropagation();
-            const $menu = document.createElement("menu");
-            $choice.appendChild($menu);
-            const removeMenu = () => {
-              $menu.remove();
-              removeEventListener("click", removeMenu);
-            };
-            addEventListener("click", removeMenu);
-            const $delete = document.createElement("button");
-            $menu.appendChild(document.createElement("li")).appendChild($delete);
-            $delete.textContent = i18n.homeMenuDelete();
-            $delete.onclick = async () => {
-              assert(false, "todo: delete user defined profile");
-            }; 
+          addEventListener("click", removeMenu);
+          const $delete = document.createElement("button");
+          $menu.appendChild(document.createElement("li")).appendChild($delete);
+          $delete.textContent = i18n.homeMenuDelete();
+          $delete.onclick = async () => {
+            assert(false, "todo: delete user defined profile");
           };
-        }
+        };
       }
     } else {
       assert(false, "unexpected state");
