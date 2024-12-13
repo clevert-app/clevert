@@ -176,6 +176,7 @@ const i18nRes = (() => {
     toHome: () => "Home",
     toMarket: () => "Market",
     tasksEmpty: () => "No tasks",
+    homeEmpty: () => "No items",
     homeShowRecent: () => "Recent",
     homeShowByName: () => "By Name",
     homeShowExtensions: () => "Extensions",
@@ -192,6 +193,7 @@ const i18nRes = (() => {
     toHome: () => "主页",
     toMarket: () => "商店",
     tasksEmpty: () => "没有任务",
+    homeEmpty: () => "没有项目",
     homeShowRecent: () => "最近",
     homeShowByName: () => "按名称",
     homeShowExtensions: () => "扩展",
@@ -349,6 +351,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     font-size: 16px;
     text-align: center;
     content: "${i18n.tasksEmpty()}";
+    opacity: 0.8;
   }
   body > .home > button {
     padding: 6px 12px;
@@ -363,6 +366,14 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     gap: 6px;
     padding: 0;
     margin: 12px 0 0;
+  }
+  body > .home ul:empty::after {
+    display: block;
+    margin: 8px;
+    font-size: 16px;
+    text-align: center;
+    content: "${i18n.homeEmpty()}";
+    opacity: 0.8;
   }
   body > .home ul li {
     position: relative;
@@ -406,11 +417,11 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     position: absolute;
     top: 6px;
     right: 6px;
-    margin: 0;
+    min-width: 96px;
     padding: 4px;
+    margin: 0;
     background: var(--bg2);
     border-radius: 6px;
-    min-width: 96px;
   }
   body > .home menu button {
     width: 100%;
