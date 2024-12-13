@@ -1408,13 +1408,13 @@ const serverMain = async () => {
     if (r.req.url?.startsWith("/extensions/")) {
       const relative = r.req.url.slice("/extensions/".length);
       const path = solvePath(PATH_EXTENSIONS, relative);
-      if (relative === "index.js") {
+      if (relative.split("/")[1] === "index.js") {
         const buffer = await fs.promises.readFile(path);
         const response = excludeImports(buffer.toString(), /^node:/);
         r.setHeader("Content-Type", "text/javascript; charset=utf-8");
         r.end(response);
       } else {
-        assert(false, "todo"); // todo: mime guess and more?
+        assert(false, "todo: url = " + r.req.url); // todo: mime guess and more?
       }
       return;
     }
