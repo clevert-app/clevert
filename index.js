@@ -967,8 +967,8 @@ const pageMain = async () => {
     $toSettings.classList.add("off");
     $tasks.classList.remove("off");
     $home.classList.add("off");
-    $action.classList.add("off");
     $market.classList.add("off");
+    $action.classList.add("off");
     $settings.classList.add("off");
   };
   const $toHome = document.createElement("button");
@@ -984,8 +984,8 @@ const pageMain = async () => {
     $toSettings.classList.add("off");
     $tasks.classList.add("off");
     $home.classList.remove("off");
-    $action.classList.add("off");
     $market.classList.add("off");
+    $action.classList.add("off");
     $settings.classList.add("off");
   };
   const $toMarket = document.createElement("button");
@@ -1001,8 +1001,8 @@ const pageMain = async () => {
     $toSettings.classList.add("off");
     $tasks.classList.add("off");
     $home.classList.add("off");
-    $action.classList.remove("off");
-    $market.classList.add("off");
+    $market.classList.remove("off");
+    $action.classList.add("off");
     $settings.classList.add("off");
   };
   const $toAction = document.createElement("button");
@@ -1019,8 +1019,8 @@ const pageMain = async () => {
     $toSettings.classList.add("off");
     $tasks.classList.add("off");
     $home.classList.add("off");
-    $action.classList.add("off");
-    $market.classList.remove("off");
+    $market.classList.add("off");
+    $action.classList.remove("off");
     $settings.classList.add("off");
   };
   const $toSettings = document.createElement("button");
@@ -1036,8 +1036,8 @@ const pageMain = async () => {
     $toSettings.classList.remove("off");
     $tasks.classList.add("off");
     $home.classList.add("off");
-    $action.classList.add("off");
     $market.classList.add("off");
+    $action.classList.add("off");
     $settings.classList.remove("off");
   };
 
