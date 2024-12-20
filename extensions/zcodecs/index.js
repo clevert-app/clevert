@@ -62,6 +62,7 @@ export default {
       // 还有一个设想，比如 a.pdf b.pdf 提取图片到 out/a/XXX.png out/b/XXX.png 这要怎么处理？
       ui: (profile) => {
         // don't use <select multiple>, it's weird in mobile browser
+        // todo: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/output
         const $root = document.createElement("form");
         $root.classList.add("root");
         const css = String.raw;

@@ -263,6 +263,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const [html, css] = [String.raw, String.raw]; // https://github.com/0x00000001A/es6-string-html
 
 const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
+  /* agreement: sort css properties by https://kkocdko.site/toy/sortcss (stylelint-config-recess-order) */
   /* initial theme, contains all vars */
   @media (min-width: 1px) {
     body {
@@ -308,35 +309,32 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   input:not([type]):focus {
     background: var(--bg5);
   }
-  input[type="checkbox" ] {
-    margin: 0;
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
+  input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    margin: 0 8px 0 0;
+    vertical-align: bottom;
     appearance: none;
-    background: var(--bg5);
-    vertical-align: top;
+    background: var(--bg4);
+    border-radius: 4px;
+    transition: background-color 0.2s;
   }
-  input[type="checkbox" ]::after {
-    content: "";
+  input[type="checkbox"]::before {
     position: absolute;
     display: block;
-    width: 16px;
-    height: 16px;
-    margin:1px;
-    background: #f0f;
-    background: none;
-    /* https://raw.githubusercontent.com/microsoft/vscode-codicons/refs/tags/0.0.36/src/icons/check.svg */
-    clip-path: path("M14.431 3.323l-8.47 10-.79-.036-3.35-4.77.818-.574 2.978 4.24 8.051-9.506.764.646z");
-  }
-  input[type="checkbox" ]:checked::before {
+    width: 20px;
+    height: 20px;
     content: "";
-    position:absolute;
-    display: block;
-    height: 18px;
-    width: 18px;
     background: var(--fg);
-    clip-path: polygon(23% 48%, 14% 54%, 33% 82%, 38% 82%, 86% 26%, 79% 19%, 37% 68%);
+    opacity: 0;
+    transition: 0.2s opacity;
+    clip-path: polygon(22% 49%, 15% 56%, 41% 82%, 86% 26%, 79% 20%, 41% 67%);
+  }
+  input[type="checkbox"]:checked::before {
+    opacity: 1;
+  }
+  label > input[type="checkbox"] + span {
+    line-height: 20px;
   }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
@@ -357,15 +355,28 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .top > button.off:not(:hover, :active) {
     background: #0000;
   }
-  button:hover {
+  button:hover,
+  input[type="checkbox"]:hover {
     background: var(--bg5);
   }
-  button:active {
+  button:active,
+  input[type="checkbox"]:active {
     background: var(--bg6);
   }
   button:active,
   body > .home li section:active {
     transition: background-color 0s;
+  }
+  menu {
+    min-width: 96px;
+    padding: 4px;
+    margin: 0;
+    background: var(--bg2);
+    border-radius: 6px;
+  }
+  menu > li > button {
+    width: 100%;
+    text-align: left;
   }
   body {
     height: 100vh;
@@ -463,15 +474,6 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     position: absolute;
     top: 6px;
     right: 6px;
-    min-width: 96px;
-    padding: 4px;
-    margin: 0;
-    background: var(--bg2);
-    border-radius: 6px;
-  }
-  body > .home menu button {
-    width: 100%;
-    text-align: left;
   }
   body > .market > input {
     margin-right: 4px;
@@ -481,11 +483,11 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     gap: 6px;
   }
   body > .settings section {
-    padding: 4px 6px;
+    padding: 4px 6px 12px;
   }
   body > .settings h5 {
-    font-size: 16px;
     margin: 0;
+    font-size: 16px;
     font-weight: 500;
   }
   body > .settings p {
@@ -509,6 +511,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   /* todo: about hover, https://stackoverflow.com/a/30303898 */
   /* todo: use box-shadow instead of background on hover? */
+  /* todo: rtl right-to-left https://github.com/happylindz/blog/issues/16 */
 `;
 
 const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
@@ -681,7 +684,7 @@ const pageMain = async () => {
           $choice.appendChild($menu);
           const removeMenu = () => {
             $menu.remove();
-            removeEventListener("click", removeMenu);
+            removeEventListener("click", removeMenu); // agreement: prefer to use `.onevent`, avoid `.addEventListener` when possible, here's why, remove listener needs more code
           };
           addEventListener("click", removeMenu);
           const $share = document.createElement("button");
