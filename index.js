@@ -175,6 +175,7 @@ const i18nRes = (() => {
     toTasks: () => "Tasks",
     toHome: () => "Home",
     toMarket: () => "Market",
+    toSettings: () => "Settings",
     tasksEmpty: () => "No tasks",
     homeEmpty: () => "No items",
     homeShowRecent: () => "Recent",
@@ -185,6 +186,10 @@ const i18nRes = (() => {
     homeMenuDelete: () => "Delete",
     homeMenuInfo: () => "Info",
     homeMoreOperations: () => "More operations",
+    settingsMirrorsTitle: () => "Mirrors",
+    settingsMirrorsDescription: () =>
+      "Mirrors may speed up downloads if your network environment is terrible.",
+    settingsMirrorsSwitch: () => "Enable mirrors",
   };
   /** @type {Readonly<typeof enus>} */
   const zhcn = {
@@ -192,6 +197,7 @@ const i18nRes = (() => {
     toTasks: () => "任务",
     toHome: () => "主页",
     toMarket: () => "商店",
+    toSettings: () => "设置",
     tasksEmpty: () => "没有任务",
     homeEmpty: () => "没有项目",
     homeShowRecent: () => "最近",
@@ -202,6 +208,10 @@ const i18nRes = (() => {
     homeMenuDelete: () => "删除",
     homeMenuInfo: () => "详细信息",
     homeMoreOperations: () => "更多操作",
+    settingsMirrorsTitle: () => "镜像",
+    settingsMirrorsDescription: () =>
+      "镜像可能加速下载，如果你的网络环境很糟糕。",
+    settingsMirrorsSwitch: () => "启用镜像",
   };
   // todo: use llm to do translate
   return {
@@ -291,6 +301,36 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   input[type="number"]:focus,
   input:not([type]):focus {
     background: var(--bg5);
+  }
+  input[type="checkbox" ] {
+    margin: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    appearance: none;
+    background: var(--bg5);
+    vertical-align: top;
+  }
+  input[type="checkbox" ]::after {
+    content: "";
+    position: absolute;
+    display: block;
+    width: 16px;
+    height: 16px;
+    margin:1px;
+    background: #f0f;
+    background: none;
+    /* https://raw.githubusercontent.com/microsoft/vscode-codicons/refs/tags/0.0.36/src/icons/check.svg */
+    clip-path: path("M14.431 3.323l-8.47 10-.79-.036-3.35-4.77.818-.574 2.978 4.24 8.051-9.506.764.646z");
+  }
+  input[type="checkbox" ]:checked::before {
+    content: "";
+    position:absolute;
+    display: block;
+    height: 18px;
+    width: 18px;
+    background: var(--fg);
+    clip-path: polygon(23% 48%, 14% 54%, 33% 82%, 38% 82%, 86% 26%, 79% 19%, 37% 68%);
   }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
@@ -434,20 +474,32 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     display: flex;
     gap: 6px;
   }
+  body > .settings section {
+    padding: 4px 6px;
+  }
+  body > .settings h5 {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 500;
+  }
+  body > .settings p {
+    margin: 8px 0;
+  }
   body > .top {
     position: fixed;
     top: 0;
     right: 0;
     left: 0;
+    padding: 8px 12px;
   }
-  body > .top > button {
-    margin: 8px 0 8px 4px;
-  }
-  body > .top > button:first-child {
-    margin-left: 12px;
+  body > .top > button:not(:last-child) {
+    margin-right: 4px;
   }
   body > .top > button.to-action:empty {
     visibility: hidden;
+  }
+  body > .top > button.to-action + button {
+    float: right;
   }
   /* todo: about hover, https://stackoverflow.com/a/30303898 */
   /* todo: use box-shadow instead of background on hover? */
@@ -866,12 +918,45 @@ const pageMain = async () => {
     };
   };
 
+  // $settings
+  const $settings = document.createElement("div");
+  document.body.appendChild($settings);
+  $settings.classList.add("settings");
+  $settings.classList.add("off");
+  const r$settings = async () => {
+    $settings.replaceChildren();
+    {
+      const $mirrors = document.createElement("section");
+      $settings.appendChild($mirrors);
+      $mirrors.classList.add("mirrors");
+      const $title = document.createElement("h5");
+      $mirrors.appendChild($title);
+      $title.textContent = i18n.settingsMirrorsTitle();
+      const $description = document.createElement("p");
+      $mirrors.appendChild($description);
+      $description.textContent = i18n.settingsMirrorsDescription();
+      const $label = document.createElement("label");
+      $mirrors.appendChild($label);
+      const $switch = document.createElement("input");
+      $label.appendChild($switch);
+      $switch.type = "checkbox";
+      // $switch.checked = config.mirrorsEnabled;
+      $switch.onchange = () => {
+        // config.mirrorsEnabled = $switch.checked;
+        // saveConfig();
+      };
+      $label.appendChild(document.createTextNode(i18n.settingsMirrorsSwitch()));
+    }
+  };
+  r$settings();
+
   // $top
   const $top = document.createElement("header"); // 如果要移动端，就**不可能**侧栏了。而顶栏在桌面端也可以忍受
   $top.classList.add("top");
   document.body.appendChild($top);
   const $toTasks = document.createElement("button");
   $top.appendChild($toTasks);
+  $toTasks.classList.add("to-tasks");
   $toTasks.classList.add("off");
   $toTasks.textContent = i18n.toTasks();
   $toTasks.onclick = () => {
@@ -879,13 +964,16 @@ const pageMain = async () => {
     $toHome.classList.add("off");
     $toMarket.classList.add("off");
     $toAction.classList.add("off");
+    $toSettings.classList.add("off");
     $tasks.classList.remove("off");
     $home.classList.add("off");
     $action.classList.add("off");
     $market.classList.add("off");
+    $settings.classList.add("off");
   };
   const $toHome = document.createElement("button");
   $top.appendChild($toHome);
+  $toHome.classList.add("to-home");
   $toHome.classList.add("off");
   $toHome.textContent = i18n.toHome();
   $toHome.onclick = () => {
@@ -893,13 +981,16 @@ const pageMain = async () => {
     $toHome.classList.remove("off");
     $toMarket.classList.add("off");
     $toAction.classList.add("off");
+    $toSettings.classList.add("off");
     $tasks.classList.add("off");
     $home.classList.remove("off");
     $action.classList.add("off");
     $market.classList.add("off");
+    $settings.classList.add("off");
   };
   const $toMarket = document.createElement("button");
   $top.appendChild($toMarket);
+  $toMarket.classList.add("to-market");
   $toMarket.classList.add("off");
   $toMarket.textContent = i18n.toMarket();
   $toMarket.onclick = () => {
@@ -907,10 +998,12 @@ const pageMain = async () => {
     $toHome.classList.add("off");
     $toMarket.classList.remove("off");
     $toAction.classList.add("off");
+    $toSettings.classList.add("off");
     $tasks.classList.add("off");
     $home.classList.add("off");
-    $action.classList.add("off");
-    $market.classList.remove("off");
+    $action.classList.remove("off");
+    $market.classList.add("off");
+    $settings.classList.add("off");
   };
   const $toAction = document.createElement("button");
   $top.appendChild($toAction);
@@ -923,10 +1016,29 @@ const pageMain = async () => {
     $toHome.classList.add("off");
     $toMarket.classList.add("off");
     $toAction.classList.remove("off");
+    $toSettings.classList.add("off");
     $tasks.classList.add("off");
     $home.classList.add("off");
-    $action.classList.remove("off");
+    $action.classList.add("off");
+    $market.classList.remove("off");
+    $settings.classList.add("off");
+  };
+  const $toSettings = document.createElement("button");
+  $top.appendChild($toSettings);
+  $toSettings.classList.add("to-settings");
+  $toSettings.classList.add("off");
+  $toSettings.textContent = i18n.toSettings();
+  $toSettings.onclick = () => {
+    $toTasks.classList.add("off");
+    $toHome.classList.add("off");
+    $toMarket.classList.add("off");
+    $toAction.classList.add("off");
+    $toSettings.classList.remove("off");
+    $tasks.classList.add("off");
+    $home.classList.add("off");
+    $action.classList.add("off");
     $market.classList.add("off");
+    $settings.classList.remove("off");
   };
 
   // main
