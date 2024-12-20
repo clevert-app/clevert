@@ -171,6 +171,7 @@ import child_process from "node:child_process";
 
 const i18nRes = (() => {
   const enus = {
+    nativeName: () => "English", // https://github.com/chromium/chromium/raw/refs/tags/133.0.6920.1/third_party/google-closure-library/closure/goog/locale/nativenameconstants.js
     title: () => "Clevert - Universal file converter platform",
     toTasks: () => "Tasks",
     toHome: () => "Home",
@@ -189,10 +190,13 @@ const i18nRes = (() => {
     settingsMirrorsTitle: () => "Mirrors",
     settingsMirrorsDescription: () =>
       "Mirrors may speed up downloads if your network environment is terrible.",
-    settingsMirrorsSwitch: () => "Enable mirrors",
+    settingsMirrorsSwitch: () => "Control whether mirrors are enabled or not.", // agreement: the wording and syntax here mimics vscode's editor.guides.bracketPairs
+    settingsLanguagesTitle: () => "Languages",
+    settingsLanguagesDescription: () => "Language in Clevert and extensions.",
   };
   /** @type {Readonly<typeof enus>} */
   const zhcn = {
+    nativeName: () => "中文（简体）",
     title: () => "Clevert - 通用的文件转换平台",
     toTasks: () => "任务",
     toHome: () => "主页",
@@ -211,7 +215,9 @@ const i18nRes = (() => {
     settingsMirrorsTitle: () => "镜像",
     settingsMirrorsDescription: () =>
       "镜像可能加速下载，如果你的网络环境很糟糕。",
-    settingsMirrorsSwitch: () => "启用镜像",
+    settingsMirrorsSwitch: () => "控制是否启用镜像。",
+    settingsLanguagesTitle: () => "语言",
+    settingsLanguagesDescription: () => "在 Clevert 和扩展中使用的语言。",
   };
   // todo: use llm to do translate
   return {
@@ -926,26 +932,50 @@ const pageMain = async () => {
   const r$settings = async () => {
     $settings.replaceChildren();
     {
-      const $mirrors = document.createElement("section");
-      $settings.appendChild($mirrors);
-      $mirrors.classList.add("mirrors");
+      const $section = document.createElement("section");
+      $settings.appendChild($section);
+      $section.classList.add("mirrors");
       const $title = document.createElement("h5");
-      $mirrors.appendChild($title);
+      $section.appendChild($title);
       $title.textContent = i18n.settingsMirrorsTitle();
       const $description = document.createElement("p");
-      $mirrors.appendChild($description);
+      $section.appendChild($description);
       $description.textContent = i18n.settingsMirrorsDescription();
-      const $label = document.createElement("label");
-      $mirrors.appendChild($label);
+      const $switchLabel = document.createElement("label");
+      $section.appendChild($switchLabel);
       const $switch = document.createElement("input");
-      $label.appendChild($switch);
+      $switchLabel.appendChild($switch);
       $switch.type = "checkbox";
       // $switch.checked = config.mirrorsEnabled;
-      $switch.onchange = () => {
+      $switch.onchange = async () => {
         // config.mirrorsEnabled = $switch.checked;
         // saveConfig();
       };
-      $label.appendChild(document.createTextNode(i18n.settingsMirrorsSwitch()));
+      const $switchText = document.createElement("span");
+      $switchLabel.appendChild($switchText);
+      $switchText.textContent = i18n.settingsMirrorsSwitch();
+    }
+    {
+      const $section = document.createElement("section");
+      $settings.appendChild($section);
+      $section.classList.add("languages");
+      const $title = document.createElement("h5");
+      $section.appendChild($title);
+      $title.textContent = i18n.settingsLanguagesTitle();
+      const $description = document.createElement("p");
+      $section.appendChild($description);
+      $description.textContent = i18n.settingsLanguagesDescription();
+      const $select = document.createElement("select");
+      $section.appendChild($select);
+      $select.onchange = async () => {
+        // todo: an api to change the language and reboot
+      };
+      for (const [locale, i18n] of Object.entries(i18nRes)) {
+        const $option = document.createElement("option");
+        $select.appendChild($option);
+        $option.value = locale;
+        $option.textContent = i18n.nativeName();
+      }
     }
   };
   r$settings();
@@ -1099,7 +1129,7 @@ const serverMain = async () => {
     windowHeight: 600,
     windowMaximized: false,
     locale: /** @type {keyof i18nRes} */ (
-      Intl.DateTimeFormat().resolvedOptions().locale
+      Intl.DateTimeFormat().resolvedOptions().locale // todo: set to nearest lang?
     ),
     mirrorsEnabled: false,
     serverPort: 9393,
