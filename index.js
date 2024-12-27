@@ -178,6 +178,9 @@ const i18nRes = (() => {
     toMarket: () => "Market",
     toSettings: () => "Settings",
     tasksEmpty: () => "No tasks",
+    tasksPause: () => "Pause",
+    tasksResume: () => "Resume",
+    tasksStop: () => "Stop",
     homeEmpty: () => "No items",
     homeShowRecent: () => "Recent",
     homeShowByName: () => "By Name",
@@ -207,6 +210,9 @@ const i18nRes = (() => {
     toMarket: () => "商店",
     toSettings: () => "设置",
     tasksEmpty: () => "没有任务",
+    tasksPause: () => "暂停",
+    tasksResume: () => "恢复",
+    tasksStop: () => "停止",
     homeEmpty: () => "没有项目",
     homeShowRecent: () => "最近",
     homeShowByName: () => "按名称",
@@ -344,6 +350,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   input[type="radio"] {
     border-radius: 50%;
   }
+  /* agreement: use clip-path for icons instead of svg, and try https://bennettfeely.com/clippy/ */
   input[type="checkbox"]::before,
   input[type="radio"]::before {
     position: absolute;
@@ -353,13 +360,13 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     clip-path: polygon(24% 49%, 18% 56%, 43% 78%, 82% 31%, 75% 26%, 42% 65%);
     content: "";
     background-image: linear-gradient(90deg, var(--fg) 50%, #0000 50%);
-    background-position: 100%;
+    background-position-x: 100%;
     background-size: 200%;
-    transition: background-position 0.2s;
+    transition: background-position-x 0.2s;
   }
   input[type="checkbox"]:checked::before,
   input[type="radio"]:checked::before {
-    background-position: 0%;
+    background-position-x: 0%;
   }
   label > input[type="checkbox"] + span,
   label > input[type="radio"] + span {
@@ -370,6 +377,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
+  body > .tasks figure,
   body > .home figure {
     position: relative;
     padding: 8px 12px;
@@ -381,6 +389,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     border-radius: 6px;
     transition: background-color 0.2s;
   }
+  body > .tasks figure ~ button:not(:hover, :active),
   body > .home figure ~ button:not(:hover, :active),
   body > .home menu button:not(:hover, :active),
   body > .home > button.off:not(:hover, :active),
@@ -460,6 +469,60 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     content: "${i18n.tasksEmpty()}";
     opacity: 0.8;
   }
+  body > .tasks section {
+    position: relative;
+  }
+  body > .tasks figure,
+  body > .home figure {
+    padding: 10px 14px 12px;
+    background: var(--bg3);
+    margin: 0;
+  }
+  body > .tasks figure:hover,
+  body > .home figure:hover {
+    background: var(--bg4);
+  }
+  body > .tasks figure:active,
+  body > .home figure:active {
+    background: var(--bg5);
+  }
+  body > .tasks figure ~ button,
+  body > .home figure ~ button {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 18px;
+    font-weight: bold;
+    overflow: hidden;
+  }
+  body > .tasks figure ~ button:nth-child(3),
+  body > .home figure ~ button:nth-child(3) {
+    right: calc(6px + 28px + 4px);
+  }
+  body > .tasks button::before {
+    display: block;
+    height: 300%;
+    clip-path: /* three icon here, pause + resume + stop */ path(
+      "M 9 9 L 9 19 L 12 19 L 12 9 L 9 9 M 16 9 L 16 19 L 19 19 L 19 9 L 19 9 M 9 36 L 9 48 L 20 42 Z M 19 65 L 19 75 L 9 75 L 9 65 Z"
+    );
+    content: "";
+    background: var(--fg);
+    opacity: 0.8;
+    transition: translate 0.2s;
+    translate: 0 0%;
+  }
+  body > .tasks button.pause::before {
+    translate: 0 0%;
+  }
+  body > .tasks button.resume::before {
+    translate: 0 -33.33%;
+  }
+  body > .tasks button.stop::before {
+    translate: 0 -66.66%;
+  }
   body > .home > button {
     padding: 6px 12px;
     margin-right: 4px;
@@ -493,39 +556,19 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     position: relative;
     list-style: none;
   }
-  body > .home section {
-    padding: 10px 14px 12px;
-    background: var(--bg3);
-  }
   /* todo: animation for removing extension */
-  body > .home section b {
+  body > .home figure b {
     font-size: 17px;
     font-weight: normal;
     line-height: 1;
   }
-  body > .home section sub {
+  body > .home figure sub {
     margin-left: 8px;
     vertical-align: baseline;
   }
-  body > .home section p {
+  body > .home figure p {
     margin: 8px 0 0;
     line-height: 1;
-  }
-  body > .home section + button {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    font-size: 18px;
-    font-weight: bold;
-  }
-  body > .home section:hover {
-    background: var(--bg4);
-  }
-  body > .home section:active {
-    background: var(--bg5);
   }
   body > .home menu {
     position: absolute;
@@ -636,21 +679,48 @@ const pageMain = async () => {
       $task = document.createElement("section");
       $tasks.insertBefore($task, $tasks.firstChild);
       $task.dataset.id = e.id;
-      const $title = document.createElement("h6");
-      $task.appendChild($title);
-      const $tips = document.createElement("span");
-      $task.appendChild($tips);
-      const $operations = document.createElement("div");
-      $task.appendChild($operations);
+      const $figure = document.createElement("figure");
+      $task.appendChild($figure);
+      const $title = document.createElement("b");
+      $figure.appendChild($title);
+      const $tips = document.createElement("sub");
+      $figure.appendChild($tips);
       if (e.kind === "run-action-progress") {
-        // TODO: more operations like pause, stop, pin
+        const $stop = document.createElement("button");
+        $task.appendChild($stop);
+        $stop.classList.add("stop");
+        $stop.title = i18n.tasksStop();
+        $stop.onclick = async () => {
+          assert(false, "todo");
+          // disable all buttons
+        };
+        const $pause = document.createElement("button");
+        $task.appendChild($pause);
+        $pause.classList.add("pause");
+        $pause.title = i18n.tasksPause();
+        $pause.onclick = async () => {
+          $pause.classList.toggle("pause");
+          $pause.classList.toggle("resume");
+          if ($pause.classList.contains("pause"))
+            $pause.title = i18n.tasksPause();
+          if ($pause.classList.contains("resume"))
+            $pause.title = i18n.tasksResume();
+          assert(false, "todo");
+          // todo: how can i know it is paused after page reload? add fields into controller?
+        };
       } else if (e.kind === "install-extension-progress") {
-        // TODO: more operations like pause, stop
+        const $stop = document.createElement("button");
+        $task.appendChild($stop);
+        $stop.classList.add("stop");
+        $stop.title = i18n.tasksStop();
+        $stop.onclick = async () => {
+          assert(false, "todo");
+        };
       } else {
-        assert(false, "unexpected kind: " + e.kind);
+        // do nothing
       }
     }
-    const [$title, $tips, $operations] = $task.children;
+    const [$title, $tips] = $task.children[0].children;
     if (e.kind === "run-action-progress") {
       // const [$pause, $stop, $pin] = $operations.children;
       $title.textContent = e.title;
