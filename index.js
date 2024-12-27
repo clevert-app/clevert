@@ -388,11 +388,13 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     background: #0000;
   }
   button:hover,
-  input[type="checkbox"]:hover {
+  input[type="checkbox"]:hover,
+  input[type="radio"]:hover {
     background: var(--bg5);
   }
   button:active,
-  input[type="checkbox"]:active {
+  input[type="checkbox"]:active,
+  input[type="radio"]:active {
     background: var(--bg6);
   }
   button:active,
