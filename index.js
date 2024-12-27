@@ -188,11 +188,15 @@ const i18nRes = (() => {
     homeMenuInfo: () => "Info",
     homeMoreOperations: () => "More operations",
     settingsMirrorsTitle: () => "Mirrors",
-    settingsMirrorsDescription: () =>
-      "Mirrors may speed up downloads if your network environment is terrible.",
+    settingsMirrorsDescription: () => "May speed up downloads in some region.",
     settingsMirrorsSwitch: () => "Control whether mirrors are enabled or not.", // agreement: the wording and syntax here mimics vscode's editor.guides.bracketPairs
     settingsLanguagesTitle: () => "Languages",
     settingsLanguagesDescription: () => "Language in Clevert and extensions.",
+    settingsAboutTitle: () => "About",
+    settingsAboutDescription: () => "Universal file converter platform.",
+    settingsAboutSource: () => "Source Code (GitHub)",
+    settingsAboutSponsorsAlipay: () => "Sponsor via Alipay",
+    settingsAboutSponsorsGitHub: () => "Sponsor via GitHub Sponsors",
   };
   /** @type {Readonly<typeof enus>} */
   const zhcn = {
@@ -213,11 +217,15 @@ const i18nRes = (() => {
     homeMenuInfo: () => "详细信息",
     homeMoreOperations: () => "更多操作",
     settingsMirrorsTitle: () => "镜像",
-    settingsMirrorsDescription: () =>
-      "镜像可能加速下载，如果你的网络环境很糟糕。",
+    settingsMirrorsDescription: () => "可能在某些地区提升下载速度。",
     settingsMirrorsSwitch: () => "控制是否启用镜像。",
     settingsLanguagesTitle: () => "语言",
     settingsLanguagesDescription: () => "在 Clevert 和扩展中使用的语言。",
+    settingsAboutTitle: () => "关于",
+    settingsAboutDescription: () => "通用的文件转换平台。",
+    settingsAboutSource: () => "源代码 (GitHub)",
+    settingsAboutSponsorsAlipay: () => "使用 支付宝 赞助",
+    settingsAboutSponsorsGitHub: () => "使用 GitHub Sponsors 赞助",
   };
   // todo: use llm to do translate
   return {
@@ -302,6 +310,9 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     outline: none; /* disable all outlines as many sites do, users who need key nav will use extensions themselves */
   }
   /* agreement: most extensions should use these modified global styles, but can still use shadow dom to create new scope */
+  a {
+    color: #a8c7fa;
+  }
   input[type="text"],
   input[type="number"],
   input:not([type]) {
@@ -428,10 +439,12 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     bottom: 0;
     left: 0;
     padding: 6px 12px 12px;
+    transition: visibility 0.2s, opacity 0.2s;
   }
   /* agreement: default to be visable, and hide with ".off" class */
   body > div.off {
     visibility: hidden;
+    opacity: 0;
   }
   /* agreement: always use strict prefix to scope the style, like "body > .foo", do not leak it to extension action */
   body > .tasks {
@@ -538,18 +551,23 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .settings .languages fieldset {
     display: grid;
-    gap: 6px;
+    gap: 4px;
     padding: 0;
     margin: 0;
     border: none;
     /* height: 20px; */
-    max-width: 30em;
-    overflow: scroll;
-    border-radius: 6px;
+    /* max-width: 30em; */
+    /* overflow: scroll; */
+    /* border-radius: 6px; */
     /* background: var(--bg3); */
   }
-  body > .settings .languages fieldset::after {
-    content: "";
+  body > .settings .about button {
+    padding: 6px 12px; /* small button, like "body > .home > button" */
+    margin: 0 4px 4px 0;
+  }
+  body > .settings .about button > a {
+    position: absolute;
+    inset: 0;
   }
   body > .top {
     position: fixed;
@@ -1050,6 +1068,32 @@ const pageMain = async () => {
         $radioLabel.appendChild($radioText);
         $radioText.textContent = i18n.nativeName();
       }
+    }
+    {
+      const $form = document.createElement("form");
+      $settings.appendChild($form);
+      $form.classList.add("about");
+      const $title = document.createElement("h5");
+      $form.appendChild($title);
+      $title.textContent = i18n.settingsAboutTitle();
+      const $description = document.createElement("p");
+      $form.appendChild($description);
+      $description.textContent = i18n.settingsAboutDescription();
+      const $source = document.createElement("button");
+      $form.appendChild($source);
+      $source.textContent = i18n.settingsAboutSource();
+      $source.appendChild(document.createElement("a")).href =
+        "https://github.com/clevert-app/clevert";
+      const $sponsorsAlipay = document.createElement("button");
+      $form.appendChild($sponsorsAlipay);
+      $sponsorsAlipay.textContent = i18n.settingsAboutSponsorsAlipay();
+      $sponsorsAlipay.appendChild(document.createElement("a")).href =
+        "https://qr.alipay.com/tsx105782qrtnv7ftvljo00";
+      const $sponsorsGitHub = document.createElement("button");
+      $form.appendChild($sponsorsGitHub);
+      $sponsorsGitHub.textContent = i18n.settingsAboutSponsorsGitHub();
+      $sponsorsGitHub.appendChild(document.createElement("a")).href =
+        "https://github.com/sponsors/clevert-app";
     }
   };
   r$settings();
