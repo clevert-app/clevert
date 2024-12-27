@@ -370,7 +370,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
-  body > .home section {
+  body > .home figure {
     position: relative;
     padding: 8px 12px;
     font-size: 14px;
@@ -381,7 +381,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     border-radius: 6px;
     transition: background-color 0.2s;
   }
-  body > .home section + button:not(:hover, :active),
+  body > .home figure ~ button:not(:hover, :active),
   body > .home menu button:not(:hover, :active),
   body > .home > button.off:not(:hover, :active),
   body > .top > button.off:not(:hover, :active) {
@@ -398,7 +398,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     background: var(--bg6);
   }
   button:active,
-  body > .home li section:active {
+  body > .home li figure:active {
     transition: background-color 0s;
   }
   @keyframes menu-in {
@@ -734,23 +734,23 @@ const pageMain = async () => {
       for (const extension of extensionsList) {
         const $choice = document.createElement("li");
         $choices.appendChild($choice);
-        const $content = document.createElement("section");
-        $choice.appendChild($content);
-        $content.onclick = () => {
+        const $figure = document.createElement("figure");
+        $choice.appendChild($figure);
+        $figure.onclick = () => {
           $showProfiles.dataset.extensionId = extension.id;
           $showProfiles.dataset.extensionVersion = extension.version;
           $showProfiles.click();
         };
         const $name = document.createElement("b");
-        $content.appendChild($name);
+        $figure.appendChild($name);
         $name.textContent = extension.name;
         $name.title = extension.id;
         const $version = document.createElement("sub");
-        $content.appendChild($version);
+        $figure.appendChild($version);
         $version.textContent = extension.version;
         $version.title = "Extension version";
         const $description = document.createElement("p");
-        $content.appendChild($description);
+        $figure.appendChild($description);
         $description.textContent = extension.description;
         const $more = document.createElement("button");
         $choice.appendChild($more);
@@ -811,23 +811,23 @@ const pageMain = async () => {
       for (const profile of profiles) {
         const $choice = document.createElement("li");
         $choices.appendChild($choice);
-        const $content = document.createElement("section");
-        $choice.appendChild($content);
-        $content.onclick = async () => {
+        const $figure = document.createElement("figure");
+        $choice.appendChild($figure);
+        $figure.onclick = async () => {
           r$action(profile.extensionId, profile.extensionVersion, profile.id);
           $toAction.textContent = "〉" + profile.name;
           $toAction.click();
         };
         const $name = document.createElement("b");
-        $content.appendChild($name);
+        $figure.appendChild($name);
         $name.textContent = profile.name;
         $name.title = profile.id;
         const $version = document.createElement("sub");
-        $content.appendChild($version);
+        $figure.appendChild($version);
         $version.textContent = profile.extensionVersion;
         $version.title = "Extension version";
         const $description = document.createElement("p");
-        $content.appendChild($description);
+        $figure.appendChild($description);
         $description.textContent = profile.description;
         const $more = document.createElement("button");
         $choice.appendChild($more);
