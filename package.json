@@ -6,6 +6,6 @@
     "index.js"
   ],
   "scripts": {
-    "start": "exit && node . && electron ."
+    "start": "exit && node --experimental-default-type=module index.js && electron index.js"
   }
 }

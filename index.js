@@ -289,6 +289,15 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     }
   }
   /* todo: custom themes like "html.theme-abc { body { } }" */
+  @media print and (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0s !important;
+      animation-duration: 0s !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
   :focus {
     outline: none; /* disable all outlines as many sites do, users who need key nav will use extensions themselves */
   }
@@ -309,32 +318,44 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   input:not([type]):focus {
     background: var(--bg5);
   }
-  input[type="checkbox"] {
+  input[type="checkbox"],
+  input[type="radio"] {
+    position: relative;
     width: 20px;
     height: 20px;
-    margin: 0 8px 0 0;
+    margin: 2px 8px 2px 2px;
     vertical-align: bottom;
     appearance: none;
     background: var(--bg4);
     border-radius: 4px;
     transition: background-color 0.2s;
   }
-  input[type="checkbox"]::before {
+  input[type="radio"] {
+    border-radius: 50%;
+  }
+  input[type="checkbox"]::before,
+  input[type="radio"]::before {
     position: absolute;
     display: block;
     width: 20px;
     height: 20px;
+    clip-path: polygon(24% 49%, 18% 56%, 43% 78%, 82% 31%, 75% 26%, 42% 65%);
     content: "";
-    background: var(--fg);
-    opacity: 0;
-    transition: 0.2s opacity;
-    clip-path: polygon(22% 49%, 15% 56%, 41% 82%, 86% 26%, 79% 20%, 41% 67%);
+    background-image: linear-gradient(90deg, var(--fg) 50%, #0000 50%);
+    background-position: 100%;
+    background-size: 200%;
+    transition: background-position 0.2s;
   }
-  input[type="checkbox"]:checked::before {
-    opacity: 1;
+  input[type="checkbox"]:checked::before,
+  input[type="radio"]:checked::before {
+    background-position: 0%;
   }
-  label > input[type="checkbox"] + span {
-    line-height: 20px;
+  label > input[type="checkbox"] + span,
+  label > input[type="radio"] + span {
+    line-height: 24px;
+  }
+  label {
+    display: inline-block;
   }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
@@ -367,12 +388,26 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .home li section:active {
     transition: background-color 0s;
   }
+  @keyframes menu-in {
+    0% {
+      opacity: 0;
+    }
+  }
+  @keyframes menu-out {
+    100% {
+      opacity: 0;
+    }
+  }
   menu {
     min-width: 96px;
     padding: 4px;
     margin: 0;
     background: var(--bg2);
     border-radius: 6px;
+    animation: 0.2s menu-in;
+  }
+  menu.off {
+    animation: 0.2s forwards menu-out;
   }
   menu > li > button {
     width: 100%;
@@ -402,9 +437,9 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .tasks {
     overflow: auto;
   }
-  body > .tasks:empty::after {
+  body > .tasks:empty::before {
     display: block;
-    margin: 8px;
+    margin: 12px;
     font-size: 16px;
     text-align: center;
     content: "${i18n.tasksEmpty()}";
@@ -419,18 +454,25 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     width: 8px;
   }
   body > .home ul {
-    display: grid;
+    display: grid; /* todo: grid-template-columns: 1fr 1fr */
     gap: 6px;
+    max-height: calc(100% - 38px);
     padding: 0;
     margin: 12px 0 0;
+    overflow: auto;
+    border-radius: 6px;
   }
-  body > .home ul:empty::after {
+  body > .home ul:empty::before {
     display: block;
     margin: 8px;
     font-size: 16px;
     text-align: center;
     content: "${i18n.homeEmpty()}";
     opacity: 0.8;
+  }
+  body > .home ul::after {
+    height: 10em;
+    content: "";
   }
   body > .home ul li {
     position: relative;
@@ -474,6 +516,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     position: absolute;
     top: 6px;
     right: 6px;
+    z-index: 1;
   }
   body > .market > input {
     margin-right: 4px;
@@ -482,7 +525,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     display: flex;
     gap: 6px;
   }
-  body > .settings section {
+  body > .settings form {
     padding: 4px 6px 12px;
   }
   body > .settings h5 {
@@ -492,6 +535,21 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .settings p {
     margin: 8px 0;
+  }
+  body > .settings .languages fieldset {
+    display: grid;
+    gap: 6px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    /* height: 20px; */
+    max-width: 30em;
+    overflow: scroll;
+    border-radius: 6px;
+    /* background: var(--bg3); */
+  }
+  body > .settings .languages fieldset::after {
+    content: "";
   }
   body > .top {
     position: fixed;
@@ -683,8 +741,9 @@ const pageMain = async () => {
           const $menu = document.createElement("menu");
           $choice.appendChild($menu);
           const removeMenu = () => {
-            $menu.remove();
             removeEventListener("click", removeMenu); // agreement: prefer to use `.onevent`, avoid `.addEventListener` when possible, here's why, remove listener needs more code
+            $menu.onanimationend = $menu.onanimationcancel = $menu.remove; // agreement: depends on css animation, so, for future sans-animation feature, use `animation-duration:0s;animation-iteration-count:1`
+            $menu.classList.add("off");
           };
           addEventListener("click", removeMenu);
           const $share = document.createElement("button");
@@ -759,8 +818,9 @@ const pageMain = async () => {
           const $menu = document.createElement("menu");
           $choice.appendChild($menu);
           const removeMenu = () => {
-            $menu.remove();
             removeEventListener("click", removeMenu);
+            $menu.onanimationend = $menu.onanimationcancel = $menu.remove;
+            $menu.classList.add("off");
           };
           addEventListener("click", removeMenu);
           const $share = document.createElement("button");
@@ -935,17 +995,17 @@ const pageMain = async () => {
   const r$settings = async () => {
     $settings.replaceChildren();
     {
-      const $section = document.createElement("section");
-      $settings.appendChild($section);
-      $section.classList.add("mirrors");
+      const $form = document.createElement("form");
+      $settings.appendChild($form);
+      $form.classList.add("mirrors");
       const $title = document.createElement("h5");
-      $section.appendChild($title);
+      $form.appendChild($title);
       $title.textContent = i18n.settingsMirrorsTitle();
       const $description = document.createElement("p");
-      $section.appendChild($description);
+      $form.appendChild($description);
       $description.textContent = i18n.settingsMirrorsDescription();
       const $switchLabel = document.createElement("label");
-      $section.appendChild($switchLabel);
+      $form.appendChild($switchLabel);
       const $switch = document.createElement("input");
       $switchLabel.appendChild($switch);
       $switch.type = "checkbox";
@@ -954,30 +1014,41 @@ const pageMain = async () => {
         // config.mirrorsEnabled = $switch.checked;
         // saveConfig();
       };
-      const $switchText = document.createElement("span");
+      const $switchText = document.createElement("span"); // agreement: use a <span> inside <label>, do not use standalone
       $switchLabel.appendChild($switchText);
       $switchText.textContent = i18n.settingsMirrorsSwitch();
     }
     {
-      const $section = document.createElement("section");
-      $settings.appendChild($section);
-      $section.classList.add("languages");
+      const $form = document.createElement("form");
+      $settings.appendChild($form);
+      $form.classList.add("languages");
       const $title = document.createElement("h5");
-      $section.appendChild($title);
+      $form.appendChild($title);
       $title.textContent = i18n.settingsLanguagesTitle();
       const $description = document.createElement("p");
-      $section.appendChild($description);
+      $form.appendChild($description);
       $description.textContent = i18n.settingsLanguagesDescription();
-      const $select = document.createElement("select");
-      $section.appendChild($select);
-      $select.onchange = async () => {
-        // todo: an api to change the language and reboot
-      };
+      const $locales = document.createElement("fieldset");
+      $form.appendChild($locales);
       for (const [locale, i18n] of Object.entries(i18nRes)) {
-        const $option = document.createElement("option");
-        $select.appendChild($option);
-        $option.value = locale;
-        $option.textContent = i18n.nativeName();
+        const $radioLabel = document.createElement("label");
+        $locales.appendChild($radioLabel);
+        const $radio = document.createElement("input");
+        $radioLabel.appendChild($radio);
+        $radio.type = "radio";
+        $radio.name = "locale";
+        $radio.value = locale;
+        $radio.onchange = async () => {
+          assert($radio.checked); // seems that uncheck does not emit events
+          // todo: confirm dialog?
+          // todo: an api to change the language and reboot
+        };
+        if (locale === cu.locale) {
+          $radio.checked = true;
+        }
+        const $radioText = document.createElement("span");
+        $radioLabel.appendChild($radioText);
+        $radioText.textContent = i18n.nativeName();
       }
     }
   };
