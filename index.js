@@ -135,6 +135,25 @@ import child_process from "node:child_process";
   id: string;
   version: string;
 }} RemoveExtensionRequest
+@typedef {
+  Electron.OpenDialogOptions
+} ShowOpenDialogRequest
+@typedef {
+  Electron.OpenDialogReturnValue
+} ShowOpenDialogResponse
+@typedef {
+  Electron.SaveDialogOptions
+} ShowSaveDialogRequest
+@typedef {
+  Electron.SaveDialogReturnValue
+} ShowSaveDialogResponse
+@typedef {{
+  path?: string;
+}} ListDirRequest
+@typedef {{
+  name: string;
+  kind: "file" | "dir";
+}[]} ListDirResponse
 @typedef {{
   kind: "run-action-progress";
   id: string;
@@ -1544,7 +1563,7 @@ const serverMain = async () => {
   };
 
   /**
-   * Solve path, like path.resolve, with support of home dir prefix `~/`.
+   * Solve path, like `path.resolve`, with support of home dir prefix `~/`. More usage: `solvePath()` returns home dir, `solvePath(".")` returns current dir.
    * ```js
    * // unix
    * solvePath("~/a/", "b/../c/d", "//e") === process.env.HOME + "/a/c/d/e";
@@ -1554,6 +1573,9 @@ const serverMain = async () => {
    * @param {...string} parts
    */
   const solvePath = (...parts) => {
+    if (parts.length === 0) {
+      return process.env.USERPROFILE ?? process.env.HOME ?? process.cwd();
+    }
     if (parts[0].startsWith("~")) {
       parts[0] = process.env.HOME + parts[0].slice(1);
       // todo: windows process.env.USERPROFILE
@@ -1980,19 +2002,33 @@ const serverMain = async () => {
     }
 
     if (r.req.url === "/show-open-dialog") {
-      /** @type {Electron.OpenDialogOptions} */
+      /** @type {ShowOpenDialogRequest} */
       const request = await readJson();
       const electron = await electronImport;
+      /** @type {ShowOpenDialogResponse} */
       const response = await electron.dialog.showOpenDialog(request);
       r.end(JSON.stringify(response));
       return;
     }
 
     if (r.req.url === "/show-save-dialog") {
-      /** @type {Electron.SaveDialogOptions} */
+      /** @type {ShowSaveDialogRequest} */
       const request = await readJson();
       const electron = await electronImport;
+      /** @type {ShowSaveDialogResponse} */
       const response = await electron.dialog.showSaveDialog(request);
+      r.end(JSON.stringify(response));
+      return;
+    }
+
+    if (r.req.url === "/list-dir") {
+      /** @type {ListDirRequest} */
+      const request = await readJson();
+      request.path = request.path ? solvePath(request.path) : solvePath();
+      /** @type {ListDirResponse} */
+      const response = (
+        await fs.promises.readdir(request.path, { withFileTypes: true })
+      ).map((e) => ({ name: e.name, kind: e.isDirectory() ? "dir" : "file" }));
       r.end(JSON.stringify(response));
       return;
     }
