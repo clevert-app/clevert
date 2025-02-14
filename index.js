@@ -333,7 +333,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   input[type="text"],
   input[type="number"],
   input:not([type]) {
-    padding: 5px 8px 5px 14px;
+    padding: 5px 8px 5px 10px;
     font-size: 14px;
     line-height: 20px;
     background: var(--bg3);
@@ -522,7 +522,6 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     padding: 0;
     overflow: hidden;
     font-size: 18px;
-    font-weight: bold;
   }
   body > .tasks figure ~ button:nth-child(3),
   body > .home figure ~ button:nth-child(3) {
@@ -558,7 +557,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     display: block;
     width: 100%;
     height: 0;
-    margin: 2px 0;
+    margin: 4px 0;
     appearance: none;
   }
   body > .tasks progress::before {
@@ -608,6 +607,10 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .home figure p {
     margin: 0;
   }
+  body > .home figure ~ button::before {
+    font-weight: bold;
+    content: "···";
+  }
   body > .home menu {
     position: absolute;
     top: 6px;
@@ -617,9 +620,38 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .market > input {
     margin-right: 4px;
   }
-  body > .action .entries {
+  body > .action > .entries {
     display: flex;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+  body > .action > .entries label > button::before {
+    font-weight: bold;
+    content: "···";
+  }
+  body > .action > .root {
+    margin-top: 12px;
+    margin-bottom: 12px;
+  }
+  body > .action label {
+    position: relative;
+    width: 200px;
+  }
+  body > .action label > input:not(:first-child) {
+    width: calc(100% - 8px - 10px);
+  }
+  body > .action label > input {
+    width: calc(100% - 8px - 10px);
+    margin-top: 4px;
+  }
+  body > .action label > input:not(:last-child) {
+    width: calc(100% - 8px - 10px - 30px - 4px);
+    margin-right: 4px;
+  }
+  body > .action label > button:last-child {
+    width: 30px;
+    padding-right: 0;
+    padding-left: 0;
   }
   body > .settings form {
     padding: 4px 6px 12px;
@@ -898,7 +930,6 @@ const pageMain = async () => {
         $description.textContent = extension.description;
         const $more = document.createElement("button");
         $choice.appendChild($more);
-        $more.textContent = "···";
         $more.title = i18n.homeMoreOperations();
         $more.onclick = async (e) => {
           e.stopPropagation();
@@ -975,7 +1006,6 @@ const pageMain = async () => {
         $description.textContent = profile.description;
         const $more = document.createElement("button");
         $choice.appendChild($more);
-        $more.textContent = "···";
         $more.title = i18n.homeMoreOperations();
         $more.onclick = async (e) => {
           e.stopPropagation();
@@ -1083,18 +1113,34 @@ const pageMain = async () => {
       const $entries = document.createElement("div");
       $action.appendChild($entries);
       $entries.classList.add("entries");
+
+      // todo: label{input,button}
+
+      const $inputDirLabel = document.createElement("label");
+      $entries.appendChild($inputDirLabel);
+      $inputDirLabel.textContent = "Input Dir:";
       const $inputDir = document.createElement("input");
-      $entries.appendChild($inputDir);
-      $inputDir.placeholder = "Input Dir";
+      $inputDirLabel.appendChild($inputDir);
       $inputDir.value = profile?.entries?.inputDir ?? "";
+      const $inputDirButton = document.createElement("button");
+      $inputDirLabel.appendChild($inputDirButton);
+
+      const $outputDirLabel = document.createElement("label");
+      $entries.appendChild($outputDirLabel);
+      $outputDirLabel.textContent = "Output Dir:";
       const $outputDir = document.createElement("input");
-      $entries.appendChild($outputDir);
-      $outputDir.placeholder = "Output Dir";
+      $outputDirLabel.appendChild($outputDir);
       $outputDir.value = profile?.entries?.outputDir ?? "";
+      const $outputDirButton = document.createElement("button");
+      $outputDirLabel.appendChild($outputDirButton);
+
+      const $outputExtensionLabel = document.createElement("label");
+      $entries.appendChild($outputExtensionLabel);
+      $outputExtensionLabel.textContent = "Output Extension:";
       const $outputExtension = document.createElement("input");
-      $entries.appendChild($outputExtension);
-      $outputExtension.placeholder = "Output Extension";
+      $outputExtensionLabel.appendChild($outputExtension);
       $outputExtension.value = profile?.entries?.outputExtension ?? "";
+
       getEntries = () => {
         /** @type {EntriesCommonFiles} */
         const entries = {
