@@ -93,8 +93,8 @@ import child_process from "node:child_process";
 }} EntriesCustom Just `entries` itself, may useful for `yt-dlp` and other scenario that a file comes from nowhere.
 @typedef {{
   begin: number;
-  expectedEnd: number;
-}} RunActionTiming All with `seconds` unit.
+  end?: number;
+}} RunActionTime All with `seconds` unit. Float number.
 @typedef {{
   finished: number;
   running: number;
@@ -102,7 +102,7 @@ import child_process from "node:child_process";
 }} RunActionProgress The `running` property may be float.
 @typedef {{
   title: string;
-  timing: () => RunActionTiming;
+  time: RunActionTime;
   progress: () => RunActionProgress;
   stop: () => void;
   promise: Promise<any>;
@@ -158,27 +158,17 @@ import child_process from "node:child_process";
   kind: "run-action-progress";
   id: string;
   title: string;
-  timing: RunActionTiming;
+  time: RunActionTime;
   progress: RunActionProgress;
-} | {
-  kind: "run-action-success";
-  id: string;
-} | {
-  kind: "run-action-error";
-  id: string;
-  error: any;
+  pending: boolean; // the "pending: true" contains "paused"
+  error?: any; // the "error" contains "stopped"
 } | {
   kind: "install-extension-progress";
   id: string;
   title: string;
   progress: InstallExtensionProgress;
-} | {
-  kind: "install-extension-success";
-  id: string;
-} | {
-  kind: "install-extension-error";
-  id: string;
-  error: any;
+  pending: boolean;
+  error?: any;
 }} GetStatusResponseEvent
 @typedef {{
   assert: typeof assert;
@@ -306,6 +296,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
       --bg4: #82a3ee44; /* dae2f9 = faf9fd*(1-(0x44/0xff)) + 7492e8*(0x44/0xff) , from https://material.angular.io/components/button-toggle/examples */
       --bg5: #82a3ee59;
       --bg6: #8597c666; /* cbd2e7 */
+      --bg7: #8597c67a;
       --fg: #000;
     }
   }
@@ -318,6 +309,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
       --bg4: #444444;
       --bg5: #555555;
       --bg6: #666666;
+      --bg7: #aaaaaa;
       --fg: #fff;
     }
   }
@@ -490,12 +482,13 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .tasks section {
     position: relative;
+    margin-bottom: 6px;
   }
   body > .tasks figure,
   body > .home figure {
     padding: 10px 14px 12px;
-    background: var(--bg3);
     margin: 0;
+    background: var(--bg3);
   }
   body > .tasks figure:hover,
   body > .home figure:hover {
@@ -505,6 +498,20 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .home figure:active {
     background: var(--bg5);
   }
+  /* todo: animation for removing */
+  body > .tasks figure h5,
+  body > .home figure h5 {
+    display: inline-block;
+    margin: 0 8px 8px 0;
+    font-size: 17px;
+    font-weight: normal;
+  }
+  body > .tasks figure sub,
+  body > .home figure sub {
+    font-size: 13px;
+    vertical-align: inherit;
+    opacity: 0.8;
+  }
   body > .tasks figure ~ button,
   body > .home figure ~ button {
     position: absolute;
@@ -513,9 +520,9 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     width: 28px;
     height: 28px;
     padding: 0;
+    overflow: hidden;
     font-size: 18px;
     font-weight: bold;
-    overflow: hidden;
   }
   body > .tasks figure ~ button:nth-child(3),
   body > .home figure ~ button:nth-child(3) {
@@ -541,6 +548,29 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .tasks button.stop::before {
     translate: 0 -66.66%;
+  }
+  body > .tasks button.off {
+    visibility: hidden;
+    opacity: 0;
+  }
+  body > .tasks progress {
+    --progress: 0%;
+    display: block;
+    width: 100%;
+    height: 0;
+    margin: 2px 0;
+    appearance: none;
+  }
+  body > .tasks progress::before {
+    display: block;
+    width: 100%;
+    height: 3px;
+    content: "";
+    background-image: linear-gradient(90deg, var(--bg7) 50%, var(--bg5) 50%);
+    background-position-x: calc(100% - var(--progress));
+    background-size: 200%;
+    border-radius: 4px;
+    transition: background-position-x 0.2s;
   }
   body > .home > button {
     padding: 6px 12px;
@@ -575,19 +605,8 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     position: relative;
     list-style: none;
   }
-  /* todo: animation for removing extension */
-  body > .home figure b {
-    font-size: 17px;
-    font-weight: normal;
-    line-height: 1;
-  }
-  body > .home figure sub {
-    margin-left: 8px;
-    vertical-align: baseline;
-  }
   body > .home figure p {
-    margin: 8px 0 0;
-    line-height: 1;
+    margin: 0;
   }
   body > .home menu {
     position: absolute;
@@ -700,10 +719,14 @@ const pageMain = async () => {
       $task.dataset.id = e.id;
       const $figure = document.createElement("figure");
       $task.appendChild($figure);
-      const $title = document.createElement("b");
+      const $title = document.createElement("h5");
       $figure.appendChild($title);
       const $tips = document.createElement("sub");
       $figure.appendChild($tips);
+      const $progress = document.createElement("progress");
+      $figure.appendChild($progress);
+      $progress.value = 0;
+      $progress.style.setProperty("--progress", "30%");
       if (e.kind === "run-action-progress") {
         const $stop = document.createElement("button");
         $task.appendChild($stop);
@@ -718,6 +741,10 @@ const pageMain = async () => {
         $pause.classList.add("pause");
         $pause.title = i18n.tasksPause();
         $pause.onclick = async () => {
+          return alert("todo");
+          if ($pause.classList.contains("pending")) return;
+          $pause.classList.add("pending");
+          setTimeout(() => $pause.classList.remove("pending"), 1000);
           $pause.classList.toggle("pause");
           $pause.classList.toggle("resume");
           if ($pause.classList.contains("pause"))
@@ -727,6 +754,9 @@ const pageMain = async () => {
           assert(false, "todo");
           // todo: how can i know it is paused after page reload? add fields into controller?
         };
+        // todo: the "show in folder" button?
+        // todo: 一开始是进度条，后来是完成时间与耗时
+        // todo: 对于文件转换类任务，提供删除条目和打开文件夹的按钮
       } else if (e.kind === "install-extension-progress") {
         const $stop = document.createElement("button");
         $task.appendChild($stop);
@@ -736,29 +766,54 @@ const pageMain = async () => {
           assert(false, "todo");
         };
       } else {
-        // do nothing
+        assert(false, "unreachable");
       }
     }
-    const [$title, $tips] = $task.children[0].children;
+    const [$figure, $stop, $pause] = /** @type {Iterable<HTMLElement>} */ (
+      $task.children
+    );
+    const [$title, $tips, $progress] = /** @type {Iterable<HTMLElement>} */ (
+      $figure.children
+    );
     if (e.kind === "run-action-progress") {
       // const [$pause, $stop, $pin] = $operations.children;
       $title.textContent = e.title;
-      $tips.textContent =
-        `${e.timing.expectedEnd - Math.trunc(Date.now() / 1000)}s - ` +
-        `${e.progress.finished}/${e.progress.amount}`;
-    } else if (e.kind === "run-action-success") {
-      $tips.textContent = "Success";
-    } else if (e.kind === "run-action-error") {
-      $tips.textContent = "Error: " + JSON.stringify(e.error);
+      $progress.style.setProperty(
+        "--progress",
+        `${(e.progress.finished / e.progress.amount) * 100}%`
+      );
+      if (e.pending) {
+        const speed = e.progress.finished / (Date.now() / 1000 - e.time.begin);
+        const remainTime = (e.progress.amount - e.progress.finished) / speed;
+        $tips.textContent =
+          `${Math.round(Number.isFinite(remainTime) ? remainTime : 0)}s - ` +
+          `${e.progress.finished}/${e.progress.amount}`;
+      } else if (e.error) {
+        $tips.textContent = "Error: " + JSON.stringify(e.error);
+        $stop?.classList?.add("off");
+        $pause?.classList?.add("off");
+      } else {
+        assert(e.time.end);
+        const took = e.time.end - e.time.begin;
+        $tips.textContent = `Finished - took ${took.toFixed(2)}s`;
+        $stop?.classList?.add("off");
+        $pause?.classList?.add("off");
+      }
     } else if (e.kind === "install-extension-progress") {
       // const [$stop, $pin] = $operations.children;
       $title.textContent = e.title;
       $tips.textContent = `${e.progress.download.finished}/${e.progress.download.amount} Bytes`;
-    } else if (e.kind === "install-extension-success") {
-      $tips.textContent = "Success";
-      r$home();
-    } else if (e.kind === "install-extension-error") {
-      $tips.textContent = "Error: " + JSON.stringify(e.error);
+      if (e.pending) {
+      } else if (e.error) {
+        $tips.textContent = "Error: " + JSON.stringify(e.error);
+        $stop?.classList?.add("off");
+        $pause?.classList?.add("off");
+      } else {
+        $tips.textContent = "Finished";
+        r$home();
+        $stop?.classList?.add("off");
+        $pause?.classList?.add("off");
+      }
     } else {
       var /** @type {never} */ _ = e; // exhaustiveness
     }
@@ -830,7 +885,7 @@ const pageMain = async () => {
           $showProfiles.dataset.extensionVersion = extension.version;
           $showProfiles.click();
         };
-        const $name = document.createElement("b");
+        const $name = document.createElement("h5");
         $figure.appendChild($name);
         $name.textContent = extension.name;
         $name.title = extension.id;
@@ -907,7 +962,7 @@ const pageMain = async () => {
           $toAction.textContent = "〉" + profile.name;
           $toAction.click();
         };
-        const $name = document.createElement("b");
+        const $name = document.createElement("h5");
         $figure.appendChild($name);
         $name.textContent = profile.name;
         $name.title = profile.id;
@@ -1031,12 +1086,15 @@ const pageMain = async () => {
       const $inputDir = document.createElement("input");
       $entries.appendChild($inputDir);
       $inputDir.placeholder = "Input Dir";
+      $inputDir.value = profile?.entries?.inputDir ?? "";
       const $outputDir = document.createElement("input");
       $entries.appendChild($outputDir);
       $outputDir.placeholder = "Output Dir";
+      $outputDir.value = profile?.entries?.outputDir ?? "";
       const $outputExtension = document.createElement("input");
       $entries.appendChild($outputExtension);
       $outputExtension.placeholder = "Output Extension";
+      $outputExtension.value = profile?.entries?.outputExtension ?? "";
       getEntries = () => {
         /** @type {EntriesCommonFiles} */
         const entries = {
@@ -1882,14 +1940,13 @@ const serverMain = async () => {
       const runningControllers = /** @type {Set<ActionExecuteController>} */ (
         new Set()
       );
-      const promise = Promise.all(
+      let promise = Promise.all(
         [...Array(request.parallel)].map((_, i) =>
           (async () => {
             for (let entry; (entry = entries.shift()); ) {
               // console.log({ entry, req });
               const controller = action.execute(request.profile, entry);
               runningControllers.add(controller);
-              await sleep(100);
               await controller.promise;
               runningControllers.delete(controller);
               finished += 1;
@@ -1897,16 +1954,14 @@ const serverMain = async () => {
           })()
         )
       );
+      promise = promise.finally(() => {
+        controller.time.end = Date.now() / 1000;
+      });
       promise.catch(() => {}); // avoid UnhandledPromiseRejection
-      const beginTime = Math.trunc(Date.now() / 1000);
-      runActionControllers.set(nextId(), {
+      /** @type {RunActionController} */
+      const controller = {
         title: request.title,
-        timing: () => {
-          return {
-            begin: beginTime,
-            expectedEnd: beginTime + 1000,
-          };
-        },
+        time: { begin: Date.now() / 1000 },
         progress: () => {
           let running = 0;
           for (const controller of runningControllers) {
@@ -1917,11 +1972,12 @@ const serverMain = async () => {
         stop: () => {
           for (const controller of runningControllers) {
             controller.stop();
-            runningControllers.delete(controller);
           }
+          runningControllers.clear();
         },
         promise,
-      });
+      };
+      runActionControllers.set(nextId(), controller);
       r.end();
       return;
     }
@@ -1938,7 +1994,7 @@ const serverMain = async () => {
       /** @param {GetStatusResponseEvent} e */
       const send = (e) => r.write(`data: ${JSON.stringify(e)}\n\n`);
       const preventedIds = /** @type {Set<string>} */ (new Set());
-      const waitingIds = /** @type {Set<string>} */ (new Set());
+      const watchingIds = /** @type {Set<string>} */ (new Set());
       while (r.writable) {
         for (const [id, controller] of runActionControllers) {
           if (preventedIds.has(id)) {
@@ -1948,21 +2004,35 @@ const serverMain = async () => {
             kind: "run-action-progress",
             id,
             title: controller.title,
-            timing: controller.timing(),
+            time: controller.time,
             progress: controller.progress(),
+            pending: true,
           });
-          if (!waitingIds.has(id)) {
-            waitingIds.add(id);
-            let promise = controller.promise; // if not in `waitingIds`, create new promises to `wait` this `controller`
-            promise = promise.then(() => {
-              send({ kind: "run-action-success", id });
-            });
-            promise = promise.catch((error) => {
-              send({ kind: "run-action-error", id, error });
-            });
-            promise = promise.finally(() => {
-              preventedIds.add(id); // now the `controller` is exited, so we add it to `preventedIds` to skip following query, but this will not interrupt the `wait.then`, `wait.catch` above, so every `/get-status` request will receive at lease once `run-action-success` or `run-action-error`
-            });
+          if (!watchingIds.has(id)) {
+            watchingIds.add(id);
+            controller.promise
+              .then(() =>
+                send({
+                  kind: "run-action-progress",
+                  id,
+                  title: controller.title,
+                  time: controller.time,
+                  progress: controller.progress(),
+                  pending: false,
+                })
+              )
+              .catch((error) =>
+                send({
+                  kind: "run-action-progress",
+                  id,
+                  title: controller.title,
+                  time: controller.time,
+                  progress: controller.progress(),
+                  pending: false,
+                  error,
+                })
+              )
+              .finally(() => preventedIds.add(id)); // now the `controller` is exited, so we add it to `preventedIds` to skip following query, but keep in mind that every `/get-status` request will receive at lease two events from every controller, once for `pending` = true, once for false
           }
         }
         for (const [id, controller] of installExtensionControllers) {
@@ -1974,21 +2044,34 @@ const serverMain = async () => {
             id,
             title: controller.title,
             progress: controller.progress(),
+            pending: true,
           });
-          if (!waitingIds.has(id)) {
-            waitingIds.add(id);
-            let promise = controller.promise;
-            promise = promise.then(() => {
-              send({ kind: "install-extension-success", id });
-            });
-            promise = promise.catch((error) => {
-              send({ kind: "install-extension-error", id, error });
-            });
-            promise = promise.finally(() => {
-              preventedIds.add(id);
-            });
+          if (!watchingIds.has(id)) {
+            watchingIds.add(id);
+            controller.promise
+              .then(() =>
+                send({
+                  kind: "install-extension-progress",
+                  id,
+                  title: controller.title,
+                  progress: controller.progress(),
+                  pending: false,
+                })
+              )
+              .catch((error) =>
+                send({
+                  kind: "install-extension-progress",
+                  id,
+                  title: controller.title,
+                  progress: controller.progress(),
+                  pending: false,
+                  error,
+                })
+              )
+              .finally(() => preventedIds.add(id));
           }
         }
+
         await sleep(1000); // loop interval, not SSE sending interval
       }
       r.end();
@@ -2107,7 +2190,6 @@ const orders = dirProvider({
 void process.exit();
 type Boxify<T> = { [K in keyof T]: Box<T> };
 ln extensions/zcodecs/index.js temp/extensions/zcodecs_0.1.0/index.js
-/home/kkocdko/misc/code/clevert/temp/_test_res/i
 https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js#L40
 https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip
 */
