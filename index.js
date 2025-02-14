@@ -1369,7 +1369,7 @@ const serverMain = async () => {
       const { bytesWritten } = await file.write(data, 0); // do not use `.writeFile`
       await file.truncate(bytesWritten); // truncate after write, do not reverse
       locked = false;
-    }, 50); // 50ms is enough for most machines, and the JSON.stringify is sync which can delay the await sleep in electron's app.on("window-all-closed", ...)
+    }, 30); // 30ms is enough for most machines, and the JSON.stringify is sync which can delay the await sleep in electron's app.on("window-all-closed", ...)
     const ret = new Proxy(JSON.parse((await file.readFile()).toString()), {
       set(obj, k, v) {
         obj[k] = Object.isExtensible(v) ? new Proxy(v, this) : v;
@@ -1424,7 +1424,7 @@ const serverMain = async () => {
   const serverPort = Promise.withResolvers();
 
   const beforeQuit = async () => {
-    await sleep(100); // wait for config file sync (50ms), however ctrl+c still cause force exit
+    await sleep(100); // wait for config file sync (30ms), however ctrl+c still cause force exit
   };
 
   const electronRun = electronImport.then(async (electron) => {
@@ -1567,8 +1567,7 @@ const serverMain = async () => {
       for await (const chunk of response.body) {
         onChunk(chunk.byteLength);
         assert(fileStream.writable);
-        if (fileStream.write(chunk)) continue;
-        await new Promise((resolve) => fileStream.once("drain", resolve));
+        await new Promise((resolve) => fileStream.write(chunk, resolve)); // not need to listen drain event, see https://github.com/clevert-app/clevert/issues/12
       }
     } finally {
       await new Promise((resolve) => fileStream.close(resolve));
