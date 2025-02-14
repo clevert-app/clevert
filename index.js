@@ -333,6 +333,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   input[type="text"],
   input[type="number"],
   input:not([type]) {
+    width: calc(200px - 8px - 10px);
     padding: 5px 8px 5px 10px;
     font-size: 14px;
     line-height: 20px;
@@ -379,18 +380,13 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   input[type="radio"]:checked::before {
     background-position-x: 0%;
   }
-  label > input[type="checkbox"] + span,
-  label > input[type="radio"] + span {
-    line-height: 24px;
-  }
   label {
-    display: inline-block;
+    line-height: 24px;
   }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
   body > .tasks figure,
   body > .home figure {
-    position: relative;
     padding: 8px 12px;
     font-size: 14px;
     line-height: 1;
@@ -633,25 +629,22 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     margin-top: 12px;
     margin-bottom: 12px;
   }
-  body > .action label {
-    position: relative;
-    width: 200px;
-  }
-  body > .action label > input:not(:first-child) {
-    width: calc(100% - 8px - 10px);
-  }
   body > .action label > input {
-    width: calc(100% - 8px - 10px);
+    display: block;
     margin-top: 4px;
   }
   body > .action label > input:not(:last-child) {
-    width: calc(100% - 8px - 10px - 30px - 4px);
-    margin-right: 4px;
+    width: calc(200px - 8px - 10px - 30px);
+    padding-right: calc(8px + 30px);
+    margin-bottom: -30px;
   }
   body > .action label > button:last-child {
+    float: right;
     width: 30px;
     padding-right: 0;
     padding-left: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
   }
   body > .settings form {
     padding: 4px 6px 12px;
@@ -1219,17 +1212,15 @@ const pageMain = async () => {
       $description.textContent = i18n.settingsMirrorsDescription();
       const $switchLabel = document.createElement("label");
       $form.appendChild($switchLabel);
+      $switchLabel.textContent = i18n.settingsMirrorsSwitch();
       const $switch = document.createElement("input");
-      $switchLabel.appendChild($switch);
+      $switchLabel.insertBefore($switch, $switchLabel.firstChild);
       $switch.type = "checkbox";
       // $switch.checked = config.mirrorsEnabled;
       $switch.onchange = async () => {
         // config.mirrorsEnabled = $switch.checked;
         // saveConfig();
       };
-      const $switchText = document.createElement("span"); // agreement: use a <span> inside <label>, do not use standalone
-      $switchLabel.appendChild($switchText);
-      $switchText.textContent = i18n.settingsMirrorsSwitch();
     }
     {
       const $form = document.createElement("form");
@@ -1246,8 +1237,9 @@ const pageMain = async () => {
       for (const [locale, i18n] of Object.entries(i18nRes)) {
         const $radioLabel = document.createElement("label");
         $locales.appendChild($radioLabel);
+        $radioLabel.textContent = i18n.nativeName();
         const $radio = document.createElement("input");
-        $radioLabel.appendChild($radio);
+        $radioLabel.insertBefore($radio, $radioLabel.firstChild);
         $radio.type = "radio";
         $radio.name = "locale";
         $radio.value = locale;
@@ -1259,9 +1251,6 @@ const pageMain = async () => {
         if (locale === cu.locale) {
           $radio.checked = true;
         }
-        const $radioText = document.createElement("span");
-        $radioLabel.appendChild($radioText);
-        $radioText.textContent = i18n.nativeName();
       }
     }
     {
