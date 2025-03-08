@@ -282,12 +282,12 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   @media (min-width: 1px) {
     body {
       --bg: #faf9fd;
-      --bg2: #d9e4fc;
-      --bg3: #dae2f9;
-      --bg4: #d7e3ff; /* https://material.angular.io/components/button-toggle/examples */
-      --bg5: #c6d7f6;
-      --bg6: #a6bee5;
-      --bg7: #a6bee5;
+      --bg2: #f1f0f4;
+      --bg3: #d0e3ff;
+      --bg4: #c6d8fa; /* https://material.angular.io/components/button-toggle/examples */
+      --bg5: #bdd2f6;
+      --bg6: #a6c3ee;
+      --bg7: #9dabc6;
       --fg: #000;
     }
   }
@@ -718,7 +718,7 @@ const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width" />
-      <meta name="color-scheme" content="light dark" />
+
       <link rel="icon" href="data:" />
       <title>${i18n.title()}</title>
       <!-- module script defer by default -->
