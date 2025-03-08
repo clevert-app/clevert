@@ -1,27 +1,34 @@
 // @ts-check
-
-// This is an example extension, shows almost all you need to know to write an extension.
-
 /** @import { Extension, ClevertUtils } from "../../index.js" */
 import child_process from "node:child_process";
 import path from "node:path";
-
 const cu = /** @type {ClevertUtils} */ (globalThis.clevertUtils);
-
-// simple trick that eval only in nodejs
-const consts = globalThis.process && {
+const consts = globalThis.process && /* simple trick, eval only in nodejs */ {
   exe: path.join(import.meta.dirname, "zcodecs"), // can't be implemented inside ClevertUtils because we need current module's import.meta
 };
-
 const i18nRes = (() => {
   const enus = {
     description: () => "Includes ect, webp, jpeg-xl and other modern codecs",
-    cjpegliDescription: () => "Advanced JPEG encoder",
+    cjpegliDescription: () =>
+      "Advanced JPEG encoder, better quality without loosing compatibility",
+    cjpegliQuality: () => "Quality",
+    cjpegliProgressiveLevel: () => "Progressive level",
+    cjxlDescription: () =>
+      "JPEG XL image encoder. JPEG XL delivers best-of-breed quality and size",
+    cjxlQuality: () => "Quality",
+    cjxlEffort: () => "Effort",
   };
   /** @type {Readonly<typeof enus>} */
   const zhcn = {
     description: () => "包含了 ect, webp, jpeg-xl 等现代编解码器",
-    cjpegliDescription: () => "先进的 JPEG 编码器",
+    cjpegliDescription: () =>
+      "先进的 JPEG 编码器，在保证兼容性的前提下提高更好的效果",
+    cjpegliQuality: () => "质量",
+    cjpegliProgressiveLevel: () => "渐进等级",
+    cjxlDescription: () =>
+      "JPEG XL 图片编码器。JPEG XL 提供质量与体积的最佳组合",
+    cjxlQuality: () => "质量",
+    cjxlEffort: () => "强度",
   };
   return {
     "en-US": /** @type {Readonly<typeof enus>} */ (enus),
@@ -45,6 +52,18 @@ export default {
       path: "./", // start from the extension dir
       url: "https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/linux-x64.zip", // just place github.com address here and the core will do auto-mirroring
     },
+    {
+      platforms: ["mac-arm64"],
+      kind: "zip",
+      path: "./",
+      url: "https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/mac-arm64.zip",
+    },
+    {
+      platforms: ["win-x64"],
+      kind: "zip",
+      path: "./",
+      url: "https://github.com/clevert-app/clevert/releases/download/asset_zcodecs_12.0.0_10664137139/win-x64.zip",
+    },
   ],
   // there's some overlap between action and profile, you can write an all-in-one action and custom based on the profile, but this is bad practice? we may supports this as an generic extension. Moreover, one extension may have different action "kind", like as both a converter and a daemon, which requires more than one action, so splitting different actions by different usage is suggested
   actions: [
@@ -67,46 +86,33 @@ export default {
         $root.classList.add("root");
         const css = String.raw;
         $root.appendChild(document.createElement("style")).textContent = css`
-          #action .root {
-            display: block; /* or grid or others */
-          }
-          #action .root label {
-            display: grid;
-            max-width: 180px;
-            gap: 4px;
+          .action .root {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 12px;
           }
         `;
-        const $qualityLabel = $root.appendChild(
-          document.createElement("label")
-        );
-        $qualityLabel.textContent = "quality(0-100):";
-        const $quality = $qualityLabel.appendChild(
-          document.createElement("input")
-        );
+        $root.addEventListener("post-remove", (e) => console.log(e));
+
+        const $qualityLabel = document.createElement("label");
+        $root.appendChild($qualityLabel);
+        $qualityLabel.textContent = i18n.cjpegliQuality() + " (0-100):";
+        const $quality = document.createElement("input");
+        $qualityLabel.appendChild($quality);
         $quality.type = "number";
         $quality.value = profile.quality;
-        $root.addEventListener("post-remove", (e) => {
-          // console.log(e);
-        });
+
+        const $progressiveLevelLabel = document.createElement("label");
+        $root.appendChild($progressiveLevelLabel);
+        $progressiveLevelLabel.textContent = i18n.cjpegliProgressiveLevel();
+        const $progressiveLevel = document.createElement("input");
+        $progressiveLevelLabel.appendChild($progressiveLevel);
+        $progressiveLevel.type = "number";
+        $progressiveLevel.value = profile.progressiveLevel;
+
         return {
-          // 给 yt-dlp 用
-          // entriesRoot,
-          // entries: () => {
-          //   return [
-          //     {
-          //       input: { url: "https://www.youtube.com/watch?v=jb6BnVKmsl8" },
-          //       output: { fileName: "id_1234.mp4" },
-          //     },
-          //     {
-          //       input: { url: "https://www.youtube.com/watch?v=jb6BnVKmsl8" },
-          //       output: { fileName: "id_1234.mp4" },
-          //     },
-          //   ];
-          // },
           root: $root,
-          // 用函数取出，少用什么 getter setter
           profile: () => {
-            // 可能不能这样写，可能会带上 entries？
             profile.quality = Number($quality.value);
             return profile;
           },
@@ -121,19 +127,80 @@ export default {
           "cjpegli",
           input.main[0],
           output.main[0],
-          "-q",
+          "--quality",
           String(profile.quality),
-          "-p",
+          "--progressive_level",
           String(profile.progressiveLevel),
         ]);
         const { promise, resolve, reject } = Promise.withResolvers();
         child.on("error", (err) => reject(err));
         child.on("exit", (code) => (code ? reject(code) : resolve(code)));
         return {
-          progress: () => 0,
-          stop: () => {
-            child.kill("SIGTERM");
+          progress: () => 0, // for detail progress within single file, like ffmpeg, so others just returns 0
+          stop: () => child.kill(),
+          promise,
+        };
+      },
+    },
+    {
+      id: "cjxl",
+      name: "cjxl",
+      description: i18n.cjxlDescription(),
+      kind: "common-files",
+      ui: (profile) => {
+        const $root = document.createElement("form");
+        $root.classList.add("root");
+        const css = String.raw;
+        $root.appendChild(document.createElement("style")).textContent = css`
+          .action .root {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 12px;
+          }
+        `;
+        $root.addEventListener("post-remove", (e) => console.log(e));
+
+        const $qualityLabel = document.createElement("label");
+        $root.appendChild($qualityLabel);
+        $qualityLabel.textContent = i18n.cjxlQuality() + " (0-100):";
+        const $quality = document.createElement("input");
+        $qualityLabel.appendChild($quality);
+        $quality.type = "number";
+        $quality.value = profile.quality;
+
+        const $effortLabel = document.createElement("label");
+        $root.appendChild($effortLabel);
+        $effortLabel.textContent = i18n.cjxlEffort() + " (1-10):";
+        const $effort = document.createElement("input");
+        $effortLabel.appendChild($effort);
+        $effort.type = "number";
+        $effort.value = profile.effort;
+
+        return {
+          root: $root,
+          profile: () => {
+            profile.quality = Number($quality.value);
+            profile.effort = Number($effort.value);
+            return profile;
           },
+        };
+      },
+      execute: (profile, { input, output }) => {
+        const child = child_process.spawn(consts.exe, [
+          "cjxl",
+          input.main[0],
+          output.main[0],
+          "--quality",
+          String(profile.quality),
+          "--effort",
+          String(profile.effort),
+        ]);
+        const { promise, resolve, reject } = Promise.withResolvers();
+        child.on("error", (err) => reject(err));
+        child.on("exit", (code) => (code ? reject(code) : resolve(code)));
+        return {
+          progress: () => 0,
+          stop: () => child.kill(),
           promise,
         };
       },
@@ -145,19 +212,37 @@ export default {
     // 约定：对于相同的 action, 这个profile列表中 profile.id == action.id 的就是默认的
     {
       name: "cjpegli",
-      description: "cjpegli default profile description",
+      description: i18n.cjpegliDescription(),
       id: "cjpegli",
       actionId: "cjpegli",
       extensionId: "zcodecs",
       extensionVersion: "0.1.0",
-      quality: 68,
-      progressiveLevel: 0,
-      // 用户：我上次output dir 到这，这次还想要到这，存profile 里，所以 entries 选项放在profile 里而不是固定在 action里
-      // 对 entries 的选项 给出建议?
-      // 用户要求能筛选输入文件扩展名，原生文件选择器 inputExtensionFilter: []
+      quality: 90,
+      progressiveLevel: 2,
+      // todo: 用户：我上次output dir 到这，这次还想要到这，存profile 里，所以 entries 选项放在profile 里而不是固定在 action里
+      // 对 entries 的选项 给出建议, 此处的 entries 只适用于 action kind: "common-files"
       entries: {
-        // outputExtension: "jpeg",
-        outputExtensionOptions: ["jpeg", "jxl"],
+        // inputDir: "/home/kkocdko/misc/code/clevert/temp/_test_res/i",
+        // outputDir: "/home/kkocdko/misc/code/clevert/temp/_test_res/o",
+        inputExtensions: ["jxl", "jpeg", "jpg", "png", "apng"],
+        outputExtensions: ["jpeg", "jpg"], // 第一个是默认的
+        // outputExtension: "jpg", // 或者指定一个默认的
+      },
+    },
+    {
+      name: "cjxl",
+      description: i18n.cjxlDescription(),
+      id: "cjxl",
+      actionId: "cjxl",
+      extensionId: "zcodecs",
+      extensionVersion: "0.1.0", // todo: 目前先手动写，与扩展自身保持一致，以后可省略
+      quality: 90,
+      effort: 7,
+      entries: {
+        inputDir: "/home/kkocdko/misc/code/clevert/temp/_test_res/i",
+        outputDir: "/home/kkocdko/misc/code/clevert/temp/_test_res/o",
+        inputExtensions: ["jxl", "jpeg", "jpg", "png", "apng"],
+        outputExtensions: ["jxl"],
       },
     },
   ],

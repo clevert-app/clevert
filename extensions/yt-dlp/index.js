@@ -1,11 +1,35 @@
 // @ts-check
-/** @import { Extension } from "../../index.js" */
+/** @import { Extension, ClevertUtils } from "../../index.js" */
 import child_process from "node:child_process";
 import path from "node:path";
-
+const cu = /** @type {ClevertUtils} */ (globalThis.clevertUtils);
 const consts = globalThis.process && {
   exe: path.join(import.meta.dirname, "yt-dlp"),
 };
+const i18nRes = (() => {
+  const enus = {
+    description: () =>
+      "Download audio/video from thousands of sites like YouTube, Instagram, TikTok, Bilibili, etc.",
+    // cjpegliDescription: () =>
+    //   "Advanced JPEG encoder, better quality without loosing compatibility",
+    // url: () => "URL",
+    // cjpegliProgressiveLevel: () => "Progressive level",
+  };
+  /** @type {Readonly<typeof enus>} */
+  const zhcn = {
+    description: () =>
+      "从各大网站下载音频/视频，支持包括 YouTube、Instagram、哔哩哔哩 等上千个网站",
+    // cjpegliDescription: () =>
+    //   "先进的 JPEG 编码器，在保证兼容性的前提下提高更好的效果",
+    // cjpegliQuality: () => "质量",
+    // cjpegliProgressiveLevel: () => "渐进等级",
+  };
+  return {
+    "en-US": /** @type {Readonly<typeof enus>} */ (enus),
+    "zh-CN": zhcn,
+  };
+})();
+const i18n = i18nRes[cu.locale];
 
 /** @type {Extension} */
 export default {
@@ -19,19 +43,19 @@ export default {
       platforms: ["linux-x64"],
       kind: "bin",
       path: "./yt-dlp",
-      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.11.04/yt-dlp",
+      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2025.01.26/yt-dlp",
     },
     {
       platforms: ["mac-arm64"],
       kind: "bin",
       path: "./yt-dlp",
-      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.11.04/yt-dlp_macos",
+      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2025.01.26/yt-dlp_macos",
     },
     {
       platforms: ["win-x64"],
       kind: "bin",
       path: "./yt-dlp.exe",
-      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2024.11.04/yt-dlp_x86.exe",
+      url: "https://github.com/yt-dlp/yt-dlp/releases/download/2025.01.26/yt-dlp_x86.exe",
     },
   ],
   actions: [
@@ -156,3 +180,5 @@ export default {
     },
   ],
 };
+
+// http://127.0.0.1:9393/static/extensions/yt-dlp/index.js

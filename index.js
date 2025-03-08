@@ -18,7 +18,7 @@ import child_process from "node:child_process";
 }} Asset For `kind:"bin"`, the `path` is file path, for others it's directory path.
 @typedef {{
   root: HTMLElement;
-  profile: () => any;
+  profile: () => any; // agreement: use function instead of getter/setter
   entries?: () => any[];
 }} ActionUiController The `entries()` will be used if action kind is `custom`.
 @typedef {{
@@ -53,25 +53,9 @@ import child_process from "node:child_process";
   actions: Action[];
   profiles: Profile[];
 }} Extension
-@typedef {{
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  actions: {
-    id: string;
-    name: string;
-    description: string;
-  }[];
-  profiles: {
-    id: string;
-    name: string;
-    description: string;
-    actionId: string;
-    extensionId: string;
-    extensionVersion: string;
-  }[];
-}[]} ListExtensionsResponse
+@typedef {(
+  Omit<Extension, "actions"> & { actions: Omit<Action, "ui" | "execute">[] }
+)[]} ListExtensionsResponse
 @typedef {{
   kind: "number-sequence";
   begin: number;
@@ -85,6 +69,7 @@ import child_process from "node:child_process";
   }[];
   inputDir: string;
   outputDir: string;
+  outputSuffix: string;
   outputExtension: string;
 }} EntriesCommonFiles The most common.
 @typedef {{
@@ -117,11 +102,9 @@ import child_process from "node:child_process";
   parallel: number;
 }} RunActionRequest
 @typedef {{
-  download: {
-    finished: number;
-    amount: number;
-  };
-}} InstallExtensionProgress
+  finished: number;
+  amount: number;
+}} InstallExtensionProgress Assets download progress in bytes.
 @typedef {{
   title: string;
   progress: () => InstallExtensionProgress;
@@ -199,6 +182,10 @@ const i18nRes = (() => {
     homeMenuDelete: () => "Delete",
     homeMenuInfo: () => "Info",
     homeMoreOperations: () => "More operations",
+    entriesInputDir: () => "Input directory",
+    entriesOutputDir: () => "Output directory",
+    entriesOutputSuffix: () => "Output suffix",
+    entriesOutputExtension: () => "Output extension",
     settingsMirrorsTitle: () => "Mirrors",
     settingsMirrorsDescription: () => "May speed up downloads in some region.",
     settingsMirrorsSwitch: () => "Control whether mirrors are enabled or not.", // agreement: the wording and syntax here mimics vscode's editor.guides.bracketPairs
@@ -231,6 +218,10 @@ const i18nRes = (() => {
     homeMenuDelete: () => "删除",
     homeMenuInfo: () => "详细信息",
     homeMoreOperations: () => "更多操作",
+    entriesInputDir: () => "输入文件夹",
+    entriesOutputDir: () => "输出文件夹",
+    entriesOutputSuffix: () => "输出文件名后缀",
+    entriesOutputExtension: () => "输出扩展名",
     settingsMirrorsTitle: () => "镜像",
     settingsMirrorsDescription: () => "可能在某些地区提升下载速度。",
     settingsMirrorsSwitch: () => "控制是否启用镜像。",
@@ -291,12 +282,12 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   @media (min-width: 1px) {
     body {
       --bg: #faf9fd;
-      --bg2: #82a3ee1a;
-      --bg3: #82a3ee2f;
-      --bg4: #82a3ee44; /* dae2f9 = faf9fd*(1-(0x44/0xff)) + 7492e8*(0x44/0xff) , from https://material.angular.io/components/button-toggle/examples */
-      --bg5: #82a3ee59;
-      --bg6: #8597c666; /* cbd2e7 */
-      --bg7: #8597c67a;
+      --bg2: #d9e4fc;
+      --bg3: #dae2f9;
+      --bg4: #d7e3ff; /* https://material.angular.io/components/button-toggle/examples */
+      --bg5: #c6d7f6;
+      --bg6: #a6bee5;
+      --bg7: #a6bee5;
       --fg: #000;
     }
   }
@@ -383,10 +374,15 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   label {
     line-height: 24px;
   }
+  legend {
+    padding: 0 0 2px;
+    line-height: 24px;
+  }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
   body > .tasks figure,
   body > .home figure {
+    position: relative;
     padding: 8px 12px;
     font-size: 14px;
     line-height: 1;
@@ -482,7 +478,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .tasks figure,
   body > .home figure {
-    padding: 10px 14px 12px;
+    padding: 10px 14px;
     margin: 0;
     background: var(--bg3);
   }
@@ -498,9 +494,17 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .tasks figure h5,
   body > .home figure h5 {
     display: inline-block;
-    margin: 0 8px 8px 0;
+    max-width: calc(100% - 120px);
+    padding: 0 8px 6px 0;
+    margin: 0;
+    overflow: hidden;
     font-size: 17px;
     font-weight: normal;
+    text-indent: -0em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: text-top;
+    transition: text-indent 0.2s;
   }
   body > .tasks figure sub,
   body > .home figure sub {
@@ -526,9 +530,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .tasks button::before {
     display: block;
     height: 300%;
-    clip-path: /* three icon here, pause + resume + stop */ path(
-      "M 9 9 L 9 19 L 12 19 L 12 9 L 9 9 M 16 9 L 16 19 L 19 19 L 19 9 L 19 9 M 9 36 L 9 48 L 20 42 Z M 19 65 L 19 75 L 9 75 L 9 65 Z"
-    );
+    clip-path: path("M9,9h3v10h-3,M16,9h3v10h-3 M9,36v12l11-6 M9,65h10v10H9");
     content: "";
     background: var(--fg);
     opacity: 0.8;
@@ -553,7 +555,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     display: block;
     width: 100%;
     height: 0;
-    margin: 4px 0;
+    margin: 8px 0 4px;
     appearance: none;
   }
   body > .tasks progress::before {
@@ -602,6 +604,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .home figure p {
     margin: 0;
+    line-height: 19px;
   }
   body > .home figure ~ button::before {
     font-weight: bold;
@@ -629,7 +632,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     margin-top: 12px;
     margin-bottom: 12px;
   }
-  body > .action label > input {
+  body > .action label > input:not([type="radio"]) {
     display: block;
     margin-top: 4px;
   }
@@ -646,18 +649,8 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
   }
-  body > .settings form {
-    padding: 4px 6px 12px;
-  }
-  body > .settings h5 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 500;
-  }
-  body > .settings p {
-    margin: 8px 0;
-  }
-  body > .settings .languages fieldset {
+  body > .action fieldset,
+  body > .settings fieldset {
     display: grid;
     gap: 4px;
     padding: 0;
@@ -668,6 +661,17 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     /* overflow: scroll; */
     /* border-radius: 6px; */
     /* background: var(--bg3); */
+  }
+  body > .settings form {
+    padding: 4px 6px 12px;
+  }
+  body > .settings h5 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  body > .settings p {
+    margin: 8px 0;
   }
   body > .settings .about button {
     padding: 6px 12px; /* small button, like "body > .home > button" */
@@ -692,6 +696,16 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .top > button.to-action + button {
     float: right;
+  }
+  body > .top > button.to-settings::before {
+    display: block;
+    width: 14px;
+    height: 14px;
+    margin: 0 -2px;
+    clip-path: path("M0,1h14v2H0v3h14v2H0v3h14v2H0");
+    content: "";
+    background: var(--fg);
+    opacity: 0.9;
   }
   /* todo: about hover, https://stackoverflow.com/a/30303898 */
   /* todo: use box-shadow instead of background on hover? */
@@ -803,10 +817,9 @@ const pageMain = async () => {
     if (e.kind === "run-action-progress") {
       // const [$pause, $stop, $pin] = $operations.children;
       $title.textContent = e.title;
-      $progress.style.setProperty(
-        "--progress",
-        `${(e.progress.finished / e.progress.amount) * 100}%`
-      );
+      $title.title = e.title;
+      const percent = (e.progress.finished / e.progress.amount) * 100;
+      $progress.style.setProperty("--progress", percent + "%");
       if (e.pending) {
         const speed = e.progress.finished / (Date.now() / 1000 - e.time.begin);
         const remainTime = (e.progress.amount - e.progress.finished) / speed;
@@ -827,7 +840,14 @@ const pageMain = async () => {
     } else if (e.kind === "install-extension-progress") {
       // const [$stop, $pin] = $operations.children;
       $title.textContent = e.title;
-      $tips.textContent = `${e.progress.download.finished}/${e.progress.download.amount} Bytes`;
+      $title.title = e.title;
+      const percent = (e.progress.finished / e.progress.amount) * 100;
+      $progress.style.setProperty("--progress", percent + "%");
+      $tips.textContent =
+        (e.progress.finished / 1024 / 1024).toFixed(1) +
+        "/" +
+        (e.progress.amount / 1024 / 1024).toFixed(1) +
+        " M"; // this is MiB
       if (e.pending) {
       } else if (e.error) {
         $tips.textContent = "Error: " + JSON.stringify(e.error);
@@ -1035,9 +1055,8 @@ const pageMain = async () => {
     }
   };
   const r$home = async () => {
-    const response = await fetch("/list-extensions")
-      .then((r) => r.json())
-      .then((a) => /** @type {ListExtensionsResponse} */ (a));
+    /** @type {ListExtensionsResponse} */
+    const response = await fetch("/list-extensions").then((r) => r.json());
     extensionsList = response;
     r$choices();
   };
@@ -1060,11 +1079,7 @@ const pageMain = async () => {
       assert($url.value.trim() !== "");
       /** @type {InstallExtensionRequest} */
       const request = {
-        title:
-          "Install extension from " +
-          ($url.value.length > 12 + 19 + 1
-            ? $url.value.slice(0, 12) + "…" + $url.value.slice(-19)
-            : $url.value),
+        title: "Install extension from " + $url.value,
         url: $url.value,
       };
       await fetch("/install-extension", {
@@ -1103,36 +1118,80 @@ const pageMain = async () => {
     $action.replaceChildren();
     let getEntries;
     if (action.kind === "common-files") {
-      const $entries = document.createElement("div");
+      const $entries = document.createElement("form");
       $action.appendChild($entries);
       $entries.classList.add("entries");
+      $entries.onsubmit = (e) => e.preventDefault();
 
-      // todo: label{input,button}
+      // todo: without electron
 
       const $inputDirLabel = document.createElement("label");
       $entries.appendChild($inputDirLabel);
-      $inputDirLabel.textContent = "Input Dir:";
+      $inputDirLabel.textContent = i18n.entriesInputDir();
       const $inputDir = document.createElement("input");
       $inputDirLabel.appendChild($inputDir);
-      $inputDir.value = profile?.entries?.inputDir ?? "";
+      $inputDir.value = profile.entries.inputDir ?? "";
       const $inputDirButton = document.createElement("button");
       $inputDirLabel.appendChild($inputDirButton);
+      $inputDirButton.onclick = async () => {
+        /** @type {ShowOpenDialogRequest} */
+        const request = { title: "Select Dir", properties: ["openDirectory"] };
+        /** @type {ShowOpenDialogResponse} */
+        const response = await fetch("/show-open-dialog", {
+          method: "POST",
+          body: JSON.stringify(request),
+        }).then((r) => r.json());
+        if (response.filePaths.length !== 0) {
+          $inputDir.value = response.filePaths[0];
+        }
+      };
 
       const $outputDirLabel = document.createElement("label");
       $entries.appendChild($outputDirLabel);
-      $outputDirLabel.textContent = "Output Dir:";
+      $outputDirLabel.textContent = i18n.entriesOutputDir();
       const $outputDir = document.createElement("input");
       $outputDirLabel.appendChild($outputDir);
-      $outputDir.value = profile?.entries?.outputDir ?? "";
+      $outputDir.value = profile.entries.outputDir ?? "";
       const $outputDirButton = document.createElement("button");
       $outputDirLabel.appendChild($outputDirButton);
+      $outputDirButton.onclick = async () => {
+        /** @type {ShowOpenDialogRequest} */
+        const request = { title: "Select Dir", properties: ["openDirectory"] };
+        /** @type {ShowOpenDialogResponse} */
+        const response = await fetch("/show-open-dialog", {
+          method: "POST",
+          body: JSON.stringify(request),
+        }).then((r) => r.json());
+        if (response.filePaths.length !== 0) {
+          $outputDir.value = response.filePaths[0];
+        }
+      };
 
-      const $outputExtensionLabel = document.createElement("label");
-      $entries.appendChild($outputExtensionLabel);
-      $outputExtensionLabel.textContent = "Output Extension:";
-      const $outputExtension = document.createElement("input");
-      $outputExtensionLabel.appendChild($outputExtension);
-      $outputExtension.value = profile?.entries?.outputExtension ?? "";
+      const $outputSuffixLabel = document.createElement("label");
+      $entries.appendChild($outputSuffixLabel);
+      $outputSuffixLabel.textContent = i18n.entriesOutputSuffix();
+      const $outputSuffix = document.createElement("input");
+      $outputSuffixLabel.appendChild($outputSuffix);
+      $outputSuffix.value = profile.entries.outputSuffix ?? "";
+
+      const $outputExtension = document.createElement("fieldset");
+      $entries.appendChild($outputExtension);
+      const $outputExtensionLegend = document.createElement("legend");
+      $outputExtension.appendChild($outputExtensionLegend);
+      $outputExtensionLegend.textContent = i18n.entriesOutputExtension();
+      for (const outputExtension of profile.entries.outputExtensions) {
+        const $radioLabel = document.createElement("label");
+        $outputExtension.appendChild($radioLabel);
+        $radioLabel.textContent = outputExtension;
+        const $radio = document.createElement("input");
+        $radioLabel.insertBefore($radio, $radioLabel.firstChild);
+        $radio.type = "radio";
+        $radio.name = "output-extension";
+        $radio.value = outputExtension;
+        $radio.checked = profile.entries.outputExtension
+          ? profile.entries.outputExtension === outputExtension // is set in profile
+          : $outputExtensionLegend.nextSibling === $radioLabel; // is the first
+      }
 
       getEntries = () => {
         /** @type {EntriesCommonFiles} */
@@ -1140,7 +1199,10 @@ const pageMain = async () => {
           kind: "common-files",
           inputDir: $inputDir.value,
           outputDir: $outputDir.value,
-          outputExtension: $outputExtension.value,
+          outputSuffix: $outputSuffix.value,
+          outputExtension: /** @type {HTMLInputElement} */ (
+            $outputExtension.querySelector(":checked")
+          ).value,
         };
         return entries;
       };
@@ -1359,7 +1421,7 @@ const pageMain = async () => {
   $top.appendChild($toSettings);
   $toSettings.classList.add("to-settings");
   $toSettings.classList.add("off");
-  $toSettings.textContent = i18n.toSettings();
+  $toSettings.title = i18n.toSettings();
   $toSettings.onclick = () => {
     $toTasks.classList.add("off");
     $toHome.classList.add("off");
@@ -1892,7 +1954,7 @@ const serverMain = async () => {
 
       installExtensionControllers.set(nextId(), {
         title: request.title,
-        progress: () => ({ download: { finished, amount } }),
+        progress: () => ({ finished, amount }),
         promise,
       });
 
@@ -1921,18 +1983,7 @@ const serverMain = async () => {
           (await import(extensionIndexJs)).default
         );
         assert(entry === extension.id + "_" + extension.version);
-        response.push({
-          id: extension.id,
-          version: extension.version,
-          name: extension.name,
-          description: extension.description,
-          actions: extension.actions.map((action) => ({
-            id: action.id,
-            name: action.name,
-            description: action.description,
-          })),
-          profiles: extension.profiles,
-        });
+        response.push(extension); // function type fields like extension.action.ui is omitted in JSON.stringify, standard guaranteed
       }
       r.setHeader("Content-Type", "application/json; charset=utf-8");
       r.end(JSON.stringify(response));
