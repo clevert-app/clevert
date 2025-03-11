@@ -159,6 +159,14 @@ import child_process from "node:child_process";
   sleep: typeof sleep;
   locale: keyof i18nRes;
 }} ClevertUtils Will be passed to `globalThis.clevertUtils`.
+@typedef {{
+  windowWidth: number;
+  windowHeight: number;
+  windowMaximized: boolean;
+  locale: keyof i18nRes;
+  mirrorsEnabled: boolean;
+  serverPort: number;
+}} Config
 */
 
 const i18nRes = (() => {
@@ -718,7 +726,7 @@ const pageHtml = (/** @type {i18nRes["en-US"]} */ i18n, lang) => html`
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width" />
-
+      <meta name="color-scheme" content="light dark" />
       <link rel="icon" href="data:" />
       <title>${i18n.title()}</title>
       <!-- module script defer by default -->
@@ -1262,6 +1270,10 @@ const pageMain = async () => {
   $settings.classList.add("off");
   const r$settings = async () => {
     $settings.replaceChildren();
+    /** @type {Config} */
+    const config = await fetch("/get-config").then((r) => r.json());
+    const saveConfig = () =>
+      fetch("/set-config", { method: "POST", body: JSON.stringify(config) });
     {
       const $form = document.createElement("form");
       $settings.appendChild($form);
@@ -1278,10 +1290,10 @@ const pageMain = async () => {
       const $switch = document.createElement("input");
       $switchLabel.insertBefore($switch, $switchLabel.firstChild);
       $switch.type = "checkbox";
-      // $switch.checked = config.mirrorsEnabled;
-      $switch.onchange = async () => {
-        // config.mirrorsEnabled = $switch.checked;
-        // saveConfig();
+      $switch.checked = config.mirrorsEnabled;
+      $switch.onchange = () => {
+        config.mirrorsEnabled = $switch.checked;
+        saveConfig();
       };
     }
     {
@@ -1307,8 +1319,10 @@ const pageMain = async () => {
         $radio.value = locale;
         $radio.onchange = async () => {
           assert($radio.checked); // seems that uncheck does not emit events
-          // todo: confirm dialog?
-          // todo: an api to change the language and reboot
+          config.locale = /** @type {any} */ (locale);
+          saveConfig();
+          await sleep(100);
+          alert("please restart to apply the language change");
         };
         if (locale === cu.locale) {
           $radio.checked = true;
@@ -1446,9 +1460,11 @@ const serverMain = async () => {
   electronImport.catch(() => {});
 
   const PATH_EXTENSIONS = "./temp/extensions";
+  const PATH_PROFILES = "./temp/profiles";
   const PATH_CACHE = "./temp/cache";
   const PATH_CONFIG = "./temp/config.json";
   await fs.promises.mkdir(PATH_EXTENSIONS, { recursive: true });
+  await fs.promises.mkdir(PATH_PROFILES, { recursive: true });
   await fs.promises.mkdir(PATH_CACHE, { recursive: true });
 
   /**
@@ -1488,6 +1504,7 @@ const serverMain = async () => {
   };
 
   // agreement: keep these configs as flat as possible, so we can easily merge and upgrade it
+  /** @type {Config} */
   const defaultConfig = Object.seal({
     windowWidth: 800,
     windowHeight: 600,
@@ -1498,8 +1515,7 @@ const serverMain = async () => {
     mirrorsEnabled: false,
     serverPort: 9393,
   });
-  /** @type {typeof defaultConfig} */
-  const config = await openJsonMmap(PATH_CONFIG); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
+  const config = /** @type {Config} */ (await openJsonMmap(PATH_CONFIG)); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
   for (const k in defaultConfig) {
     // be relax, Object.hasOwn({ a: undefined }, "a") === true
     if (!Object.hasOwn(config, k)) {
@@ -2004,6 +2020,9 @@ const serverMain = async () => {
       return;
     }
 
+    // todo: implement /list-profiles /save-profile /remove-profile /profile/xxx
+    // design proposal: there are many profiles, save profile into ./profiles/the-profile-uuid.json , and build a profile index json, recent profiles name and
+
     if (r.req.url === "/run-action") {
       /** @type {RunActionRequest} */
       const request = await readJson();
@@ -2198,6 +2217,19 @@ const serverMain = async () => {
         await fs.promises.readdir(request.path, { withFileTypes: true })
       ).map((e) => ({ name: e.name, kind: e.isDirectory() ? "dir" : "file" }));
       r.end(JSON.stringify(response));
+      return;
+    }
+
+    if (r.req.url === "/get-config") {
+      r.end(JSON.stringify(config));
+      return;
+    }
+
+    if (r.req.url === "/set-config") {
+      /** @type {Config} */
+      const request = await readJson();
+      for (const k in request) config[k] = request[k];
+      r.end();
       return;
     }
 
