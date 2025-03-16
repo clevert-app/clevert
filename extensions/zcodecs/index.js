@@ -247,3 +247,6 @@ export default {
     },
   ],
 };
+
+// ln extensions/zcodecs/index.js temp/index_zcodecs.js
+// http://127.0.0.1:9393/static/index_zcodecs.js

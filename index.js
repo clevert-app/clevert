@@ -1110,10 +1110,10 @@ const pageMain = async () => {
    * @param {string} profileId
    */
   const r$action = async (extensionId, extensionVersion, profileId) => {
-    const extensionIndexJsUrl =
-      "/extensions/" + extensionId + "_" + extensionVersion + "/index.js";
+    const extensionDir =
+      "/static/extensions/" + extensionId + "_" + extensionVersion;
     const extension = /** @type {Extension} */ (
-      (await import(extensionIndexJsUrl)).default
+      (await import(extensionDir + "/index.js")).default
     );
     const profile = extension.profiles.find(
       (profile) => profile.id === profileId
@@ -1459,13 +1459,43 @@ const serverMain = async () => {
   const electronImport = import("electron"); // as early as possible // to hack type acquisition: cd ~/.cache/typescript/0.0 ; mkdir _electron ; echo '{"name":"@types/electron"}' > _electron/package.json ; curl -o _electron/index.d.ts -L unpkg.com/electron/electron.d.ts ; npm i -D ./_electron
   electronImport.catch(() => {});
 
-  const PATH_EXTENSIONS = "./temp/extensions";
-  const PATH_PROFILES = "./temp/profiles";
-  const PATH_CACHE = "./temp/cache";
-  const PATH_CONFIG = "./temp/config.json";
-  await fs.promises.mkdir(PATH_EXTENSIONS, { recursive: true });
-  await fs.promises.mkdir(PATH_PROFILES, { recursive: true });
-  await fs.promises.mkdir(PATH_CACHE, { recursive: true });
+  /**
+   * Solve path, like `path.resolve`, with support of home dir prefix `~/`. More usage: `solvePath()` returns home dir, `solvePath(".")` returns current dir.
+   * ```js
+   * // unix
+   * solvePath("~/a/", "b/../c/d", "//e") === process.env.HOME + "/a/c/d/e";
+   * // windows
+   * solvePath("C:\\a\\", "b\\../c/\\d", "\\\\e") === "C:\\a\\c\\d\\e"; // auto slash convert
+   * ```
+   * @param {...string} parts
+   */
+  const solvePath = (...parts) => {
+    if (parts.length === 0) {
+      return process.env.USERPROFILE ?? process.env.HOME ?? process.cwd();
+    }
+    if (parts[0].startsWith("~")) {
+      parts[0] = process.env.HOME + parts[0].slice(1);
+      // todo: windows process.env.USERPROFILE
+    }
+    // we do not use path.resolve directy because we want to control absolute or not
+    if (!path.isAbsolute(parts[0])) {
+      parts.unshift(process.cwd());
+    }
+    return path.join(...parts);
+  };
+
+  const PATH_DATA = solvePath("temp");
+  for (const entry of ["cache", "extensions", "profiles"])
+    await fs.promises.mkdir(solvePath(PATH_DATA, entry), { recursive: true });
+
+  /** Copy from [MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types#important_mime_types_for_web_developers). */
+  const MIME = Object.freeze({
+    html: "text/html; charset=utf-8",
+    css: "text/css; charset=utf-8",
+    js: "text/javascript; charset=utf-8",
+    json: "application/json; charset=utf-8",
+    svg: "image/svg+xml; charset=utf-8",
+  });
 
   /**
    * Open a json file and returns mapping object. Like [valtio](https://github.com/pmndrs/valtio).
@@ -1515,7 +1545,8 @@ const serverMain = async () => {
     mirrorsEnabled: false,
     serverPort: 9393,
   });
-  const config = /** @type {Config} */ (await openJsonMmap(PATH_CONFIG)); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
+  /** @type {Config} */
+  const config = await openJsonMmap(solvePath(PATH_DATA, "config.json")); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
   for (const k in defaultConfig) {
     // be relax, Object.hasOwn({ a: undefined }, "a") === true
     if (!Object.hasOwn(config, k)) {
@@ -1733,31 +1764,6 @@ const serverMain = async () => {
   };
 
   /**
-   * Solve path, like `path.resolve`, with support of home dir prefix `~/`. More usage: `solvePath()` returns home dir, `solvePath(".")` returns current dir.
-   * ```js
-   * // unix
-   * solvePath("~/a/", "b/../c/d", "//e") === process.env.HOME + "/a/c/d/e";
-   * // windows
-   * solvePath("C:\\a\\", "b\\../c/\\d", "\\\\e") === "C:\\a\\c\\d\\e"; // auto slash convert
-   * ```
-   * @param {...string} parts
-   */
-  const solvePath = (...parts) => {
-    if (parts.length === 0) {
-      return process.env.USERPROFILE ?? process.env.HOME ?? process.cwd();
-    }
-    if (parts[0].startsWith("~")) {
-      parts[0] = process.env.HOME + parts[0].slice(1);
-      // todo: windows process.env.USERPROFILE
-    }
-    // we do not use path.resolve directy because we want to control absolute or not
-    if (!path.isAbsolute(parts[0])) {
-      parts.unshift(process.cwd());
-    }
-    return path.join(...parts);
-  };
-
-  /**
    * Get next unique id. Format = `1716887172_000123` = unix stamp + underscore + sequence number inside this second.
    * @returns {string}
    */
@@ -1844,7 +1850,7 @@ const serverMain = async () => {
     r.setHeader("Cache-Control", "no-store");
 
     if (r.req.url === "/") {
-      r.setHeader("Content-Type", "text/html; charset=utf-8"); // agreement: don't use chained call like r.setHeader(xxx).end("whatever")
+      r.setHeader("Content-Type", MIME.html); // agreement: don't use chained call like r.setHeader(xxx).end("whatever")
       r.end(pageHtml(i18n, config.locale)); // agreement: use vanilla html+css+js, esm, @ts-check, jsdoc, get rid of ts transpile, node 22 added built-in ts but not at browser in the foreseeable future
       return;
     }
@@ -1852,13 +1858,12 @@ const serverMain = async () => {
     if (r.req.url === "/index.js") {
       const buffer = await fs.promises.readFile(import.meta.filename);
       const response = excludeImports(buffer.toString(), /^node:/);
-      r.setHeader("Content-Type", "text/javascript; charset=utf-8");
+      r.setHeader("Content-Type", MIME.js);
       r.end(response);
       return;
     }
 
     if (r.req.url === "/favicon.ico") {
-      r.setHeader("Content-Type", "image/png");
       r.end();
       return;
     }
@@ -1871,7 +1876,7 @@ const serverMain = async () => {
       const abortController = new AbortController();
       const tempPaths = /** @type {Set<string>} */ new Set();
       const promise = (async () => {
-        const indexJsTemp = solvePath(PATH_CACHE, nextId() + ".js");
+        const indexJsTemp = solvePath(PATH_DATA, "cache", nextId() + ".js");
         tempPaths.add(indexJsTemp);
         await download(
           request.url,
@@ -1884,7 +1889,8 @@ const serverMain = async () => {
           (await import(indexJsTemp)).default
         );
         const extensionDir = solvePath(
-          PATH_EXTENSIONS,
+          PATH_DATA,
+          "extensions",
           extension.id + "_" + extension.version
         );
         tempPaths.add(extensionDir);
@@ -1905,7 +1911,7 @@ const serverMain = async () => {
           else if (asset.kind === "tar-gzip") suffix = ".tar.gz";
           else var /** @type {never} */ _ = asset.kind; // exhaustiveness
           assert(suffix);
-          const assetTemp = solvePath(PATH_CACHE, nextId() + suffix);
+          const assetTemp = solvePath(PATH_DATA, "cache", nextId() + suffix);
           tempPaths.add(assetTemp);
           await download(
             asset.url,
@@ -1982,7 +1988,8 @@ const serverMain = async () => {
       /** @type {RemoveExtensionRequest} */
       const request = await readJson();
       const extensionDir = solvePath(
-        PATH_EXTENSIONS,
+        PATH_DATA,
+        "extensions",
         request.id + "_" + request.version
       );
       await fs.promises.rm(extensionDir, { recursive: true, force: true });
@@ -1993,30 +2000,19 @@ const serverMain = async () => {
     if (r.req.url === "/list-extensions") {
       /** @type {ListExtensionsResponse} */
       const response = [];
-      for (const entry of await fs.promises.readdir(PATH_EXTENSIONS)) {
-        const extensionIndexJs = solvePath(PATH_EXTENSIONS, entry, "index.js");
+      for (const { parentPath, name } of await fs.promises.readdir(
+        solvePath(PATH_DATA, "extensions"),
+        { withFileTypes: true }
+      )) {
+        const extensionIndexJs = solvePath(parentPath, name, "index.js");
         const extension = /** @type {Extension} */ (
           (await import(extensionIndexJs)).default
         );
-        assert(entry === extension.id + "_" + extension.version);
+        assert(name === extension.id + "_" + extension.version);
         response.push(extension); // function type fields like extension.action.ui is omitted in JSON.stringify, standard guaranteed
       }
-      r.setHeader("Content-Type", "application/json; charset=utf-8");
+      r.setHeader("Content-Type", MIME.json);
       r.end(JSON.stringify(response));
-      return;
-    }
-
-    if (r.req.url?.startsWith("/extensions/")) {
-      const relative = r.req.url.slice("/extensions/".length);
-      const path = solvePath(PATH_EXTENSIONS, relative);
-      if (relative.split("/")[1] === "index.js") {
-        const buffer = await fs.promises.readFile(path);
-        const response = excludeImports(buffer.toString(), /^node:/);
-        r.setHeader("Content-Type", "text/javascript; charset=utf-8");
-        r.end(response);
-      } else {
-        assert(false, "todo: url = " + r.req.url); // todo: mime guess and more?
-      }
       return;
     }
 
@@ -2027,7 +2023,8 @@ const serverMain = async () => {
       /** @type {RunActionRequest} */
       const request = await readJson();
       const extensionIndexJs = solvePath(
-        PATH_EXTENSIONS,
+        PATH_DATA,
+        "extensions",
         request.extensionId + "_" + request.extensionVersion,
         "index.js"
       );
@@ -2242,11 +2239,23 @@ const serverMain = async () => {
 
     if (r.req.url?.startsWith("/static/")) {
       const relative = r.req.url.slice("/static/".length);
-      const path = solvePath(relative);
-      const fileStream = fs.createReadStream(path).on("error", (error) => {
-        r.writeHead(400); // this endpoint is just used for testing, so visitor should ensure the url is valid
-        r.end(JSON.stringify(error)); // listen and write errors into response instead of panic
+      const filePath = solvePath(PATH_DATA, relative);
+      if (
+        relative.startsWith("extensions/") &&
+        relative.split("/")?.[2] === "index.js"
+      ) {
+        const buffer = await fs.promises.readFile(filePath);
+        const response = excludeImports(buffer.toString(), /^node:/);
+        r.setHeader("Content-Type", MIME.js);
+        r.end(response);
+        return;
+      }
+      const fileStream = fs.createReadStream(filePath);
+      await new Promise((resolve, reject) => {
+        fileStream.on("ready", resolve);
+        fileStream.on("error", (e) => reject(new Error(e.toString())));
       });
+      r.setHeader("Content-Type", MIME[path.extname(filePath).slice(1)]);
       fileStream.pipe(r);
       return;
     }
@@ -2259,9 +2268,12 @@ const serverMain = async () => {
     try {
       await requestHandler(r);
     } catch (error) {
+      console.warn({ recover: "requestHandler", date: new Date() });
       console.warn(error);
       try {
         r.writeHead(500); // if it's already called inside requestHandler(), the "can't set headers after they are sent" will be thrown
+      } catch (_) {} // just ignore errors here
+      try {
         r.end();
       } catch (_) {} // just ignore errors here
     }
