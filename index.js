@@ -1886,7 +1886,7 @@ const serverMain = async () => {
           (chunkSize) => (finished += chunkSize)
         );
         const extension = /** @type {Extension} */ (
-          (await import(indexJsTemp)).default
+          (await import("file://" + indexJsTemp)).default
         );
         const extensionDir = solvePath(
           PATH_DATA,
@@ -1945,6 +1945,7 @@ const serverMain = async () => {
               ],
               { env: { XZ_OPT: "-T0" } },
               (error) => {
+                // console.error(error) // --force-local // https://stackoverflow.com/a/37996249 // on windows msys2 this cause error
                 if (!error) return resolve(error);
                 if (asset.kind !== "zip") return reject(error);
                 assert(!asset.stripPath, "todo"); // todo: simulate tar --strip-components while using unzip
@@ -2006,7 +2007,7 @@ const serverMain = async () => {
       )) {
         const extensionIndexJs = solvePath(parentPath, name, "index.js");
         const extension = /** @type {Extension} */ (
-          (await import(extensionIndexJs)).default
+          (await import("file://" + extensionIndexJs)).default
         );
         assert(name === extension.id + "_" + extension.version);
         response.push(extension); // function type fields like extension.action.ui is omitted in JSON.stringify, standard guaranteed
@@ -2029,7 +2030,7 @@ const serverMain = async () => {
         "index.js"
       );
       const extension = /** @type {Extension} */ (
-        (await import(extensionIndexJs)).default
+        (await import("file://" + extensionIndexJs)).default
       );
       const action = extension.actions.find(
         (action) => action.id === request.actionId
