@@ -2253,7 +2253,7 @@ const serverMain = async () => {
       }
       const fileStream = fs.createReadStream(filePath);
       await new Promise((resolve, reject) => {
-        fileStream.on("ready", resolve);
+        fileStream.on("ready", () => resolve(fileStream));
         fileStream.on("error", (e) => reject(new Error(e.toString())));
       });
       r.setHeader("Content-Type", MIME[path.extname(filePath).slice(1)]);
