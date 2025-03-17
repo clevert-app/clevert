@@ -63,14 +63,19 @@ import child_process from "node:child_process";
 }} EntriesNumberSequence May be useful later.
 @typedef {{
   kind: "common-files";
-  entries?: {
-    inputFile: string,
-    outputFile: string;
-  }[];
+  mode: "dir";
   inputDir: string;
   outputDir: string;
   outputSuffix: string;
   outputExtension: string;
+} | {
+  kind: "common-files";
+  mode: "files";
+  inplace: boolean;
+  entries: {
+    input: string,
+    output?: string;
+  }[];
 }} EntriesCommonFiles The most common.
 @typedef {{
   kind: "custom";
@@ -380,6 +385,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     background-position-x: 0%;
   }
   label {
+    display: inline-block;
     line-height: 24px;
   }
   legend {
@@ -404,7 +410,8 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .home figure ~ button:not(:hover, :active),
   body > .home menu button:not(:hover, :active),
   body > .home > button.off:not(:hover, :active),
-  body > .top > button.off:not(:hover, :active) {
+  body > .top > button.off:not(:hover, :active),
+  body > .action > button.off:not(:hover, :active) {
     background: #0000;
   }
   button:hover,
@@ -577,9 +584,10 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     border-radius: 4px;
     transition: background-position-x 0.2s;
   }
-  body > .home > button {
+  body > .home > button,
+  body > .action > button {
     padding: 6px 12px;
-    margin-right: 4px;
+    margin: 0 4px 12px 0;
   }
   body > .home .separator {
     display: inline-block;
@@ -590,7 +598,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     gap: 6px;
     max-height: calc(100% - 38px);
     padding: 0;
-    margin: 12px 0 0;
+    margin: 0;
     overflow: auto;
     border-radius: 6px;
   }
@@ -631,6 +639,16 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     display: flex;
     flex-wrap: wrap;
     gap: 6px 12px;
+  }
+  body > .action > .entries.common-files ul {
+    margin: 0;
+    padding: 0;
+  }
+  body > .action > .entries.common-files li {
+    list-style: none;
+  }
+  body > .action > .entries.common-files li > :not(button) {
+    margin-right: 12px;
   }
   body > .action > .entries label > button::before {
     font-weight: bold;
@@ -1125,95 +1143,177 @@ const pageMain = async () => {
     assert(action !== undefined);
     $action.replaceChildren();
     let getEntries;
+    // todo: input-file-inplace
     if (action.kind === "common-files") {
+      /** @type {EntriesCommonFiles["mode"]} */
+      let mode = profile?.entries?.mode || "dir";
+
+      const $modeDir = document.createElement("button");
+      $action.appendChild($modeDir);
+      $modeDir.textContent = "Directory";
+      $modeDir.onclick = () => {
+        mode = "dir";
+        $modeDir.classList.remove("off");
+        $modeFiles.classList.add("off");
+        r$entries$dir();
+      };
+      if (mode !== "dir") $modeDir.classList.add("off");
+      const $modeFiles = document.createElement("button");
+      $action.appendChild($modeFiles);
+      $modeFiles.textContent = "Files";
+      $modeFiles.onclick = () => {
+        mode = "files";
+        $modeDir.classList.add("off");
+        $modeFiles.classList.remove("off");
+        r$entries$files();
+      };
+      if (mode !== "files") $modeFiles.classList.add("off");
+
+      // todo: dir and file selector without electron
+
       const $entries = document.createElement("form");
       $action.appendChild($entries);
       $entries.classList.add("entries");
+      $entries.classList.add("common-files");
       $entries.onsubmit = (e) => e.preventDefault();
+      const r$entries$dir = () => {
+        $entries.replaceChildren();
 
-      // todo: without electron
-
-      const $inputDirLabel = document.createElement("label");
-      $entries.appendChild($inputDirLabel);
-      $inputDirLabel.textContent = i18n.entriesInputDir();
-      const $inputDir = document.createElement("input");
-      $inputDirLabel.appendChild($inputDir);
-      $inputDir.value = profile.entries.inputDir ?? "";
-      const $inputDirButton = document.createElement("button");
-      $inputDirLabel.appendChild($inputDirButton);
-      $inputDirButton.onclick = async () => {
-        /** @type {ShowOpenDialogRequest} */
-        const request = { title: "Select Dir", properties: ["openDirectory"] };
-        /** @type {ShowOpenDialogResponse} */
-        const response = await fetch("/show-open-dialog", {
-          method: "POST",
-          body: JSON.stringify(request),
-        }).then((r) => r.json());
-        if (response.filePaths.length !== 0) {
-          $inputDir.value = response.filePaths[0];
-        }
-      };
-
-      const $outputDirLabel = document.createElement("label");
-      $entries.appendChild($outputDirLabel);
-      $outputDirLabel.textContent = i18n.entriesOutputDir();
-      const $outputDir = document.createElement("input");
-      $outputDirLabel.appendChild($outputDir);
-      $outputDir.value = profile.entries.outputDir ?? "";
-      const $outputDirButton = document.createElement("button");
-      $outputDirLabel.appendChild($outputDirButton);
-      $outputDirButton.onclick = async () => {
-        /** @type {ShowOpenDialogRequest} */
-        const request = { title: "Select Dir", properties: ["openDirectory"] };
-        /** @type {ShowOpenDialogResponse} */
-        const response = await fetch("/show-open-dialog", {
-          method: "POST",
-          body: JSON.stringify(request),
-        }).then((r) => r.json());
-        if (response.filePaths.length !== 0) {
-          $outputDir.value = response.filePaths[0];
-        }
-      };
-
-      const $outputSuffixLabel = document.createElement("label");
-      $entries.appendChild($outputSuffixLabel);
-      $outputSuffixLabel.textContent = i18n.entriesOutputSuffix();
-      const $outputSuffix = document.createElement("input");
-      $outputSuffixLabel.appendChild($outputSuffix);
-      $outputSuffix.value = profile.entries.outputSuffix ?? "";
-
-      const $outputExtension = document.createElement("fieldset");
-      $entries.appendChild($outputExtension);
-      const $outputExtensionLegend = document.createElement("legend");
-      $outputExtension.appendChild($outputExtensionLegend);
-      $outputExtensionLegend.textContent = i18n.entriesOutputExtension();
-      for (const outputExtension of profile.entries.outputExtensions) {
-        const $radioLabel = document.createElement("label");
-        $outputExtension.appendChild($radioLabel);
-        $radioLabel.textContent = outputExtension;
-        const $radio = document.createElement("input");
-        $radioLabel.insertBefore($radio, $radioLabel.firstChild);
-        $radio.type = "radio";
-        $radio.name = "output-extension";
-        $radio.value = outputExtension;
-        $radio.checked = profile.entries.outputExtension
-          ? profile.entries.outputExtension === outputExtension // is set in profile
-          : $outputExtensionLegend.nextSibling === $radioLabel; // is the first
-      }
-
-      getEntries = () => {
-        /** @type {EntriesCommonFiles} */
-        const entries = {
-          kind: "common-files",
-          inputDir: $inputDir.value,
-          outputDir: $outputDir.value,
-          outputSuffix: $outputSuffix.value,
-          outputExtension: /** @type {HTMLInputElement} */ (
-            $outputExtension.querySelector(":checked")
-          ).value,
+        const $inputDirLabel = document.createElement("label");
+        $entries.appendChild($inputDirLabel);
+        $inputDirLabel.textContent = i18n.entriesInputDir();
+        const $inputDir = document.createElement("input");
+        $inputDirLabel.appendChild($inputDir);
+        $inputDir.value = profile.entries.inputDir ?? "";
+        const $inputDirButton = document.createElement("button");
+        $inputDirLabel.appendChild($inputDirButton);
+        $inputDirButton.onclick = async () => {
+          /** @type {ShowOpenDialogRequest} */
+          const request = {
+            title: "Select Dir",
+            properties: ["openDirectory"],
+          };
+          /** @type {ShowOpenDialogResponse} */
+          const response = await fetch("/show-open-dialog", {
+            method: "POST",
+            body: JSON.stringify(request),
+          }).then((r) => r.json());
+          if (response.filePaths.length !== 0) {
+            $inputDir.value = response.filePaths[0];
+          }
         };
-        return entries;
+
+        const $outputDirLabel = document.createElement("label");
+        $entries.appendChild($outputDirLabel);
+        $outputDirLabel.textContent = i18n.entriesOutputDir();
+        const $outputDir = document.createElement("input");
+        $outputDirLabel.appendChild($outputDir);
+        $outputDir.value = profile.entries.outputDir ?? "";
+        const $outputDirButton = document.createElement("button");
+        $outputDirLabel.appendChild($outputDirButton);
+        $outputDirButton.onclick = async () => {
+          /** @type {ShowOpenDialogRequest} */
+          const request = {
+            title: "Select Dir",
+            properties: ["openDirectory"],
+          };
+          /** @type {ShowOpenDialogResponse} */
+          const response = await fetch("/show-open-dialog", {
+            method: "POST",
+            body: JSON.stringify(request),
+          }).then((r) => r.json());
+          if (response.filePaths.length !== 0) {
+            $outputDir.value = response.filePaths[0];
+          }
+        };
+
+        const $outputSuffixLabel = document.createElement("label");
+        $entries.appendChild($outputSuffixLabel);
+        $outputSuffixLabel.textContent = i18n.entriesOutputSuffix();
+        const $outputSuffix = document.createElement("input");
+        $outputSuffixLabel.appendChild($outputSuffix);
+        $outputSuffix.value = profile.entries.outputSuffix ?? "";
+
+        const $outputExtension = document.createElement("fieldset");
+        $entries.appendChild($outputExtension);
+        const $outputExtensionLegend = document.createElement("legend");
+        $outputExtension.appendChild($outputExtensionLegend);
+        $outputExtensionLegend.textContent = i18n.entriesOutputExtension();
+        for (const outputExtension of profile.entries.outputExtensions) {
+          const $radioLabel = document.createElement("label");
+          $outputExtension.appendChild($radioLabel);
+          $radioLabel.textContent = outputExtension;
+          const $radio = document.createElement("input");
+          $radioLabel.insertBefore($radio, $radioLabel.firstChild);
+          $radio.type = "radio";
+          $radio.name = "output-extension";
+          $radio.value = outputExtension;
+          $radio.checked = profile.entries.outputExtension
+            ? profile.entries.outputExtension === outputExtension // is set in profile
+            : $outputExtensionLegend.nextSibling === $radioLabel; // is the first
+        }
+
+        getEntries = () => {
+          /** @type {EntriesCommonFiles} */
+          const entries = {
+            kind: "common-files",
+            mode: "dir",
+            inputDir: $inputDir.value,
+            outputDir: $outputDir.value,
+            outputSuffix: $outputSuffix.value,
+            outputExtension: /** @type {HTMLInputElement} */ (
+              $outputExtension.querySelector(":checked")
+            ).value,
+          };
+          return entries;
+        };
       };
+      const r$entries$files = () => {
+        $entries.replaceChildren();
+        // todo: a list, can add/remove multi files
+        // | input(text) | output(text) | x |
+        // | input [btn] | output [btn] | v |
+        const $list = document.createElement("ul");
+        $entries.appendChild($list);
+        const newEntry = () => {
+          const $entry = document.createElement("li");
+          $list.appendChild($entry);
+          const $inputLabel = document.createElement("label");
+          $entry.appendChild($inputLabel);
+          const $input = document.createElement("input");
+          $inputLabel.appendChild($input);
+          $input.placeholder = "Input";
+          const $inputButton = document.createElement("button");
+          $inputLabel.appendChild($inputButton);
+          const $outputLabel = document.createElement("label");
+          $entry.appendChild($outputLabel);
+          const $output = document.createElement("input");
+          $outputLabel.appendChild($output);
+          $output.placeholder = "Output";
+          const $outputButton = document.createElement("button");
+          $outputLabel.appendChild($outputButton);
+          const $tailButton = document.createElement("button");
+          $entry.appendChild($tailButton);
+          $tailButton.textContent = "New";
+          $tailButton.onclick = () => {
+            newEntry();
+          };
+        };
+        newEntry();
+
+        getEntries = () => {
+          /** @type {EntriesCommonFiles} */
+          const entries = {
+            kind: "common-files",
+            mode: "files",
+            inplace: false,
+            entries: [],
+          };
+          return entries;
+        };
+      };
+      if (mode === "dir") r$entries$dir();
+      if (mode === "files") r$entries$files();
     } else if (action.kind === "custom") {
       getEntries = () => {
         assert(controller.entries);
@@ -1800,21 +1900,21 @@ const serverMain = async () => {
 
   /**
    * @param {RunActionRequest["entries"]} opts
-   * @returns {Promise<any>}
+   * @returns {Promise<any[]>}
    */
-  const genEntries = async (opts) => {
-    if (opts.kind === "common-files") {
-      if (opts.entries) {
-        assert(false, "todo");
-      }
+  const solveEntries = async (opts) => {
+    if (opts.kind === "common-files" && opts.mode === "dir") {
+      // if (opts.entries) {
+      //   assert(false, "todo");
+      // }
       const entries = [];
       const inputDir = solvePath(opts.inputDir);
       const outputDir = solvePath(opts.outputDir);
-      for (const v of await fs.promises.readdir(inputDir, {
+      for (const { parentPath, name } of await fs.promises.readdir(inputDir, {
         withFileTypes: true,
         recursive: true,
       })) {
-        const input = solvePath(v.parentPath, v.name);
+        const input = solvePath(parentPath, name);
         let output = path.relative(inputDir, input);
         if (opts.outputExtension) {
           const extname = path.extname(input); // includes the dot char
@@ -1824,14 +1924,17 @@ const serverMain = async () => {
           output += "." + opts.outputExtension;
         }
         output = solvePath(outputDir, output);
-        entries.push({
-          input: { main: [input] },
-          output: { main: [output] },
-        });
+        entries.push({ input, output });
       }
       return entries;
+    } else if (opts.kind === "common-files" && opts.mode === "files") {
+      // question: what about the usage of `.inplace` ?
+      return opts.entries;
+    } else if (opts.kind === "custom") {
+      return opts.entries;
+    } else {
+      assert(false, "todo");
     }
-    assert(false, "todo");
   };
 
   /**
@@ -2036,7 +2139,7 @@ const serverMain = async () => {
         (action) => action.id === request.actionId
       );
       assert(action !== undefined, "action not found");
-      const entries = await genEntries(request.entries);
+      const entries = await solveEntries(request.entries);
       const amount = entries.length;
       let finished = 0;
       const runningControllers = /** @type {Set<ActionExecuteController>} */ (
@@ -2243,7 +2346,7 @@ const serverMain = async () => {
       const filePath = solvePath(PATH_DATA, relative);
       if (
         relative.startsWith("extensions/") &&
-        relative.split("/")?.[2] === "index.js"
+        relative.split("/")?.[2] === "index.js" // match request path like `/static/extensions/id_1.2.3/index.json`
       ) {
         const buffer = await fs.promises.readFile(filePath);
         const response = excludeImports(buffer.toString(), /^node:/);

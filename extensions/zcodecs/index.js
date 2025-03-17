@@ -188,8 +188,8 @@ export default {
       execute: (profile, { input, output }) => {
         const child = child_process.spawn(consts.exe, [
           "cjxl",
-          input.main[0],
-          output.main[0],
+          input,
+          output,
           "--quality",
           String(profile.quality),
           "--effort",
