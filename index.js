@@ -638,11 +638,14 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .action > .entries {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 12px;
+    gap: 12px;
   }
   body > .action > .entries.common-files ul {
     margin: 0;
     padding: 0;
+    width: 100%;
+    max-height: calc(50vh - 200px);
+    overflow: auto;
   }
   body > .action > .entries.common-files li {
     list-style: none;
@@ -1189,10 +1192,7 @@ const pageMain = async () => {
         $inputDirLabel.appendChild($inputDirButton);
         $inputDirButton.onclick = async () => {
           /** @type {ShowOpenDialogRequest} */
-          const request = {
-            title: "Select Dir",
-            properties: ["openDirectory"],
-          };
+          const request = { properties: ["openDirectory"] };
           /** @type {ShowOpenDialogResponse} */
           const response = await fetch("/show-open-dialog", {
             method: "POST",
@@ -1213,10 +1213,7 @@ const pageMain = async () => {
         $outputDirLabel.appendChild($outputDirButton);
         $outputDirButton.onclick = async () => {
           /** @type {ShowOpenDialogRequest} */
-          const request = {
-            title: "Select Dir",
-            properties: ["openDirectory"],
-          };
+          const request = { properties: ["openDirectory"] };
           /** @type {ShowOpenDialogResponse} */
           const response = await fetch("/show-open-dialog", {
             method: "POST",
@@ -1275,31 +1272,65 @@ const pageMain = async () => {
         // | input [btn] | output [btn] | v |
         const $list = document.createElement("ul");
         $entries.appendChild($list);
-        const newEntry = () => {
+        const $add = document.createElement("button");
+        $entries.appendChild($add);
+        $add.textContent = "Add";
+        $add.onclick = () => {
           const $entry = document.createElement("li");
           $list.appendChild($entry);
           const $inputLabel = document.createElement("label");
           $entry.appendChild($inputLabel);
           const $input = document.createElement("input");
           $inputLabel.appendChild($input);
-          $input.placeholder = "Input";
+          $input.placeholder = "Input file";
           const $inputButton = document.createElement("button");
           $inputLabel.appendChild($inputButton);
+          $inputButton.onclick = async () => {
+            /** @type {ShowOpenDialogRequest} */
+            const request = { properties: ["openFile"] };
+            /** @type {ShowOpenDialogResponse} */
+            const response = await fetch("/show-open-dialog", {
+              method: "POST",
+              body: JSON.stringify(request),
+            }).then((r) => r.json());
+            if (response.filePaths.length) {
+              $input.value = response.filePaths[0];
+            }
+          };
           const $outputLabel = document.createElement("label");
           $entry.appendChild($outputLabel);
           const $output = document.createElement("input");
           $outputLabel.appendChild($output);
-          $output.placeholder = "Output";
+          $output.placeholder = "Output file";
           const $outputButton = document.createElement("button");
           $outputLabel.appendChild($outputButton);
-          const $tailButton = document.createElement("button");
-          $entry.appendChild($tailButton);
-          $tailButton.textContent = "New";
-          $tailButton.onclick = () => {
-            newEntry();
+          $outputButton.onclick = async () => {
+            /** @type {ShowSaveDialogRequest} */
+            const request = { properties: [] };
+            /** @type {ShowSaveDialogResponse} */
+            const response = await fetch("/show-save-dialog", {
+              method: "POST",
+              body: JSON.stringify(request),
+            }).then((r) => r.json());
+            if (response.filePath) {
+              $output.value = response.filePath;
+            }
+          };
+          const $removeButton = document.createElement("button");
+          $entry.appendChild($removeButton);
+          $removeButton.textContent = "✕";
+          $removeButton.onclick = () => {
+            $entry.remove();
           };
         };
-        newEntry();
+        $add.click();
+        const $clear = document.createElement("button");
+        $entries.appendChild($clear);
+        $clear.textContent = "Clear";
+        $clear.onclick = () => {
+          $list.replaceChildren();
+          $add.click();
+        };
 
         getEntries = () => {
           /** @type {EntriesCommonFiles} */
@@ -1899,14 +1930,27 @@ const serverMain = async () => {
   };
 
   /**
+   * @param {string} script
+   * @returns {Promise<string>}
+   */
+  const powershellEval = (script) => {
+    assert(process.platform === "win32");
+    const { promise, resolve, reject } = Promise.withResolvers();
+    child_process.execFile(
+      "powershell.exe",
+      ["-Command", script],
+      (error, stdout, stderr) =>
+        error ? reject(error) : resolve(stdout.trim())
+    );
+    return promise;
+  };
+
+  /**
    * @param {RunActionRequest["entries"]} opts
    * @returns {Promise<any[]>}
    */
   const solveEntries = async (opts) => {
     if (opts.kind === "common-files" && opts.mode === "dir") {
-      // if (opts.entries) {
-      //   assert(false, "todo");
-      // }
       const entries = [];
       const inputDir = solvePath(opts.inputDir);
       const outputDir = solvePath(opts.outputDir);
@@ -2292,21 +2336,72 @@ const serverMain = async () => {
     if (r.req.url === "/show-open-dialog") {
       /** @type {ShowOpenDialogRequest} */
       const request = await readJson();
-      const electron = await electronImport;
-      /** @type {ShowOpenDialogResponse} */
-      const response = await electron.dialog.showOpenDialog(request);
-      r.end(JSON.stringify(response));
-      return;
+      try {
+        const electron = await electronImport;
+        /** @type {ShowOpenDialogResponse} */
+        const response = await electron.dialog.showOpenDialog(request);
+        r.end(JSON.stringify(response));
+        return; // early return to reduce indent
+      } catch (_) {} /* not electron, catch and ignore, fallback to simulate the electron api */
+      if (process.platform === "win32") {
+        /** @type {ShowOpenDialogResponse} */
+        const response = { canceled: false, filePaths: [] };
+        assert(
+          !request.properties?.includes("multiSelections"),
+          "the multiSelections is not implemented"
+        );
+        // https://stackoverflow.com/a/216769 // https://stackoverflow.com/a/66187224/
+        if (request.properties?.includes("openDirectory")) {
+          const s = `Add-Type -TypeDefinition @"\nusing System;using System.Runtime.InteropServices;public enum FOS:uint{FOS_PICKFOLDERS=0x20,FOS_FORCEFILESYSTEM=0x40,FOS_ALLOWMULTISELECT=0x200,FOS_PATHMUSTEXIST=0x800,FOS_FILEMUSTEXIST=0x1000,FOS_CREATEPROMPT=0x2000,FOS_SHAREAWARE=0x4000}public enum SIGDN:uint{SIGDN_FILESYSPATH=0x80058000}[ComImport][Guid("42f85136-db7e-439c-85f1-e4075d135fc8")][InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface IFileDialog{[PreserveSig]int Show(IntPtr parent);void SetFileTypes(uint cFileTypes,IntPtr rgFilterSpec);void SetFileTypeIndex(uint iFileType);void GetFileTypeIndex(out uint piFileType);void Advise(IntPtr pfde);void Unadvise(uint dwCookie);void SetOptions(FOS fos);void GetOptions(out FOS pfos);void SetDefaultFolder(IntPtr psi);void SetFolder(IntPtr psi);void GetFolder(out IntPtr ppsi);void GetCurrentSelection(out IntPtr ppsi);void SetFileName([MarshalAs(UnmanagedType.LPWStr)]string pszName);void GetFileName(out IntPtr pszName);void SetTitle([MarshalAs(UnmanagedType.LPWStr)]string pszTitle);void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)]string pszText);void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)]string pszLabel);void GetResult(out IShellItem ppsi);}[ComImport][Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]class FileOpenDialogClass{}[ComImport][Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe")][InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface IShellItem{void BindToHandler(IntPtr pbc,ref Guid bhid,ref Guid riid,out IntPtr ppv);void GetParent(out IShellItem ppsi);void GetDisplayName(SIGDN sigdnName,out IntPtr ppszName);}public class DirPicker{public static string Open(){var d=(IFileDialog)new FileOpenDialogClass();d.SetOptions(FOS.FOS_PICKFOLDERS|FOS.FOS_FORCEFILESYSTEM);if(d.Show(IntPtr.Zero)!=0)return null;IShellItem item;d.GetResult(out item);if(item==null)return null;IntPtr pszName;item.GetDisplayName(SIGDN.SIGDN_FILESYSPATH,out pszName);return Marshal.PtrToStringUni(pszName);}}\n"@ -ReferencedAssemblies System.Runtime.InteropServices;$p=[DirPicker]::Open();Write-Output $p`;
+          const out = await powershellEval(s);
+          if (out) response.filePaths.push(out);
+        } else {
+          let s = `Add-Type -AssemblyName System.Windows.Forms; $b = New-Object System.Windows.Forms.OpenFileDialog; `;
+          if (request.title) s += `$b.Description = '${request.title}'; `;
+          const remarks = (request.filters || []).map((filter) => {
+            const patterns = filter.extensions.map((v) => `*.${v}`);
+            return `${filter.name}|${patterns.join(";")}`;
+          });
+          s += `$b.Filter = '${remarks.join("|")}'; `;
+          s += "$b.ShowDialog() | Out-Null; Write-Output $b.FileName; ";
+          const out = await powershellEval(s);
+          if (out) response.filePaths.push(out);
+        }
+        if (response.filePaths.length === 0) response.canceled = true;
+        r.end(JSON.stringify(response));
+        return;
+      } else {
+        assert(false, "todo, more platforms");
+      }
     }
 
     if (r.req.url === "/show-save-dialog") {
       /** @type {ShowSaveDialogRequest} */
       const request = await readJson();
-      const electron = await electronImport;
-      /** @type {ShowSaveDialogResponse} */
-      const response = await electron.dialog.showSaveDialog(request);
-      r.end(JSON.stringify(response));
-      return;
+      try {
+        const electron = await electronImport;
+        /** @type {ShowSaveDialogResponse} */
+        const response = await electron.dialog.showSaveDialog(request);
+        r.end(JSON.stringify(response));
+        return; // early return to reduce indent
+      } catch (_) {} /* not electron, catch and ignore, fallback to simulate the electron api */
+      if (process.platform === "win32") {
+        /** @type {ShowSaveDialogResponse} */
+        const response = { canceled: false, filePath: "" };
+        let s = `Add-Type -AssemblyName System.Windows.Forms; $b = New-Object System.Windows.Forms.SaveFileDialog; `;
+        if (request.title) s += `$b.Description = '${request.title}'; `;
+        const remarks = (request.filters || []).map((filter) => {
+          const patterns = filter.extensions.map((v) => `*.${v}`);
+          return `${filter.name}|${patterns.join(";")}`;
+        });
+        s += `$b.Filter = '${remarks.join("|")}'; `;
+        s += "$b.ShowDialog() | Out-Null; Write-Output $b.FileName; ";
+        const out = await powershellEval(s);
+        if (out) response.filePath = out;
+        else response.canceled = true;
+        r.end(JSON.stringify(response));
+        return;
+      }
     }
 
     if (r.req.url === "/list-dir") {
