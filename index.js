@@ -195,6 +195,8 @@ const i18nRes = (() => {
     homeMenuDelete: () => "Delete",
     homeMenuInfo: () => "Info",
     homeMoreOperations: () => "More operations",
+    entriesModeDir: () => "Directory mode",
+    entriesModeFiles: () => "Files mode",
     entriesInputDir: () => "Input directory",
     entriesOutputDir: () => "Output directory",
     entriesOutputSuffix: () => "Output suffix",
@@ -231,6 +233,8 @@ const i18nRes = (() => {
     homeMenuDelete: () => "删除",
     homeMenuInfo: () => "详细信息",
     homeMoreOperations: () => "更多操作",
+    entriesModeDir: () => "文件夹模式",
+    entriesModeFiles: () => "文件模式",
     entriesInputDir: () => "输入文件夹",
     entriesOutputDir: () => "输出文件夹",
     entriesOutputSuffix: () => "输出文件名后缀",
@@ -635,22 +639,23 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .market > input {
     margin-right: 4px;
   }
-  body > .action > .entries {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
+  body > .action > .entries.common-files > * {
+    margin: 0 12px 6px 0;
+  }
+  body > .action > .entries.common-files > button {
+    margin: 0 4px 4px 0;
   }
   body > .action > .entries.common-files ul {
+    width: fit-content;
     margin: 0;
     padding: 0;
-    width: 100%;
     max-height: calc(50vh - 200px);
     overflow: auto;
   }
   body > .action > .entries.common-files li {
     list-style: none;
   }
-  body > .action > .entries.common-files li > :not(button) {
+  body > .action > .entries.common-files li > * {
     margin-right: 12px;
   }
   body > .action > .entries label > button::before {
@@ -680,7 +685,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .action fieldset,
   body > .settings fieldset {
-    display: grid;
+    display: inline-grid;
     gap: 4px;
     padding: 0;
     margin: 0;
@@ -1153,7 +1158,7 @@ const pageMain = async () => {
 
       const $modeDir = document.createElement("button");
       $action.appendChild($modeDir);
-      $modeDir.textContent = "Directory";
+      $modeDir.textContent = i18n.entriesModeDir();
       $modeDir.onclick = () => {
         mode = "dir";
         $modeDir.classList.remove("off");
@@ -1163,7 +1168,7 @@ const pageMain = async () => {
       if (mode !== "dir") $modeDir.classList.add("off");
       const $modeFiles = document.createElement("button");
       $action.appendChild($modeFiles);
-      $modeFiles.textContent = "Files";
+      $modeFiles.textContent = i18n.entriesModeFiles();
       $modeFiles.onclick = () => {
         mode = "files";
         $modeDir.classList.add("off");
@@ -1193,14 +1198,14 @@ const pageMain = async () => {
         $inputDirButton.onclick = async () => {
           /** @type {ShowOpenDialogRequest} */
           const request = { properties: ["openDirectory"] };
+          if ($inputDir.value) request.defaultPath = $inputDir.value;
           /** @type {ShowOpenDialogResponse} */
           const response = await fetch("/show-open-dialog", {
             method: "POST",
             body: JSON.stringify(request),
           }).then((r) => r.json());
-          if (response.filePaths.length !== 0) {
+          if (response.filePaths.length)
             $inputDir.value = response.filePaths[0];
-          }
         };
 
         const $outputDirLabel = document.createElement("label");
@@ -1214,14 +1219,14 @@ const pageMain = async () => {
         $outputDirButton.onclick = async () => {
           /** @type {ShowOpenDialogRequest} */
           const request = { properties: ["openDirectory"] };
+          if ($outputDir.value) request.defaultPath = $outputDir.value;
           /** @type {ShowOpenDialogResponse} */
           const response = await fetch("/show-open-dialog", {
             method: "POST",
             body: JSON.stringify(request),
           }).then((r) => r.json());
-          if (response.filePaths.length !== 0) {
+          if (response.filePaths.length)
             $outputDir.value = response.filePaths[0];
-          }
         };
 
         const $outputSuffixLabel = document.createElement("label");
@@ -1267,11 +1272,7 @@ const pageMain = async () => {
       };
       const r$entries$files = () => {
         $entries.replaceChildren();
-        // todo: a list, can add/remove multi files
-        // | input(text) | output(text) | x |
-        // | input [btn] | output [btn] | v |
-        const $list = document.createElement("ul");
-        $entries.appendChild($list);
+
         const $add = document.createElement("button");
         $entries.appendChild($add);
         $add.textContent = "Add";
@@ -1288,14 +1289,13 @@ const pageMain = async () => {
           $inputButton.onclick = async () => {
             /** @type {ShowOpenDialogRequest} */
             const request = { properties: ["openFile"] };
+            if ($input.value) request.defaultPath = $input.value;
             /** @type {ShowOpenDialogResponse} */
             const response = await fetch("/show-open-dialog", {
               method: "POST",
               body: JSON.stringify(request),
             }).then((r) => r.json());
-            if (response.filePaths.length) {
-              $input.value = response.filePaths[0];
-            }
+            if (response.filePaths.length) $input.value = response.filePaths[0];
           };
           const $outputLabel = document.createElement("label");
           $entry.appendChild($outputLabel);
@@ -1307,14 +1307,17 @@ const pageMain = async () => {
           $outputButton.onclick = async () => {
             /** @type {ShowSaveDialogRequest} */
             const request = { properties: [] };
+            if ($output.value) request.defaultPath = $output.value;
+            if (profile.entries?.outputExtensions) {
+              const toFilter = (v) => ({ name: v, extensions: [v] });
+              request.filters = profile.entries.outputExtensions.map(toFilter);
+            }
             /** @type {ShowSaveDialogResponse} */
             const response = await fetch("/show-save-dialog", {
               method: "POST",
               body: JSON.stringify(request),
             }).then((r) => r.json());
-            if (response.filePath) {
-              $output.value = response.filePath;
-            }
+            if (response.filePath) $output.value = response.filePath;
           };
           const $removeButton = document.createElement("button");
           $entry.appendChild($removeButton);
@@ -1323,7 +1326,6 @@ const pageMain = async () => {
             $entry.remove();
           };
         };
-        $add.click();
         const $clear = document.createElement("button");
         $entries.appendChild($clear);
         $clear.textContent = "Clear";
@@ -1331,6 +1333,9 @@ const pageMain = async () => {
           $list.replaceChildren();
           $add.click();
         };
+        const $list = document.createElement("ul");
+        $entries.appendChild($list);
+        $add.click();
 
         getEntries = () => {
           /** @type {EntriesCommonFiles} */
@@ -1939,8 +1944,7 @@ const serverMain = async () => {
     child_process.execFile(
       "powershell.exe",
       ["-Command", script],
-      (error, stdout, stderr) =>
-        error ? reject(error) : resolve(stdout.trim())
+      (e, stdout, stderr) => (e ? reject(e) : resolve(stdout))
     );
     return promise;
   };
@@ -2352,18 +2356,22 @@ const serverMain = async () => {
         );
         // https://stackoverflow.com/a/216769 // https://stackoverflow.com/a/66187224/
         if (request.properties?.includes("openDirectory")) {
-          const s = `Add-Type -TypeDefinition @"\nusing System;using System.Runtime.InteropServices;public enum FOS:uint{FOS_PICKFOLDERS=0x20,FOS_FORCEFILESYSTEM=0x40,FOS_ALLOWMULTISELECT=0x200,FOS_PATHMUSTEXIST=0x800,FOS_FILEMUSTEXIST=0x1000,FOS_CREATEPROMPT=0x2000,FOS_SHAREAWARE=0x4000}public enum SIGDN:uint{SIGDN_FILESYSPATH=0x80058000}[ComImport][Guid("42f85136-db7e-439c-85f1-e4075d135fc8")][InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface IFileDialog{[PreserveSig]int Show(IntPtr parent);void SetFileTypes(uint cFileTypes,IntPtr rgFilterSpec);void SetFileTypeIndex(uint iFileType);void GetFileTypeIndex(out uint piFileType);void Advise(IntPtr pfde);void Unadvise(uint dwCookie);void SetOptions(FOS fos);void GetOptions(out FOS pfos);void SetDefaultFolder(IntPtr psi);void SetFolder(IntPtr psi);void GetFolder(out IntPtr ppsi);void GetCurrentSelection(out IntPtr ppsi);void SetFileName([MarshalAs(UnmanagedType.LPWStr)]string pszName);void GetFileName(out IntPtr pszName);void SetTitle([MarshalAs(UnmanagedType.LPWStr)]string pszTitle);void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)]string pszText);void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)]string pszLabel);void GetResult(out IShellItem ppsi);}[ComImport][Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]class FileOpenDialogClass{}[ComImport][Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe")][InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface IShellItem{void BindToHandler(IntPtr pbc,ref Guid bhid,ref Guid riid,out IntPtr ppv);void GetParent(out IShellItem ppsi);void GetDisplayName(SIGDN sigdnName,out IntPtr ppszName);}public class DirPicker{public static string Open(){var d=(IFileDialog)new FileOpenDialogClass();d.SetOptions(FOS.FOS_PICKFOLDERS|FOS.FOS_FORCEFILESYSTEM);if(d.Show(IntPtr.Zero)!=0)return null;IShellItem item;d.GetResult(out item);if(item==null)return null;IntPtr pszName;item.GetDisplayName(SIGDN.SIGDN_FILESYSPATH,out pszName);return Marshal.PtrToStringUni(pszName);}}\n"@ -ReferencedAssemblies System.Runtime.InteropServices;$p=[DirPicker]::Open();Write-Output $p`;
-          const out = await powershellEval(s);
+          const s = `Add-Type -TypeDefinition @"\nusing System;using System.Runtime.InteropServices;public enum FOS:uint{FOS_PICKFOLDERS=0x20,FOS_FORCEFILESYSTEM=0x40,FOS_ALLOWMULTISELECT=0x200,FOS_PATHMUSTEXIST=0x800,FOS_FILEMUSTEXIST=0x1000,FOS_CREATEPROMPT=0x2000,FOS_SHAREAWARE=0x4000}public enum SIGDN:uint{SIGDN_FILESYSPATH=0x80058000}[ComImport][Guid("42f85136-db7e-439c-85f1-e4075d135fc8")][InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface IFileDialog{[PreserveSig]int Show(IntPtr parent);void SetFileTypes(uint cFileTypes,IntPtr rgFilterSpec);void SetFileTypeIndex(uint iFileType);void GetFileTypeIndex(out uint piFileType);void Advise(IntPtr pfde);void Unadvise(uint dwCookie);void SetOptions(FOS fos);void GetOptions(out FOS pfos);void SetDefaultFolder(IntPtr psi);void SetFolder(IntPtr psi);void GetFolder(out IntPtr ppsi);void GetCurrentSelection(out IntPtr ppsi);void SetFileName([MarshalAs(UnmanagedType.LPWStr)]string pszName);void GetFileName(out IntPtr pszName);void SetTitle([MarshalAs(UnmanagedType.LPWStr)]string pszTitle);void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)]string pszText);void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)]string pszLabel);void GetResult(out IShellItem ppsi);}[ComImport][Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]class FileOpenDialogClass{}[ComImport][Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe")][InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]interface IShellItem{void BindToHandler(IntPtr pbc,ref Guid bhid,ref Guid riid,out IntPtr ppv);void GetParent(out IShellItem ppsi);void GetDisplayName(SIGDN sigdnName,out IntPtr ppszName);}public class DirPicker{public static string Open(){var d=(IFileDialog)new FileOpenDialogClass();d.SetOptions(FOS.FOS_PICKFOLDERS|FOS.FOS_FORCEFILESYSTEM);if(d.Show(IntPtr.Zero)!=0)return null;IShellItem item;d.GetResult(out item);if(item==null)return null;IntPtr pszName;item.GetDisplayName(SIGDN.SIGDN_FILESYSPATH,out pszName);return Marshal.PtrToStringUni(pszName);}}\n"@ -ReferencedAssemblies System.Runtime.InteropServices;$p=[DirPicker]::Open();if($p){ $v = [Text.Encoding]::UTF8.GetBytes($p); [Console]::OpenStandardOutput().Write($v, 0, $v.Length); }`;
+          const out = await powershellEval(s); // sometimes the opened dialog will not get focus, in my machine with windows + vscode terminal + cmd.exe will trigger this bug, but with msys2 bash it works fine
           if (out) response.filePaths.push(out);
         } else {
           let s = `Add-Type -AssemblyName System.Windows.Forms; $b = New-Object System.Windows.Forms.OpenFileDialog; `;
           if (request.title) s += `$b.Description = '${request.title}'; `;
+          if (request.defaultPath) {
+            const parsed = path.parse(request.defaultPath);
+            s += `$b.InitialDirectory = '${parsed.dir}'; $b.FileName = '${parsed.base}'; `;
+          }
           const remarks = (request.filters || []).map((filter) => {
             const patterns = filter.extensions.map((v) => `*.${v}`);
             return `${filter.name}|${patterns.join(";")}`;
           });
           s += `$b.Filter = '${remarks.join("|")}'; `;
-          s += "$b.ShowDialog() | Out-Null; Write-Output $b.FileName; ";
+          s += `if ($b.ShowDialog() -eq 1) { $v = [Text.Encoding]::UTF8.GetBytes($b.FileName); [Console]::OpenStandardOutput().Write($v, 0, $v.Length); } `;
           const out = await powershellEval(s);
           if (out) response.filePaths.push(out);
         }
@@ -2390,12 +2398,16 @@ const serverMain = async () => {
         const response = { canceled: false, filePath: "" };
         let s = `Add-Type -AssemblyName System.Windows.Forms; $b = New-Object System.Windows.Forms.SaveFileDialog; `;
         if (request.title) s += `$b.Description = '${request.title}'; `;
+        if (request.defaultPath) {
+          const parsed = path.parse(request.defaultPath);
+          s += `$b.InitialDirectory = '${parsed.dir}'; $b.FileName = '${parsed.base}'; `;
+        }
         const remarks = (request.filters || []).map((filter) => {
           const patterns = filter.extensions.map((v) => `*.${v}`);
           return `${filter.name}|${patterns.join(";")}`;
         });
         s += `$b.Filter = '${remarks.join("|")}'; `;
-        s += "$b.ShowDialog() | Out-Null; Write-Output $b.FileName; ";
+        s += `if ($b.ShowDialog() -eq 1) { $v = [Text.Encoding]::UTF8.GetBytes($b.FileName); [Console]::OpenStandardOutput().Write($v, 0, $v.Length); } `;
         const out = await powershellEval(s);
         if (out) response.filePath = out;
         else response.canceled = true;
