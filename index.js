@@ -647,6 +647,8 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .action > .entries.common-files ul {
     width: fit-content;
+    max-width: 100%;
+    white-space: nowrap;
     margin: 0;
     padding: 0;
     max-height: calc(50vh - 200px);
@@ -657,6 +659,10 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .action > .entries.common-files li > * {
     margin-right: 12px;
+  }
+  body > .action > .entries.common-files li input {
+    width: calc(50vw - 120px);
+    max-width: 320px;
   }
   body > .action > .entries label > button::before {
     font-weight: bold;
