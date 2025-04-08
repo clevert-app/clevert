@@ -1595,6 +1595,9 @@ const pageMain = async () => {
   {
     $toHome.click();
   }
+
+  const electron = /** @type {Electron.Renderer} */ (globalThis.electron);
+  // electron.webUtils.getPathForFile // https://www.electronjs.org/docs/latest/tutorial/native-file-drag-drop/
 };
 
 const serverMain = async () => {
@@ -1722,7 +1725,7 @@ const serverMain = async () => {
         title: i18n.title(),
         autoHideMenuBar: true,
         backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
-        webPreferences: { sandbox: false, spellcheck: false },
+        webPreferences: { sandbox: false, spellcheck: false, preload },
         width: config.windowWidth, // only (width,height), no (x,y), see https://kkocdko.site/post/202409161747
         height: config.windowHeight,
       });
@@ -1739,7 +1742,7 @@ const serverMain = async () => {
       win.loadURL("http://127.0.0.1:" + (await serverPort.promise));
     };
     app.whenReady().then(async () => {
-      await sleep(0); // workaround to reduce flicker in linux, see https://github.com/electron/electron/issues/42523#issuecomment-2354912311
+      await preloadPromise;
       createWindow();
       app.on("activate", () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -1751,8 +1754,12 @@ const serverMain = async () => {
       if (process.platform !== "darwin") {
         await beforeQuit();
         app.quit(); // https://github.com/electron/electron/blob/v32.1.0/docs/tutorial/quick-start.md#recap
+        // process.exit(); // on windows we need this?
       }
     });
+    const preload = solvePath(PATH_DATA, "preload.mjs"); // because of https://www.electronjs.org/docs/latest/tutorial/esm , see also #14012 #28981
+    const preloadData = `import{contextBridge,webUtils}from"electron";contextBridge.exposeInMainWorld("electron",{webUtils})`;
+    const preloadPromise = fs.promises.writeFile(preload, preloadData);
   });
   if (!process?.versions?.electron || process?.env?.ELECTRON_RUN_AS_NODE) {
     electronRun.catch(() => {}); // ignore errors if not in electron
