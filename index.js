@@ -626,9 +626,18 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     margin: 0;
     line-height: 19px;
   }
-  body > .home figure ~ button::before {
-    font-weight: bold;
-    content: "···";
+  body > .home figure ~ button::before,
+  body > .action > .entries label > button::before {
+    clip-path: path(
+      "m1.6,5.4 a1.6,1.6,0,1,0,.01,0 m5.4,0 a1.6,1.6,0,1,0,.01,0 m5.4,0 a1.6,1.6,0,1,0,.01,0"
+    );
+    display: block;
+    width: 14px;
+    height: 14px;
+    margin: 0 auto;
+    content: "";
+    background: var(--fg);
+    opacity: 0.9;
   }
   body > .home menu {
     position: absolute;
@@ -648,11 +657,11 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .action > .entries.common-files ul {
     width: fit-content;
     max-width: 100%;
-    white-space: nowrap;
-    margin: 0;
-    padding: 0;
     max-height: calc(50vh - 200px);
+    padding: 0;
+    margin: 0;
     overflow: auto;
+    white-space: nowrap;
   }
   body > .action > .entries.common-files li {
     list-style: none;
@@ -664,10 +673,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     width: calc(50vw - 120px);
     max-width: 320px;
   }
-  body > .action > .entries label > button::before {
-    font-weight: bold;
-    content: "···";
-  }
+
   body > .action > .root {
     margin-top: 12px;
     margin-bottom: 12px;
