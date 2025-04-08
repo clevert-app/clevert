@@ -331,6 +331,9 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
       animation-iteration-count: 1 !important;
     }
   }
+  * {
+    position: relative;
+  }
   :focus {
     outline: none; /* disable all outlines as many sites do, users who need key nav will use extensions themselves */
   }
@@ -391,6 +394,19 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   label {
     display: inline-block;
     line-height: 24px;
+    transition: opacity 0.2s;
+  }
+  label.drop-hint::after {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    content: "Drop here";
+    background: var(--bg4);
+    border: 2px dashed;
+    border-radius: 6px;
   }
   legend {
     padding: 0 0 2px;
@@ -1296,6 +1312,27 @@ const pageMain = async () => {
           const $input = document.createElement("input");
           $inputLabel.appendChild($input);
           $input.placeholder = "Input file";
+
+          // Add drag and drop event listeners
+          $inputLabel.classList.add("drop-hint");
+          $inputLabel.ondragover = $inputLabel.ondragenter = (e) => {
+            e.preventDefault();
+            $inputLabel.classList.add("drop-hint");
+          };
+          $inputLabel.ondragleave = (e) => {
+            e.preventDefault();
+            $inputLabel.classList.remove("drop-hint");
+          };
+          $inputLabel.ondrop = (e) => {
+            console.log("drop", e);
+            e.preventDefault();
+            $inputLabel.classList.remove("drop-hint");
+            if (e.dataTransfer?.files.length && electron) {
+              const file = e.dataTransfer.files[0];
+              $input.value = electron.webUtils.getPathForFile(file);
+            }
+          };
+
           const $inputButton = document.createElement("button");
           $inputLabel.appendChild($inputButton);
           $inputButton.onclick = async () => {
@@ -1724,7 +1761,7 @@ const serverMain = async () => {
 
   const electronRun = electronImport.then(async (electron) => {
     const { app, BrowserWindow, nativeTheme, screen } = electron; // agreement: keep electron optional, as a simple webview, users can choose node + browser
-    app.commandLine.appendSwitch("no-sandbox"); // cause devtools error /dev/shm ... on linux
+    // app.commandLine.appendSwitch("no-sandbox"); // cause devtools error /dev/shm ... on linux
     app.commandLine.appendSwitch("disable-gpu-sandbox");
     const createWindow = async () => {
       const win = new BrowserWindow({
