@@ -178,6 +178,7 @@ const i18nRes = (() => {
   const enus = {
     nativeName: () => "English", // https://github.com/chromium/chromium/raw/refs/tags/133.0.6920.1/third_party/google-closure-library/closure/goog/locale/nativenameconstants.js
     title: () => "Clevert - Universal file converter platform",
+    dropHint: () => "Drop here",
     toTasks: () => "Tasks",
     toHome: () => "Home",
     toMarket: () => "Market",
@@ -216,6 +217,7 @@ const i18nRes = (() => {
   const zhcn = {
     nativeName: () => "中文（简体）",
     title: () => "Clevert - 通用的文件转换平台",
+    dropHint: () => "拖放到这里",
     toTasks: () => "任务",
     toHome: () => "主页",
     toMarket: () => "商店",
@@ -403,7 +405,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    content: "Drop here";
+    content: "${i18n.dropHint()}";
     background: var(--bg4);
     border: 2px dashed;
     border-radius: 6px;
@@ -1218,6 +1220,19 @@ const pageMain = async () => {
         const $inputDirLabel = document.createElement("label");
         $entries.appendChild($inputDirLabel);
         $inputDirLabel.textContent = i18n.entriesInputDir();
+        $inputDirLabel.ondragover = $inputDirLabel.ondragenter = (e) => {
+          e.preventDefault();
+          $inputDirLabel.classList.add("drop-hint");
+        };
+        $inputDirLabel.ondragleave = () => {
+          $inputDirLabel.classList.remove("drop-hint");
+        };
+        $inputDirLabel.ondrop = (e) => {
+          e.preventDefault();
+          $inputDirLabel.classList.remove("drop-hint");
+          const file = e?.dataTransfer?.items?.[0]?.getAsFile();
+          $inputDir.value = globalThis.electron.webUtils.getPathForFile(file);
+        };
         const $inputDir = document.createElement("input");
         $inputDirLabel.appendChild($inputDir);
         $inputDir.value = profile.entries.inputDir ?? "";
@@ -1239,6 +1254,19 @@ const pageMain = async () => {
         const $outputDirLabel = document.createElement("label");
         $entries.appendChild($outputDirLabel);
         $outputDirLabel.textContent = i18n.entriesOutputDir();
+        $outputDirLabel.ondragover = $outputDirLabel.ondragenter = (e) => {
+          e.preventDefault();
+          $outputDirLabel.classList.add("drop-hint");
+        };
+        $outputDirLabel.ondragleave = () => {
+          $outputDirLabel.classList.remove("drop-hint");
+        };
+        $outputDirLabel.ondrop = (e) => {
+          e.preventDefault();
+          $outputDirLabel.classList.remove("drop-hint");
+          const file = e?.dataTransfer?.items?.[0]?.getAsFile();
+          $outputDir.value = globalThis.electron.webUtils.getPathForFile(file);
+        };
         const $outputDir = document.createElement("input");
         $outputDirLabel.appendChild($outputDir);
         $outputDir.value = profile.entries.outputDir ?? "";
@@ -1309,30 +1337,23 @@ const pageMain = async () => {
           $list.appendChild($entry);
           const $inputLabel = document.createElement("label");
           $entry.appendChild($inputLabel);
-          const $input = document.createElement("input");
-          $inputLabel.appendChild($input);
-          $input.placeholder = "Input file";
-
-          // Add drag and drop event listeners
-          $inputLabel.classList.add("drop-hint");
           $inputLabel.ondragover = $inputLabel.ondragenter = (e) => {
             e.preventDefault();
             $inputLabel.classList.add("drop-hint");
           };
-          $inputLabel.ondragleave = (e) => {
-            e.preventDefault();
+          $inputLabel.ondragleave = () => {
             $inputLabel.classList.remove("drop-hint");
           };
           $inputLabel.ondrop = (e) => {
-            console.log("drop", e);
             e.preventDefault();
             $inputLabel.classList.remove("drop-hint");
-            if (e.dataTransfer?.files.length && electron) {
-              const file = e.dataTransfer.files[0];
-              $input.value = electron.webUtils.getPathForFile(file);
-            }
+            const file = e?.dataTransfer?.items?.[0]?.getAsFile();
+            $input.value = globalThis.electron.webUtils.getPathForFile(file);
           };
-
+          // todo: https://www.electronjs.org/docs/latest/tutorial/native-file-drag-drop/
+          const $input = document.createElement("input");
+          $inputLabel.appendChild($input);
+          $input.placeholder = "Input file";
           const $inputButton = document.createElement("button");
           $inputLabel.appendChild($inputButton);
           $inputButton.onclick = async () => {
@@ -1348,6 +1369,19 @@ const pageMain = async () => {
           };
           const $outputLabel = document.createElement("label");
           $entry.appendChild($outputLabel);
+          $outputLabel.ondragover = $outputLabel.ondragenter = (e) => {
+            e.preventDefault();
+            $outputLabel.classList.add("drop-hint");
+          };
+          $outputLabel.ondragleave = () => {
+            $outputLabel.classList.remove("drop-hint");
+          };
+          $outputLabel.ondrop = (e) => {
+            e.preventDefault();
+            $outputLabel.classList.remove("drop-hint");
+            const file = e?.dataTransfer?.items?.[0]?.getAsFile();
+            $output.value = globalThis.electron.webUtils.getPathForFile(file);
+          };
           const $output = document.createElement("input");
           $outputLabel.appendChild($output);
           $output.placeholder = "Output file";
@@ -1638,9 +1672,6 @@ const pageMain = async () => {
   {
     $toHome.click();
   }
-
-  const electron = /** @type {Electron.Renderer} */ (globalThis.electron);
-  // electron.webUtils.getPathForFile // https://www.electronjs.org/docs/latest/tutorial/native-file-drag-drop/
 };
 
 const serverMain = async () => {
