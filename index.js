@@ -1791,7 +1791,7 @@ const serverMain = async () => {
   };
 
   const electronRun = electronImport.then(async (electron) => {
-    const { app, BrowserWindow, nativeTheme, screen } = electron; // agreement: keep electron optional, as a simple webview, users can choose node + browser
+    const { app, BrowserWindow, MenuItem, nativeTheme, screen } = electron; // agreement: keep electron optional, as a simple webview, users can choose node + browser
     // app.commandLine.appendSwitch("no-sandbox"); // cause devtools error /dev/shm ... on linux
     app.commandLine.appendSwitch("disable-gpu-sandbox");
     const createWindow = async () => {
@@ -1812,6 +1812,10 @@ const serverMain = async () => {
         config.windowWidth = Math.min(bounds.width, workAreaSize.width - 64);
         config.windowHeight = Math.min(bounds.height, workAreaSize.height - 64);
         config.windowMaximized = win.isMaximized();
+      });
+      win.webContents.on("context-menu", (_, props) => {
+        const role = props.isEditable ? "editMenu" : "viewMenu";
+        new MenuItem({ role }).submenu?.popup();
       });
       win.loadURL("http://127.0.0.1:" + (await serverPort.promise));
     };
