@@ -1220,16 +1220,12 @@ const pageMain = async () => {
         const $inputDirLabel = document.createElement("label");
         $entries.appendChild($inputDirLabel);
         $inputDirLabel.textContent = i18n.entriesInputDir();
-        $inputDirLabel.ondragover = $inputDirLabel.ondragenter = (e) => {
-          e.preventDefault();
-          $inputDirLabel.classList.add("drop-hint");
-        };
-        $inputDirLabel.ondragleave = () => {
-          $inputDirLabel.classList.remove("drop-hint");
-        };
+        $inputDirLabel.ondragover = (e) =>
+          e.preventDefault() ?? $inputDirLabel.classList.add("drop-hint");
+        $inputDirLabel.ondragleave = (e) =>
+          e.preventDefault() ?? $inputDirLabel.classList.remove("drop-hint");
         $inputDirLabel.ondrop = (e) => {
-          e.preventDefault();
-          $inputDirLabel.classList.remove("drop-hint");
+          e.preventDefault() ?? $inputDirLabel.classList.remove("drop-hint");
           const file = e?.dataTransfer?.items?.[0]?.getAsFile();
           $inputDir.value = globalThis.electron.webUtils.getPathForFile(file);
         };
@@ -1254,16 +1250,12 @@ const pageMain = async () => {
         const $outputDirLabel = document.createElement("label");
         $entries.appendChild($outputDirLabel);
         $outputDirLabel.textContent = i18n.entriesOutputDir();
-        $outputDirLabel.ondragover = $outputDirLabel.ondragenter = (e) => {
-          e.preventDefault();
-          $outputDirLabel.classList.add("drop-hint");
-        };
-        $outputDirLabel.ondragleave = () => {
-          $outputDirLabel.classList.remove("drop-hint");
-        };
+        $outputDirLabel.ondragover = (e) =>
+          e.preventDefault() ?? $outputDirLabel.classList.add("drop-hint");
+        $outputDirLabel.ondragleave = (e) =>
+          e.preventDefault() ?? $outputDirLabel.classList.remove("drop-hint");
         $outputDirLabel.ondrop = (e) => {
-          e.preventDefault();
-          $outputDirLabel.classList.remove("drop-hint");
+          e.preventDefault() ?? $outputDirLabel.classList.remove("drop-hint");
           const file = e?.dataTransfer?.items?.[0]?.getAsFile();
           $outputDir.value = globalThis.electron.webUtils.getPathForFile(file);
         };
@@ -1337,16 +1329,12 @@ const pageMain = async () => {
           $list.appendChild($entry);
           const $inputLabel = document.createElement("label");
           $entry.appendChild($inputLabel);
-          $inputLabel.ondragover = $inputLabel.ondragenter = (e) => {
-            e.preventDefault();
-            $inputLabel.classList.add("drop-hint");
-          };
-          $inputLabel.ondragleave = () => {
-            $inputLabel.classList.remove("drop-hint");
-          };
+          $inputLabel.ondragover = (e) =>
+            e.preventDefault() ?? $inputLabel.classList.add("drop-hint");
+          $inputLabel.ondragleave = (e) =>
+            e.preventDefault() ?? $inputLabel.classList.remove("drop-hint");
           $inputLabel.ondrop = (e) => {
-            e.preventDefault();
-            $inputLabel.classList.remove("drop-hint");
+            e.preventDefault() ?? $inputLabel.classList.remove("drop-hint");
             const file = e?.dataTransfer?.items?.[0]?.getAsFile();
             $input.value = globalThis.electron.webUtils.getPathForFile(file);
           };
@@ -1369,16 +1357,12 @@ const pageMain = async () => {
           };
           const $outputLabel = document.createElement("label");
           $entry.appendChild($outputLabel);
-          $outputLabel.ondragover = $outputLabel.ondragenter = (e) => {
-            e.preventDefault();
-            $outputLabel.classList.add("drop-hint");
-          };
-          $outputLabel.ondragleave = () => {
-            $outputLabel.classList.remove("drop-hint");
-          };
+          $outputLabel.ondragover = (e) =>
+            e.preventDefault() ?? $outputLabel.classList.add("drop-hint");
+          $outputLabel.ondragleave = (e) =>
+            e.preventDefault() ?? $outputLabel.classList.remove("drop-hint");
           $outputLabel.ondrop = (e) => {
-            e.preventDefault();
-            $outputLabel.classList.remove("drop-hint");
+            e.preventDefault() ?? $outputLabel.classList.remove("drop-hint");
             const file = e?.dataTransfer?.items?.[0]?.getAsFile();
             $output.value = globalThis.electron.webUtils.getPathForFile(file);
           };
@@ -1541,7 +1525,9 @@ const pageMain = async () => {
           config.locale = /** @type {any} */ (locale);
           saveConfig();
           await sleep(100);
-          alert("please restart to apply the language change");
+          if (confirm("Restart now to apply the language change?")) {
+            await fetch("/quit", {});
+          }
         };
         if (locale === cu.locale) {
           $radio.checked = true;
@@ -1792,14 +1778,22 @@ const serverMain = async () => {
 
   const electronRun = electronImport.then(async (electron) => {
     const { app, BrowserWindow, MenuItem, nativeTheme, screen } = electron; // agreement: keep electron optional, as a simple webview, users can choose node + browser
-    // app.commandLine.appendSwitch("no-sandbox"); // cause devtools error /dev/shm ... on linux
+    app.commandLine.appendSwitch("no-sandbox"); // cause devtools error /dev/shm ... on linux
     app.commandLine.appendSwitch("disable-gpu-sandbox");
     const createWindow = async () => {
       const win = new BrowserWindow({
         title: i18n.title(),
         autoHideMenuBar: true,
         backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
-        webPreferences: { sandbox: false, spellcheck: false, preload },
+        webPreferences: {
+          sandbox: false,
+          spellcheck: false,
+          enableWebSQL: false,
+          webgl: false,
+          disableBlinkFeatures:
+            "WebBluetooth,WebXR,WebAuth,WebHID,WebShare,WebUSB",
+          preload: await preloadScriptPath,
+        },
         width: config.windowWidth, // only (width,height), no (x,y), see https://kkocdko.site/post/202409161747
         height: config.windowHeight,
       });
@@ -1820,7 +1814,6 @@ const serverMain = async () => {
       win.loadURL("http://127.0.0.1:" + (await serverPort.promise));
     };
     app.whenReady().then(async () => {
-      await preloadPromise;
       createWindow();
       app.on("activate", () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -1835,9 +1828,11 @@ const serverMain = async () => {
         // process.exit(); // on windows we need this?
       }
     });
-    const preload = solvePath(PATH_DATA, "preload.mjs"); // because of https://www.electronjs.org/docs/latest/tutorial/esm , see also #14012 #28981
-    const preloadData = `import{contextBridge,webUtils}from"electron";contextBridge.exposeInMainWorld("electron",{webUtils})`;
-    const preloadPromise = fs.promises.writeFile(preload, preloadData);
+    const preloadScriptPath = new Promise((resolve) => {
+      const path = solvePath(PATH_DATA, "preload.mjs"); // because of https://www.electronjs.org/docs/latest/tutorial/esm , see also #14012 #28981
+      const data = `import{contextBridge,webUtils}from"electron";contextBridge.exposeInMainWorld("electron",{webUtils})`;
+      fs.writeFile(path, data, () => resolve(path));
+    });
   });
   if (!process?.versions?.electron || process?.env?.ELECTRON_RUN_AS_NODE) {
     electronRun.catch(() => {}); // ignore errors if not in electron
@@ -2301,7 +2296,10 @@ const serverMain = async () => {
       promise = promise.finally(() => {
         controller.time.end = Date.now() / 1000;
       });
-      promise.catch(() => {}); // avoid UnhandledPromiseRejection
+      promise.catch((e) => {
+        console.error({ kind: "run_action_error", e });
+        // todo: put detail error into page
+      }); // avoid UnhandledPromiseRejection
       /** @type {RunActionController} */
       const controller = {
         title: request.title,
