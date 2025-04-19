@@ -1778,22 +1778,12 @@ const serverMain = async () => {
 
   const electronRun = electronImport.then(async (electron) => {
     const { app, BrowserWindow, MenuItem, nativeTheme, screen } = electron; // agreement: keep electron optional, as a simple webview, users can choose node + browser
-    app.commandLine.appendSwitch("no-sandbox"); // cause devtools error /dev/shm ... on linux
-    app.commandLine.appendSwitch("disable-gpu-sandbox");
     const createWindow = async () => {
       const win = new BrowserWindow({
         title: i18n.title(),
         autoHideMenuBar: true,
         backgroundColor: nativeTheme.shouldUseDarkColors ? "#000" : "#fff",
-        webPreferences: {
-          sandbox: false,
-          spellcheck: false,
-          enableWebSQL: false,
-          webgl: false,
-          disableBlinkFeatures:
-            "WebBluetooth,WebXR,WebAuth,WebHID,WebShare,WebUSB",
-          preload: await preloadScriptPath,
-        },
+        webPreferences: { preload: await preloadScriptPath },
         width: config.windowWidth, // only (width,height), no (x,y), see https://kkocdko.site/post/202409161747
         height: config.windowHeight,
       });
