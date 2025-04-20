@@ -149,14 +149,14 @@ import child_process from "node:child_process";
   time: RunActionTime;
   progress: RunActionProgress;
   pending: boolean; // the "pending: true" contains "paused"
-  error?: any; // the "error" contains "stopped"
+  error?: Partial<Error>; // the "error" contains "stopped"
 } | {
   kind: "install-extension-progress";
   id: string;
   title: string;
   progress: InstallExtensionProgress;
   pending: boolean;
-  error?: any;
+  error?: Partial<Error>;
 }} GetStatusResponseEvent
 @typedef {{
   assert: typeof assert;
@@ -891,7 +891,7 @@ const pageMain = async () => {
           `${Math.round(Number.isFinite(remainTime) ? remainTime : 0)}s - ` +
           `${e.progress.finished}/${e.progress.amount}`;
       } else if (e.error) {
-        $tips.textContent = "Error: " + JSON.stringify(e.error);
+        $tips.textContent = "Error: " + e.error.message;
         $stop?.classList?.add("off");
         $pause?.classList?.add("off");
       } else {
@@ -914,7 +914,7 @@ const pageMain = async () => {
         " M"; // this is MiB
       if (e.pending) {
       } else if (e.error) {
-        $tips.textContent = "Error: " + JSON.stringify(e.error);
+        $tips.textContent = "Error: " + e.error.message;
         $stop?.classList?.add("off");
         $pause?.classList?.add("off");
       } else {
@@ -2188,12 +2188,11 @@ const serverMain = async () => {
           } else {
             var /** @type {never} */ _ = asset.kind; // exhaustiveness
           }
-
           await chmod777(extensionDir);
         }
       })();
-
-      promise.catch(async () => {
+      promise.catch(async (e) => {
+        console.error("install-extension-error", e);
         // in vscode, cancel is not supported, and it has auto cleaning, we follow this strategy
         // todo: needs fix, if user close app during installing. however this seems fine because everytime after launch the cache dir is cleaned, and what about the extensionDir?
         abortController.abort();
@@ -2201,13 +2200,11 @@ const serverMain = async () => {
           await fs.promises.rm(v, { force: true, recursive: true });
         }
       });
-
       installExtensionControllers.set(nextId(), {
         title: request.title,
         progress: () => ({ finished, amount }),
         promise,
       });
-
       r.end();
       return;
     }
@@ -2287,8 +2284,7 @@ const serverMain = async () => {
         controller.time.end = Date.now() / 1000;
       });
       promise.catch((e) => {
-        console.error({ kind: "run_action_error", e });
-        // todo: put detail error into page
+        console.error("run-action-error", e);
       }); // avoid UnhandledPromiseRejection
       /** @type {RunActionController} */
       const controller = {
@@ -2343,7 +2339,7 @@ const serverMain = async () => {
           if (!watchingIds.has(id)) {
             watchingIds.add(id);
             controller.promise
-              .then(() =>
+              .then(() => {
                 send({
                   kind: "run-action-progress",
                   id,
@@ -2351,9 +2347,9 @@ const serverMain = async () => {
                   time: controller.time,
                   progress: controller.progress(),
                   pending: false,
-                })
-              )
-              .catch((error) =>
+                });
+              })
+              .catch((error) => {
                 send({
                   kind: "run-action-progress",
                   id,
@@ -2361,9 +2357,11 @@ const serverMain = async () => {
                   time: controller.time,
                   progress: controller.progress(),
                   pending: false,
-                  error,
-                })
-              )
+                  error: Object.fromEntries(
+                    Object.getOwnPropertyNames(error).map((k) => [k, error[k]])
+                  ),
+                });
+              })
               .finally(() => preventedIds.add(id)); // now the `controller` is exited, so we add it to `preventedIds` to skip following query, but keep in mind that every `/get-status` request will receive at lease two events from every controller, once for `pending` = true, once for false
           }
         }
@@ -2381,25 +2379,27 @@ const serverMain = async () => {
           if (!watchingIds.has(id)) {
             watchingIds.add(id);
             controller.promise
-              .then(() =>
+              .then(() => {
                 send({
                   kind: "install-extension-progress",
                   id,
                   title: controller.title,
                   progress: controller.progress(),
                   pending: false,
-                })
-              )
-              .catch((error) =>
+                });
+              })
+              .catch((error) => {
                 send({
                   kind: "install-extension-progress",
                   id,
                   title: controller.title,
                   progress: controller.progress(),
                   pending: false,
-                  error,
-                })
-              )
+                  error: Object.fromEntries(
+                    Object.getOwnPropertyNames(error).map((k) => [k, error[k]])
+                  ),
+                });
+              })
               .finally(() => preventedIds.add(id));
           }
         }
