@@ -202,6 +202,8 @@ const i18nRes = (() => {
     entriesOutputDir: () => "Output directory",
     entriesOutputSuffix: () => "Output suffix",
     entriesOutputExtension: () => "Output extension",
+    actionRun: () => "Run",
+    actionSaveProfile: () => "Save profile",
     settingsMirrorsTitle: () => "Mirrors",
     settingsMirrorsDescription: () => "May speed up downloads in some region.",
     settingsMirrorsSwitch: () => "Control whether mirrors are enabled or not.", // agreement: the wording and syntax here mimics vscode's editor.guides.bracketPairs
@@ -241,6 +243,8 @@ const i18nRes = (() => {
     entriesOutputDir: () => "输出文件夹",
     entriesOutputSuffix: () => "输出文件名后缀",
     entriesOutputExtension: () => "输出扩展名",
+    actionRun: () => "运行",
+    actionSaveProfile: () => "保存配置",
     settingsMirrorsTitle: () => "镜像",
     settingsMirrorsDescription: () => "可能在某些地区提升下载速度。",
     settingsMirrorsSwitch: () => "控制是否启用镜像。",
@@ -365,7 +369,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     position: relative;
     width: 20px;
     height: 20px;
-    margin: 2px 8px 2px 2px;
+    margin: 2px 8px 2px 0;
     vertical-align: bottom;
     appearance: none;
     background: var(--bg4);
@@ -666,37 +670,38 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .market > input {
     margin-right: 4px;
   }
-  body > .action > .entries.common-files > * {
-    margin: 0 12px 6px 0;
-  }
-  body > .action > .entries.common-files > button {
-    margin: 0 4px 4px 0;
+  body > .action > .operations,
+  body > .action > .entries.common-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
   }
   body > .action > .entries.common-files ul {
     width: fit-content;
-    max-width: 100%;
     max-height: calc(50vh - 200px);
     padding: 0;
     margin: 0;
+    margin-right: max(4px, 100vw - 840px);
     overflow: auto;
     white-space: nowrap;
-  }
-  body > .action > .entries.common-files li {
-    list-style: none;
   }
   body > .action > .entries.common-files li > * {
     margin-right: 12px;
   }
   body > .action > .entries.common-files li input {
-    width: calc(50vw - 120px);
+    width: calc(50vw - 100px);
     max-width: 320px;
   }
-
+  body > .action > .entries.common-files fieldset {
+    display: inline-grid;
+    grid: auto / repeat(3, auto);
+    gap: 0 6px;
+  }
   body > .action > .root {
     margin-top: 12px;
     margin-bottom: 12px;
   }
-  body > .action label > input:not([type="radio"]) {
+  body > .action label > input:not([type="radio"]):not([type="checkbox"]) {
     display: block;
     margin-top: 4px;
   }
@@ -715,16 +720,18 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .action fieldset,
   body > .settings fieldset {
-    display: inline-grid;
-    gap: 4px;
+    display: inline-block;
     padding: 0;
     margin: 0;
     border: none;
-    /* height: 20px; */
-    /* max-width: 30em; */
-    /* overflow: scroll; */
-    /* border-radius: 6px; */
-    /* background: var(--bg3); */
+  }
+  body > .action fieldset > label,
+  body > .settings fieldset > label {
+    display: block;
+  }
+  body > .action fieldset > label:not(:last-child),
+  body > .settings fieldset > label:not(:last-child) {
+    margin-bottom: 4px;
   }
   body > .settings form {
     padding: 4px 6px 12px;
@@ -1321,6 +1328,9 @@ const pageMain = async () => {
       const r$entries$files = () => {
         $entries.replaceChildren();
 
+        /** @type {Map<HTMLLIElement, { $input: HTMLInputElement, $output: HTMLInputElement }>} */
+        const m = new Map();
+
         const $add = document.createElement("button");
         $entries.appendChild($add);
         $add.textContent = "Add";
@@ -1386,10 +1396,12 @@ const pageMain = async () => {
             }).then((r) => r.json());
             if (response.filePath) $output.value = response.filePath;
           };
+          m.set($entry, { $input, $output });
           const $removeButton = document.createElement("button");
           $entry.appendChild($removeButton);
           $removeButton.textContent = "✕";
           $removeButton.onclick = () => {
+            m.delete($entry);
             $entry.remove();
           };
         };
@@ -1397,6 +1409,7 @@ const pageMain = async () => {
         $entries.appendChild($clear);
         $clear.textContent = "Clear";
         $clear.onclick = () => {
+          m.clear();
           $list.replaceChildren();
           $add.click();
         };
@@ -1410,7 +1423,10 @@ const pageMain = async () => {
             kind: "common-files",
             mode: "files",
             inplace: false,
-            entries: [],
+            entries: [...m.values()].map(({ $input, $output }) => ({
+              input: $input.value,
+              output: $output.value,
+            })),
           };
           return entries;
         };
@@ -1444,7 +1460,8 @@ const pageMain = async () => {
     $action.appendChild($operations);
     const $runAction = document.createElement("button");
     $operations.appendChild($runAction);
-    $runAction.textContent = "Run";
+    $runAction.classList.add("run-action");
+    $runAction.textContent = i18n.actionRun();
     $runAction.onclick = async () => {
       /** @type {RunActionRequest} */
       const request = {
@@ -1463,6 +1480,13 @@ const pageMain = async () => {
       $toTasks.click();
       $toAction.textContent = "";
       $action.replaceChildren();
+    };
+    const $saveProfile = document.createElement("button");
+    $operations.appendChild($saveProfile);
+    $saveProfile.classList.add("save-profile");
+    $saveProfile.textContent = i18n.actionSaveProfile();
+    $saveProfile.onclick = async () => {
+      assert(false, "todo");
     };
   };
 
@@ -2040,15 +2064,11 @@ const serverMain = async () => {
       })) {
         const input = solvePath(parentPath, name);
         let output = path.relative(inputDir, input);
-        if (opts.outputExtension) {
-          const extname = path.extname(input); // includes the dot char
-          if (extname) {
-            output = output.slice(0, output.length - extname.length);
-          }
-          output += "." + opts.outputExtension;
-        }
-        output = solvePath(outputDir, output);
-        entries.push({ input, output });
+        const extname = path.extname(input); // includes the dot char
+        if (extname) output = output.slice(0, output.length - extname.length);
+        output += opts.outputSuffix; // can be empty string
+        output += opts.outputExtension ? "." + opts.outputExtension : extname;
+        entries.push({ input, output: solvePath(outputDir, output) });
       }
       return entries;
     } else if (opts.kind === "common-files" && opts.mode === "files") {
@@ -2358,7 +2378,7 @@ const serverMain = async () => {
                   progress: controller.progress(),
                   pending: false,
                   error: Object.fromEntries(
-                    Object.getOwnPropertyNames(error).map((k) => [k, error[k]])
+                    Object.getOwnPropertyNames(error).map((k) => [k, error[k]]) // the Error object is not able to be JSON.stringify, so we needs this
                   ),
                 });
               })
