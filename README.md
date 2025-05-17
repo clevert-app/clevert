@@ -14,5 +14,10 @@ The universal file converter platform.
 </details>
 
 <!--
+
 busybox ash -c "all_proxy=socks://127.0.0.1:1080 git push"
+
+# must be hard link instead of symbol link
+ln -f extensions/zcodecs/index.js temp/extensions/zcodecs_0.1.0/index.js
+
 -->
