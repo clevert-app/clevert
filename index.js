@@ -63,20 +63,21 @@ import child_process from "node:child_process";
 }} EntriesNumberSequence May be useful later.
 @typedef {{
   kind: "common-files";
+  ifExists: "noop" | "force" | "skip";
+} & ({
   mode: "dir";
   inputDir: string;
   outputDir: string;
   outputSuffix: string;
   outputExtension: string;
 } | {
-  kind: "common-files";
   mode: "files";
   inplace: boolean;
   entries: {
     input: string,
     output?: string;
   }[];
-}} EntriesCommonFiles The most common.
+})} EntriesCommonFiles The most common.
 @typedef {{
   kind: "custom";
   entries: any[];
@@ -103,7 +104,7 @@ import child_process from "node:child_process";
   extensionVersion: string;
   actionId: string;
   profile: any;
-  entries: EntriesCustom | EntriesCommonFiles | EntriesNumberSequence;
+  entries: EntriesCommonFiles | EntriesCustom | EntriesNumberSequence;
   parallel: number;
 }} RunActionRequest
 @typedef {{
@@ -202,6 +203,10 @@ const i18nRes = (() => {
     entriesOutputDir: () => "Output directory",
     entriesOutputSuffix: () => "Output suffix",
     entriesOutputExtension: () => "Output extension",
+    entriesIfExists: () => "If file exists",
+    entriesIfExistsNoop: () => "Do nothing",
+    entriesIfExistsForce: () => "Overwrite",
+    entriesIfExistsSkip: () => "Skip",
     actionRun: () => "Run",
     actionSaveProfile: () => "Save profile",
     settingsMirrorsTitle: () => "Mirrors",
@@ -243,6 +248,10 @@ const i18nRes = (() => {
     entriesOutputDir: () => "输出文件夹",
     entriesOutputSuffix: () => "输出文件名后缀",
     entriesOutputExtension: () => "输出扩展名",
+    entriesIfExists: () => "若文件已存在",
+    entriesIfExistsNoop: () => "无操作",
+    entriesIfExistsForce: () => "强制覆盖",
+    entriesIfExistsSkip: () => "跳过",
     actionRun: () => "运行",
     actionSaveProfile: () => "保存配置",
     settingsMirrorsTitle: () => "镜像",
@@ -1141,6 +1150,13 @@ const pageMain = async () => {
   $market.classList.add("market");
   $market.classList.add("off");
   const r$market = async () => {
+    // // use a iframe, src= "https://v0--pi-khaki-15.vercel.app/"
+    // $market.replaceChildren();
+    // const $iframe = document.createElement("iframe");
+    // $market.appendChild($iframe);
+    // $iframe.src = "https://v0--pi-khaki-15.vercel.app/";
+    // $iframe.style="width: 100%; height: 100%; border: none; background: var(--bg);";
+    // return;
     // todo: add real market
     const $url = document.createElement("input");
     $market.appendChild($url);
@@ -1312,6 +1328,30 @@ const pageMain = async () => {
             : $outputExtensionLegend.nextSibling === $radioLabel; // is the first
         }
 
+        const $ifExists = document.createElement("fieldset");
+        $entries.appendChild($ifExists);
+        const $ifExistsLegend = document.createElement("legend");
+        $ifExists.appendChild($ifExistsLegend);
+        $ifExistsLegend.textContent = i18n.entriesIfExists();
+        const g$ifExistsRadio = (label) => {
+          const $radioLabel = document.createElement("label");
+          $ifExists.appendChild($radioLabel);
+          $radioLabel.textContent = label;
+          const $radio = document.createElement("input");
+          $radioLabel.insertBefore($radio, $radioLabel.firstChild);
+          $radio.type = "radio";
+          $radio.name = "if-exists";
+          return $radio;
+        };
+        const ifExistsInit = /** @type {EntriesCommonFiles["ifExists"]} */ (
+          profile.entries?.ifExists ?? "noop"
+        );
+        const $ifExistsNoop = g$ifExistsRadio(i18n.entriesIfExistsNoop());
+        const $ifExistsForce = g$ifExistsRadio(i18n.entriesIfExistsForce());
+        const $ifExistsSkip = g$ifExistsRadio(i18n.entriesIfExistsSkip());
+        $ifExistsNoop.checked = ifExistsInit === "noop";
+        $ifExistsForce.checked = ifExistsInit === "force";
+        $ifExistsSkip.checked = ifExistsInit === "skip";
         getEntries = () => {
           /** @type {EntriesCommonFiles} */
           const entries = {
@@ -1323,6 +1363,13 @@ const pageMain = async () => {
             outputExtension: /** @type {HTMLInputElement} */ (
               $outputExtension.querySelector(":checked")
             ).value,
+            ifExists: $ifExistsNoop.checked
+              ? "noop"
+              : $ifExistsForce.checked
+              ? "force"
+              : $ifExistsSkip.checked
+              ? "skip"
+              : assert(false, "unreachable"),
           };
           return entries;
         };
@@ -1423,6 +1470,7 @@ const pageMain = async () => {
           /** @type {EntriesCommonFiles} */
           const entries = {
             kind: "common-files",
+            ifExists: "noop",
             mode: "files",
             inplace: false,
             entries: [...m.values()].map(({ $input, $output }) => ({
@@ -2052,8 +2100,7 @@ const serverMain = async () => {
   };
 
   /**
-   * @param {RunActionRequest["entries"]} opts
-   * @returns {Promise<any[]>}
+   * @type {{ (opts: EntriesCommonFiles): Promise<{ input: string; output: string; }[]>; (opts: EntriesCustom): Promise<any[]>; (opts: EntriesNumberSequence): Promise<any[]>; }}
    */
   const solveEntries = async (opts) => {
     if (opts.kind === "common-files" && opts.mode === "dir") {
@@ -2282,25 +2329,47 @@ const serverMain = async () => {
         (action) => action.id === request.actionId
       );
       assert(action !== undefined, "action not found");
-      const entries = await solveEntries(request.entries);
+
+      // pass typescript union&overload check
+      const entries = false
+        ? assert(false)
+        : request.entries.kind === "common-files"
+        ? await solveEntries(request.entries)
+        : request.entries.kind === "custom"
+        ? await solveEntries(request.entries)
+        : request.entries.kind === "number-sequence"
+        ? await solveEntries(request.entries)
+        : assert(false);
       const amount = entries.length;
       let finished = 0;
       const runningControllers = /** @type {Set<ActionExecuteController>} */ (
         new Set()
       );
-      let promise = Promise.all(
-        [...Array(request.parallel)].map((_, i) =>
-          (async () => {
-            for (let entry; (entry = entries.shift()); ) {
-              // console.log({ entry, req });
-              const controller = action.execute(request.profile, entry);
-              runningControllers.add(controller);
-              await controller.promise;
-              runningControllers.delete(controller);
-              finished += 1;
+      const spawn = async (workerIndex) => {
+        for (let entry; (entry = entries.shift()); ) {
+          // console.log({ entry, req });
+          if (
+            request.entries.kind === "common-files" &&
+            request.entries.ifExists !== "noop"
+          ) {
+            // todo: strong type of entry.output
+            const exists = await fs.promises.stat(entry.output).catch(() => {});
+            if (exists && request.entries.ifExists === "force") {
+              await fs.promises.rm(entry.output, { force: true });
+            } else if (exists && request.entries.ifExists === "skip") {
+              console.log("skipped", entry);
+              continue;
             }
-          })()
-        )
+          }
+          const controller = action.execute(request.profile, entry);
+          runningControllers.add(controller);
+          await controller.promise;
+          runningControllers.delete(controller);
+          finished += 1;
+        }
+      };
+      let promise = Promise.all(
+        [...Array(request.parallel)].map((_, i) => spawn(i))
       );
       promise = promise.finally(() => {
         controller.time.end = Date.now() / 1000;
