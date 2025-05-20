@@ -1845,7 +1845,7 @@ const serverMain = async () => {
       }
     });
     const preloadScriptPath = new Promise((resolve) => {
-      const path = solvePath(PATH_DATA, "preload.mjs"); // because of https://www.electronjs.org/docs/latest/tutorial/esm , see also #14012 #28981
+      const path = solvePath(PATH_DATA, "cache", "preload.mjs"); // because of https://www.electronjs.org/docs/latest/tutorial/esm , see also #14012 #28981
       const data = `import{contextBridge,webUtils}from"electron";contextBridge.exposeInMainWorld("electron",{webUtils})`;
       fs.writeFile(path, data, () => resolve(path));
     });
