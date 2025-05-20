@@ -889,14 +889,16 @@ const pageMain = async () => {
       // const [$pause, $stop, $pin] = $operations.children;
       $title.textContent = e.title;
       $title.title = e.title;
-      const percent = (e.progress.finished / e.progress.amount) * 100;
+      const current = e.progress.finished + e.progress.running;
+      const percent = (current / e.progress.amount) * 100;
       $progress.style.setProperty("--progress", percent + "%");
       if (e.pending) {
-        const speed = e.progress.finished / (Date.now() / 1000 - e.time.begin);
-        const remainTime = (e.progress.amount - e.progress.finished) / speed;
+        const speed = current / (Date.now() / 1000 - e.time.begin);
+        const remainTime = (e.progress.amount - current) / speed;
+        const currentText = e.progress.running ? current.toFixed(2) : current;
         $tips.textContent =
           `${Math.round(Number.isFinite(remainTime) ? remainTime : 0)}s - ` +
-          `${e.progress.finished}/${e.progress.amount}`;
+          `${currentText}/${e.progress.amount}`;
       } else if (e.error) {
         $tips.textContent = "Error: " + e.error.message;
         $stop?.classList?.add("off");
