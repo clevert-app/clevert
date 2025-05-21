@@ -195,7 +195,7 @@ export default {
           .action .root {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 6px 12px;
           }
           .action .root hr {
             border: none;
@@ -379,8 +379,8 @@ export default {
         if (profile.sharpYuv) args.push("-sharp_yuv");
         if (profile.noAlpha) args.push("-noalpha");
         if (profile.lowMemory) args.push("-low_memory");
-        const child = child_process.spawn(consts.exe, args);
         const { promise, resolve, reject } = Promise.withResolvers();
+        const child = child_process.spawn(consts.exe, args);
         child.on("error", (error) => reject(error));
         child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
         return {
@@ -403,7 +403,7 @@ export default {
           .action .root {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 6px 12px;
           }
           .action .root hr {
             border: none;
@@ -465,9 +465,8 @@ export default {
         if (profile.flip) args.push("-flip");
         if (profile.alpha) args.push("-alpha");
         if (profile.incremental) args.push("-incremental");
-
-        const child = child_process.spawn(consts.exe, args);
         const { promise, resolve, reject } = Promise.withResolvers();
+        const child = child_process.spawn(consts.exe, args);
         child.on("error", (error) => reject(error));
         child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
         return {
@@ -490,7 +489,7 @@ export default {
           .action .root {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 6px 12px;
           }
           .action .root hr {
             border: none;
@@ -639,9 +638,8 @@ export default {
         if (profile.minSize) args.push("-min_size");
         if (profile.loopCompat) args.push("-loop_compatibility");
         if (profile.mt) args.push("-mt");
-
-        const child = child_process.spawn(consts.exe, args);
         const { promise, resolve, reject } = Promise.withResolvers();
+        const child = child_process.spawn(consts.exe, args);
         child.on("error", (error) => reject(error));
         child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
         return {
@@ -666,7 +664,7 @@ export default {
           .action .root {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 6px 12px;
           }
           .action .root hr {
             border: none;
@@ -763,8 +761,8 @@ export default {
         if (profile.stdQuant) args.push("--std_quant");
         if (profile.xyb) args.push("--xyb");
         if (profile.noadaptive) args.push("--noadaptive_quantization");
-        const child = child_process.spawn(consts.exe, args);
         const { promise, resolve, reject } = Promise.withResolvers();
+        const child = child_process.spawn(consts.exe, args);
         child.on("error", (error) => reject(error));
         child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
         return {
@@ -787,7 +785,7 @@ export default {
           .action .root {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 6px 12px;
           }
         `;
         $root.addEventListener("post-remove", (e) => console.log(e));
@@ -813,8 +811,8 @@ export default {
       execute: (profile, { input, output }) => {
         const args = ["djpegli", input, output];
         if (profile.bitdepth) args.push("--bitdepth=" + profile.bitdepth);
-        const child = child_process.spawn(consts.exe, args);
         const { promise, resolve, reject } = Promise.withResolvers();
+        const child = child_process.spawn(consts.exe, args);
         child.on("error", (error) => reject(error));
         child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
         return {
@@ -837,7 +835,7 @@ export default {
           .action .root {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 6px 12px;
           }
           .action .root label.off {
             display: none;
@@ -967,8 +965,8 @@ export default {
           args.push("--brotli_effort=" + profile.brotliEffort);
         if (profile.losslessJpeg)
           args.push("--lossless_jpeg=" + profile.losslessJpeg);
-        const child = child_process.spawn(consts.exe, args);
         const { promise, resolve, reject } = Promise.withResolvers();
+        const child = child_process.spawn(consts.exe, args);
         child.on("error", (error) => reject(error));
         child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
         return {
@@ -991,11 +989,7 @@ export default {
           .action .root {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
-          }
-          .action .root > section {
-            display: inline-grid;
-            gap: 4px;
+            gap: 6px 12px;
           }
           .action .root > section > .off {
             opacity: 0.6;
@@ -1003,6 +997,8 @@ export default {
           }
           .action .root > section > :last-child {
             text-indent: 4px;
+            display: block;
+            margin-top: 2px;
           }
         `;
         $root.addEventListener("post-remove", (e) => console.log(e));
@@ -1137,9 +1133,8 @@ export default {
           args.push("--jpeg_quality=" + profile.jpegQuality);
         if (profile.alphaBlend) args.push("--alpha_blend");
         if (profile.background) args.push("--background=" + profile.background);
-
-        const child = child_process.spawn(consts.exe, args);
         const { promise, resolve, reject } = Promise.withResolvers();
+        const child = child_process.spawn(consts.exe, args);
         child.on("error", (error) => reject(error));
         child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
         return {
