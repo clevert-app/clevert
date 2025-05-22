@@ -18,7 +18,7 @@ import child_process from "node:child_process";
 }} Asset For `kind:"bin"`, the `path` is file path, for others it's directory path.
 @typedef {{
   root: HTMLElement;
-  profile: () => any; // agreement: use function instead of getter/setter
+  profile: () => Profile; // agreement: use function instead of getter/setter
   entries?: () => any[];
 }} ActionUiController The `entries()` will be used if action kind is `custom`.
 @typedef {{
@@ -50,7 +50,7 @@ import child_process from "node:child_process";
   description: string;
   dependencies: string[];
   assets: Asset[];
-  actions: Action[];
+  actions: Action[]; // agreement: use array, each has id field, instead of object[id]=action
   profiles: Profile[];
 }} Extension
 @typedef {(
@@ -163,6 +163,7 @@ import child_process from "node:child_process";
   assert: typeof assert;
   debounce: typeof debounce;
   sleep: typeof sleep;
+  nextId: () => Promise<string>; // agreement: the id is unique globally, so client should fetch it from server, that's why async
   locale: keyof i18nRes;
 }} ClevertUtils Will be passed to `globalThis.clevertUtils`.
 @typedef {{
@@ -172,6 +173,7 @@ import child_process from "node:child_process";
   locale: keyof i18nRes;
   mirrorsEnabled: boolean;
   serverPort: number;
+  profiles: Profile[];
 }} Config
 */
 
@@ -209,6 +211,9 @@ const i18nRes = (() => {
     entriesIfExistsSkip: () => "Skip",
     actionRun: () => "Run",
     actionSaveProfile: () => "Save profile",
+    actionSaveProfileName: () => "Profile name",
+    actionSaveProfileDescription: () => "Description",
+    actionSaveProfileSave: () => "Save",
     settingsMirrorsTitle: () => "Mirrors",
     settingsMirrorsDescription: () => "May speed up downloads in some region.",
     settingsMirrorsSwitch: () => "Control whether mirrors are enabled or not.", // agreement: the wording and syntax here mimics vscode's editor.guides.bracketPairs
@@ -254,6 +259,9 @@ const i18nRes = (() => {
     entriesIfExistsSkip: () => "跳过",
     actionRun: () => "运行",
     actionSaveProfile: () => "保存配置",
+    actionSaveProfileName: () => "配置名称",
+    actionSaveProfileDescription: () => "描述",
+    actionSaveProfileSave: () => "保存",
     settingsMirrorsTitle: () => "镜像",
     settingsMirrorsDescription: () => "可能在某些地区提升下载速度。",
     settingsMirrorsSwitch: () => "控制是否启用镜像。",
@@ -679,11 +687,18 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .market > input {
     margin-right: 4px;
   }
-  body > .action > .operations,
-  body > .action > .entries.common-files {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 12px;
+  body > .action > .operations > *,
+  body > .action > .entries.common-files > * {
+    margin: 0 12px 6px 0;
+  }
+  body > .action > .operations > menu {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+    box-shadow: 0 0 0 6px var(--bg);
   }
   body > .action > .entries.common-files ul {
     width: fit-content;
@@ -817,6 +832,7 @@ const pageMain = async () => {
     assert,
     debounce,
     sleep,
+    nextId: () => fetch("/next-id").then((v) => v.text()),
     locale: /** @type {keyof i18nRes} */ (document.documentElement.lang),
   };
   globalThis.clevertUtils = cu;
@@ -1027,7 +1043,7 @@ const pageMain = async () => {
         $choice.appendChild($more);
         $more.title = i18n.homeMoreOperations();
         $more.onclick = async (e) => {
-          e.stopPropagation();
+          e.stopPropagation(); // important, avoid menu close immediately
           const $menu = document.createElement("menu");
           $choice.appendChild($menu);
           const removeMenu = () => {
@@ -1397,6 +1413,7 @@ const pageMain = async () => {
             const file = e?.dataTransfer?.items?.[0]?.getAsFile();
             $input.value = globalThis.electron.webUtils.getPathForFile(file);
           };
+          // todo: after drop to $input, autofill the $output
           // todo: https://www.electronjs.org/docs/latest/tutorial/native-file-drag-drop/
           const $input = document.createElement("input");
           $inputLabel.appendChild($input);
@@ -1508,6 +1525,53 @@ const pageMain = async () => {
     const $operations = document.createElement("div");
     $operations.classList.add("operations");
     $action.appendChild($operations);
+    const $saveProfile = document.createElement("button");
+    $operations.appendChild($saveProfile);
+    $saveProfile.classList.add("save-profile");
+    $saveProfile.textContent = i18n.actionSaveProfile();
+    $saveProfile.onclick = async (e) => {
+      e.stopPropagation();
+      const $menu = document.createElement("menu");
+      $operations.appendChild($menu);
+      $menu.onclick = (e) => e.stopPropagation();
+      const removeMenu = () => {
+        removeEventListener("click", removeMenu);
+        $menu.onanimationend = $menu.onanimationcancel = $menu.remove;
+        $menu.classList.add("off");
+      };
+      addEventListener("click", removeMenu);
+      const $nameLabel = document.createElement("label");
+      $menu.appendChild($nameLabel);
+      $nameLabel.textContent = i18n.actionSaveProfileName();
+      const $name = document.createElement("input");
+      $nameLabel.appendChild($name);
+      $name.value = profile.name;
+      const $descriptionLabel = document.createElement("label");
+      $menu.appendChild($descriptionLabel);
+      $descriptionLabel.textContent = i18n.actionSaveProfileDescription();
+      const $description = document.createElement("input");
+      $descriptionLabel.appendChild($description);
+      $description.value = profile.description;
+      const $save = document.createElement("button");
+      $menu.appendChild($save);
+      $save.textContent = i18n.actionSaveProfileSave();
+      $save.onclick = async () => {
+        const profile = controller.profile();
+        profile.name = $name.value;
+        profile.description = $description.value;
+        /** @type {Config} */
+        const config = await fetch("/get-config").then((r) => r.json());
+        const found = config.profiles.findIndex((v) => v.id === profile.id);
+        if (found === -1) {
+          profile.id = (await cu.nextId()) + "_" + profile.id;
+          config.profiles.push(profile);
+        } else {
+          config.profiles[found] = profile;
+        }
+        fetch("/set-config", { method: "POST", body: JSON.stringify(config) });
+        removeMenu();
+      };
+    };
     const $runAction = document.createElement("button");
     $operations.appendChild($runAction);
     $runAction.classList.add("run-action");
@@ -1530,13 +1594,6 @@ const pageMain = async () => {
       $toTasks.click();
       $toAction.textContent = "";
       $action.replaceChildren();
-    };
-    const $saveProfile = document.createElement("button");
-    $operations.appendChild($saveProfile);
-    $saveProfile.classList.add("save-profile");
-    $saveProfile.textContent = i18n.actionSaveProfile();
-    $saveProfile.onclick = async () => {
-      assert(false, "todo");
     };
   };
 
@@ -1764,7 +1821,7 @@ const serverMain = async () => {
   };
 
   const PATH_DATA = solvePath("temp");
-  for (const entry of ["cache", "extensions", "profiles"])
+  for (const entry of ["cache", "extensions"])
     await fs.promises.mkdir(solvePath(PATH_DATA, entry), { recursive: true });
 
   /** Copy from [MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types#important_mime_types_for_web_developers). */
@@ -1823,6 +1880,7 @@ const serverMain = async () => {
     ),
     mirrorsEnabled: false,
     serverPort: 9393,
+    profiles: [],
   });
   /** @type {Config} */
   const config = await openJsonMmap(solvePath(PATH_DATA, "config.json")); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
@@ -1838,6 +1896,7 @@ const serverMain = async () => {
     assert,
     debounce,
     sleep,
+    nextId: async () => nextId(),
     locale: config.locale,
   };
   globalThis.clevertUtils = cu;
@@ -2608,6 +2667,11 @@ const serverMain = async () => {
       const request = await readJson();
       for (const k in request) config[k] = request[k];
       r.end();
+      return;
+    }
+
+    if (r.req.url === "/next-id") {
+      r.end(nextId());
       return;
     }
 
