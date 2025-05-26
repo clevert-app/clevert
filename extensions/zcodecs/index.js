@@ -238,7 +238,7 @@ export default {
         //     $presetFieldset.appendChild($presetLabel);
         //     $presetLabel.textContent = preset;
         //     const $presetRadio = document.createElement("input");
-        //     $presetLabel.insertBefore($presetRadio, $presetLabel.firstChild);
+        //     $presetLabel.appendChild($presetRadio);
         //     $presetRadio.type = "radio";
         //     $presetRadio.name = "cwebp-preset";
         //     $presetRadio.value = preset;
@@ -314,7 +314,7 @@ export default {
         $root.appendChild($losslessLabel);
         $losslessLabel.textContent = i18n.cwebpLossless();
         const $lossless = document.createElement("input");
-        $losslessLabel.insertBefore($lossless, $losslessLabel.firstChild);
+        $losslessLabel.appendChild($lossless);
         $lossless.type = "checkbox";
         $lossless.checked = profile.lossless;
 
@@ -323,7 +323,7 @@ export default {
         $root.appendChild($sharpYuvLabel);
         $sharpYuvLabel.textContent = i18n.cwebpSharpYuv();
         const $sharpYuv = document.createElement("input");
-        $sharpYuvLabel.insertBefore($sharpYuv, $sharpYuvLabel.firstChild);
+        $sharpYuvLabel.appendChild($sharpYuv);
         $sharpYuv.type = "checkbox";
         $sharpYuv.checked = profile.sharpYuv;
 
@@ -332,7 +332,7 @@ export default {
         $root.appendChild($noAlphaLabel);
         $noAlphaLabel.textContent = i18n.cwebpNoAlpha();
         const $noAlpha = document.createElement("input");
-        $noAlphaLabel.insertBefore($noAlpha, $noAlphaLabel.firstChild);
+        $noAlphaLabel.appendChild($noAlpha);
         $noAlpha.type = "checkbox";
         $noAlpha.checked = profile.noAlpha;
 
@@ -341,7 +341,7 @@ export default {
         $root.appendChild($lowMemoryLabel);
         $lowMemoryLabel.textContent = i18n.cwebpLowMemory();
         const $lowMemory = document.createElement("input");
-        $lowMemoryLabel.insertBefore($lowMemory, $lowMemoryLabel.firstChild);
+        $lowMemoryLabel.appendChild($lowMemory);
         $lowMemory.type = "checkbox";
         $lowMemory.checked = profile.lowMemory;
 
@@ -419,7 +419,7 @@ export default {
         $root.appendChild($nofancyLabel);
         $nofancyLabel.textContent = i18n.dwebpNoFancy();
         const $nofancy = document.createElement("input");
-        $nofancyLabel.insertBefore($nofancy, $nofancyLabel.firstChild);
+        $nofancyLabel.appendChild($nofancy);
         $nofancy.type = "checkbox";
         $nofancy.checked = profile.nofancy;
 
@@ -428,7 +428,7 @@ export default {
         $root.appendChild($flipLabel);
         $flipLabel.textContent = i18n.dwebpFlip();
         const $flip = document.createElement("input");
-        $flipLabel.insertBefore($flip, $flipLabel.firstChild);
+        $flipLabel.appendChild($flip);
         $flip.type = "checkbox";
         $flip.checked = profile.flip;
 
@@ -437,7 +437,7 @@ export default {
         $root.appendChild($alphaLabel);
         $alphaLabel.textContent = i18n.dwebpAlpha();
         const $alpha = document.createElement("input");
-        $alphaLabel.insertBefore($alpha, $alphaLabel.firstChild);
+        $alphaLabel.appendChild($alpha);
         $alpha.type = "checkbox";
         $alpha.checked = profile.alpha;
 
@@ -567,7 +567,7 @@ export default {
         $root.appendChild($lossyLabel);
         $lossyLabel.textContent = i18n.gif2webpLossy(); // e.g., "Lossy compression"
         const $lossy = document.createElement("input");
-        $lossyLabel.insertBefore($lossy, $lossyLabel.firstChild);
+        $lossyLabel.appendChild($lossy);
         $lossy.type = "checkbox";
         $lossy.checked = profile.lossy;
 
@@ -576,7 +576,7 @@ export default {
         $root.appendChild($mixedLabel);
         $mixedLabel.textContent = i18n.gif2webpMixed(); // e.g., "Mixed mode (lossy/lossless per frame)"
         const $mixed = document.createElement("input");
-        $mixedLabel.insertBefore($mixed, $mixedLabel.firstChild);
+        $mixedLabel.appendChild($mixed);
         $mixed.type = "checkbox";
         $mixed.checked = profile.mixed;
 
@@ -585,7 +585,7 @@ export default {
         $root.appendChild($minSizeLabel);
         $minSizeLabel.textContent = i18n.gif2webpMinSize(); // e.g., "Minimize output size"
         const $minSize = document.createElement("input");
-        $minSizeLabel.insertBefore($minSize, $minSizeLabel.firstChild);
+        $minSizeLabel.appendChild($minSize);
         $minSize.type = "checkbox";
         $minSize.checked = profile.minSize;
 
@@ -594,7 +594,7 @@ export default {
         $root.appendChild($loopCompatLabel);
         $loopCompatLabel.textContent = i18n.gif2webpLoopCompat(); // e.g., "Loop compatibility mode"
         const $loopCompat = document.createElement("input");
-        $loopCompatLabel.insertBefore($loopCompat, $loopCompatLabel.firstChild);
+        $loopCompatLabel.appendChild($loopCompat);
         $loopCompat.type = "checkbox";
         $loopCompat.checked = profile.loopCompat;
 
@@ -603,7 +603,7 @@ export default {
         $root.appendChild($mtLabel);
         $mtLabel.textContent = i18n.gif2webpMt(); // e.g., "Use multi-threading"
         const $mt = document.createElement("input");
-        $mtLabel.insertBefore($mt, $mtLabel.firstChild);
+        $mtLabel.appendChild($mt);
         $mt.type = "checkbox";
         $mt.checked = profile.mt;
 
@@ -711,7 +711,7 @@ export default {
         $root.appendChild($stdQuantLabel);
         $stdQuantLabel.textContent = i18n.cjpegliStdQuant();
         const $stdQuant = document.createElement("input");
-        $stdQuantLabel.insertBefore($stdQuant, $stdQuantLabel.firstChild);
+        $stdQuantLabel.appendChild($stdQuant);
         $stdQuant.type = "checkbox";
         $stdQuant.checked = profile.stdQuant;
 
@@ -720,7 +720,7 @@ export default {
         $root.appendChild($xybLabel);
         $xybLabel.textContent = i18n.cjpegliXyb();
         const $xyb = document.createElement("input");
-        $xybLabel.insertBefore($xyb, $xybLabel.firstChild);
+        $xybLabel.appendChild($xyb);
         $xyb.type = "checkbox";
         $xyb.checked = profile.xyb;
 
@@ -729,7 +729,7 @@ export default {
         $root.appendChild($noadaptiveLabel);
         $noadaptiveLabel.textContent = i18n.cjpegliNoadaptive();
         const $noadaptive = document.createElement("input");
-        $noadaptiveLabel.insertBefore($noadaptive, $noadaptiveLabel.firstChild);
+        $noadaptiveLabel.appendChild($noadaptive);
         $noadaptive.type = "checkbox";
         $noadaptive.checked = profile.noadaptive;
 
@@ -858,10 +858,7 @@ export default {
         $qualityMethod.appendChild($distanceRadioLabel);
         $distanceRadioLabel.textContent = i18n.cjxlQualityMethodDistance();
         const $distanceRadio = document.createElement("input");
-        $distanceRadioLabel.insertBefore(
-          $distanceRadio,
-          $distanceRadioLabel.firstChild
-        );
+        $distanceRadioLabel.appendChild($distanceRadio);
         $distanceRadio.type = "radio";
         $distanceRadio.name = "cjxl-quality-method";
         if (profile.distance) $distanceRadio.checked = true;
@@ -869,10 +866,7 @@ export default {
         $qualityMethod.appendChild($qualityRadioLabel);
         $qualityRadioLabel.textContent = i18n.cjxlQualityMethodQuality();
         const $qualityRadio = document.createElement("input");
-        $qualityRadioLabel.insertBefore(
-          $qualityRadio,
-          $qualityRadioLabel.firstChild
-        );
+        $qualityRadioLabel.appendChild($qualityRadio);
         $qualityRadio.type = "radio";
         $qualityRadio.name = "cjxl-quality-method";
         if (profile.quality || !profile.distance) $qualityRadio.checked = true; // question: as default?
@@ -934,10 +928,7 @@ export default {
         $root.appendChild($losslessJpegLabel);
         $losslessJpegLabel.textContent = i18n.cjxlLosslessJpeg();
         const $losslessJpeg = document.createElement("input");
-        $losslessJpegLabel.insertBefore(
-          $losslessJpeg,
-          $losslessJpegLabel.firstChild
-        );
+        $losslessJpegLabel.appendChild($losslessJpeg);
         $losslessJpeg.type = "checkbox";
         $losslessJpeg.checked = profile.losslessJpeg === "1";
 
@@ -1048,10 +1039,7 @@ export default {
         $pixelsToJpegSection.appendChild($pixelsToJpegLabel);
         $pixelsToJpegLabel.textContent = i18n.djxlPixelsToJpeg();
         const $pixelsToJpeg = document.createElement("input");
-        $pixelsToJpegLabel.insertBefore(
-          $pixelsToJpeg,
-          $pixelsToJpegLabel.firstChild
-        );
+        $pixelsToJpegLabel.appendChild($pixelsToJpeg);
         $pixelsToJpeg.type = "checkbox";
         $pixelsToJpeg.checked = profile.pixelsToJpeg;
         $pixelsToJpeg.onchange = () =>
@@ -1074,7 +1062,7 @@ export default {
         $alphaBlendSection.appendChild($alphaBlendLabel);
         $alphaBlendLabel.textContent = i18n.djxlAlphaBlend();
         const $alphaBlend = document.createElement("input");
-        $alphaBlendLabel.insertBefore($alphaBlend, $alphaBlendLabel.firstChild);
+        $alphaBlendLabel.appendChild($alphaBlend);
         $alphaBlend.type = "checkbox";
         $alphaBlend.checked = profile.alphaBlend;
         $alphaBlend.onchange = () =>
@@ -1094,10 +1082,7 @@ export default {
         $root.appendChild($allowPartialFilesLabel);
         $allowPartialFilesLabel.textContent = i18n.djxlAllowPartialFiles();
         const $allowPartialFiles = document.createElement("input");
-        $allowPartialFilesLabel.insertBefore(
-          $allowPartialFiles,
-          $allowPartialFilesLabel.firstChild
-        );
+        $allowPartialFilesLabel.appendChild($allowPartialFiles);
         $allowPartialFiles.type = "checkbox";
         $allowPartialFiles.checked = profile.allowPartialFiles;
 

@@ -392,6 +392,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     background: var(--bg4);
     border-radius: 4px;
     transition: background-color 0.2s;
+    float: left;
   }
   input[type="radio"] {
     border-radius: 50%;
@@ -1335,7 +1336,7 @@ const pageMain = async () => {
           $outputExtension.appendChild($radioLabel);
           $radioLabel.textContent = outputExtension;
           const $radio = document.createElement("input");
-          $radioLabel.insertBefore($radio, $radioLabel.firstChild);
+          $radioLabel.appendChild($radio);
           $radio.type = "radio";
           $radio.name = "output-extension";
           $radio.value = outputExtension;
@@ -1354,7 +1355,7 @@ const pageMain = async () => {
           $ifExists.appendChild($radioLabel);
           $radioLabel.textContent = label;
           const $radio = document.createElement("input");
-          $radioLabel.insertBefore($radio, $radioLabel.firstChild);
+          $radioLabel.appendChild($radio);
           $radio.type = "radio";
           $radio.name = "if-exists";
           return $radio;
@@ -1622,7 +1623,7 @@ const pageMain = async () => {
       $form.appendChild($switchLabel);
       $switchLabel.textContent = i18n.settingsMirrorsSwitch();
       const $switch = document.createElement("input");
-      $switchLabel.insertBefore($switch, $switchLabel.firstChild);
+      $switchLabel.appendChild($switch);
       $switch.type = "checkbox";
       $switch.checked = config.mirrorsEnabled;
       $switch.onchange = () => {
@@ -1647,7 +1648,7 @@ const pageMain = async () => {
         $locales.appendChild($radioLabel);
         $radioLabel.textContent = i18n.nativeName();
         const $radio = document.createElement("input");
-        $radioLabel.insertBefore($radio, $radioLabel.firstChild);
+        $radioLabel.appendChild($radio);
         $radio.type = "radio";
         $radio.name = "locale";
         $radio.value = locale;
@@ -2742,11 +2743,45 @@ const serverMain = async () => {
   server.listen(config.serverPort, "127.0.0.1");
 };
 
+// const utilsMain = async () => {
+//   const generateMarketJson = async () => {
+//     const listData = await fs.promises.readFile("market.json", "utf-8");
+//     const list = /** @type {string[]} */ (JSON.parse(listData));
+//     for (const url of list) {
+//       // todo: add sandbox
+//       // node --permission index.js
+//       // https://nodejs.org/api/permissions.html
+//       // import(url);
+//       // download to local
+//       // const indexJs = await fetch(url, { redirect: "follow" });
+//       // const indexJsText = await indexJs.text();
+//       // await fs.promises.writeFile("temp.js", indexJsText);
+//       // await fs.promises.writeFile(
+//       //   "temp.import.js",
+//       //   `console.log(await import("./temp.js").default)`
+//       // );
+//       // child_process.fork("temp.import.js", ["--permission"]);
+//       const indexJs = await fetch(url, { redirect: "follow" });
+//       const indexJsText = await indexJs.text();
+//       const fileName = Date.now() + ".js";
+//       await fs.promises.writeFile(fileName, indexJsText);
+//       console.log((await import("./" + fileName)).default);
+//     }
+//     // (""+Math.trunc((Date.now()/1000)/(3600*6))*(3600*6)).padStart(12,'0')
+//   };
+//   if (process.argv[3] === "generate-market-json") {
+//     await generateMarketJson();
+//   }
+// };
+
 if (globalThis.document) {
   pageMain();
 } else {
   serverMain(); // wrap it in function, avoid top-level await, see https://github.com/electron/electron/issues/40719
 }
+// else {
+//   utilsMain();
+// }
 
 /*
 const orders = dirProvider({

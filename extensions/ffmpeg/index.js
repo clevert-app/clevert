@@ -2,9 +2,7 @@
 /** @import { Extension, ClevertUtils } from "../../index.js" */
 import child_process from "node:child_process";
 import path from "node:path";
-import fs from "node:fs";
 import http from "node:http";
-import stream from "node:stream";
 const /** @type {ClevertUtils} */ cu = globalThis.clevertUtils;
 const consts = globalThis.process && {
   exe: path.join(import.meta.dirname, "ffmpeg"),
@@ -97,7 +95,7 @@ const executeWithProgress = (args) => {
 export default {
   id: "ffmpeg",
   version: "0.1.0",
-  name: "FFmpeg",
+  name: "ffmpeg",
   description: i18n.description(),
   dependencies: [],
   assets: [
@@ -165,7 +163,7 @@ export default {
         $audioLabel.classList.add("contains-switch");
         $audioLabel.textContent = i18n.containsAudio();
         const $audio = document.createElement("input");
-        $audioLabel.insertBefore($audio, $audioLabel.firstChild);
+        $audioLabel.appendChild($audio);
         $audio.type = "checkbox";
         $audio.checked = profile.audio;
         $audio.onchange = () =>
@@ -189,7 +187,7 @@ export default {
         $videoLabel.classList.add("contains-switch");
         $videoLabel.textContent = i18n.containsVideo();
         const $video = document.createElement("input");
-        $videoLabel.insertBefore($video, $videoLabel.firstChild);
+        $videoLabel.appendChild($video);
         $video.type = "checkbox";
         $video.checked = profile.video;
         $video.onchange = () =>
@@ -212,7 +210,7 @@ export default {
         $root.appendChild($noMetadataLabel);
         $noMetadataLabel.textContent = i18n.noMetadata();
         const $noMetadata = document.createElement("input");
-        $noMetadataLabel.insertBefore($noMetadata, $noMetadataLabel.firstChild);
+        $noMetadataLabel.appendChild($noMetadata);
         $noMetadata.type = "checkbox";
         $noMetadata.checked = profile.noMetadata;
 
@@ -269,21 +267,18 @@ export default {
         `;
         $root.addEventListener("post-remove", (e) => console.log(e));
 
-        const $stripMetadataLabel = document.createElement("label");
-        $root.appendChild($stripMetadataLabel);
-        $stripMetadataLabel.textContent = i18n.noMetadata();
-        const $stripMetadata = document.createElement("input");
-        $stripMetadataLabel.insertBefore(
-          $stripMetadata,
-          $stripMetadataLabel.firstChild
-        );
-        $stripMetadata.type = "checkbox";
-        $stripMetadata.checked = profile.stripMetadata ?? true;
+        const $noMetadataLabel = document.createElement("label");
+        $root.appendChild($noMetadataLabel);
+        $noMetadataLabel.textContent = i18n.noMetadata();
+        const $noMetadata = document.createElement("input");
+        $noMetadataLabel.appendChild($noMetadata);
+        $noMetadata.type = "checkbox";
+        $noMetadata.checked = profile.noMetadata;
 
         return {
           root: $root,
           profile: () => {
-            profile.stripMetadata = $stripMetadata.checked;
+            profile.noMetadata = $noMetadata.checked;
             return profile;
           },
         };
@@ -292,7 +287,7 @@ export default {
         // ffmpeg -hide_banner -i i.mp4 -vn -c:a copy -movflags faststart -map_metadata -1 -y o.mp4
         const args = ["-hide_banner", "-i", input, "-vn", "-c:a", "copy"];
         args.push("-movflags", "faststart");
-        if (profile.stripMetadata) args.push("-map_metadata", "-1");
+        if (profile.noMetadata) args.push("-map_metadata", "-1");
         args.push("-y", output);
         const { promise, resolve, reject } = Promise.withResolvers();
         const child = child_process.spawn(consts.exe, args);
@@ -306,6 +301,7 @@ export default {
       },
     },
     {
+      // todo: work in progress
       id: "slice_download",
       name: "slice_download",
       description: "slice_download",
@@ -340,7 +336,7 @@ export default {
         return {
           root: $root,
           profile: () => {
-            return {};
+            return profile;
           },
           entries: () => {
             return [{ url: $url.value, ranges: $ranges.value }];
@@ -500,8 +496,6 @@ export default {
       // videoExtra: "",
       // below are fields for entries
       entries: {
-        inputDir: "/home/kkocdko/misc/code/clevert/temp/_test_res/audio_i",
-        outputDir: "/home/kkocdko/misc/code/clevert/temp/_test_res/audio_o",
         outputExtensions: ["mp3"],
       },
     },
@@ -530,7 +524,7 @@ export default {
       id: "dump_audio",
       name: i18n.dumpAudio(),
       description: i18n.dumpAudioDescription(),
-      actionId: "dumpaudio",
+      actionId: "dump_audio",
       extensionId: "ffmpeg",
       extensionVersion: "0.1.0",
       // below are fields for action
@@ -538,14 +532,16 @@ export default {
       audioExtra: "-c:a copy",
       video: false,
       // videoExtra: "",
-      stripMetadata: true,
+      noMetadata: true,
       // below are fields for entries
       entries: {
         // inputExtensions: [],
         outputExtensions: ["m4a", "mp4"],
       },
     },
+    /*
     {
+      // todo: work in progress
       id: "slice_download", // 约定：对于相同的 action, 这个profile列表中 profile.id == action.id 的就是默认的
       name: "slice_download",
       description: "从支持 HTTP Range 请求的服务器下载视频的一部分",
@@ -564,14 +560,15 @@ export default {
         // outputExtension: "jpg", // 或者指定一个默认的
       },
     },
-    // {
-    //   id: "amr_to_mp3",
-    //   name: "amr_to_mp3",
-    //   description: "将通话录音的 amr 格式音频转换为 mp3 音频",
-    //   actionId: "amr_to_mp3",
-    //   extensionId: "ffmpeg",
-    //   extensionVersion: "0.1.0",
-    // },
+    {
+      id: "amr_to_mp3",
+      name: "amr_to_mp3",
+      description: "将通话录音的 amr 格式音频转换为 mp3 音频",
+      actionId: "amr_to_mp3",
+      extensionId: "ffmpeg",
+      extensionVersion: "0.1.0",
+    },
+    */
   ],
 };
 
