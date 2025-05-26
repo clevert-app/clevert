@@ -384,6 +384,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   input[type="checkbox"],
   input[type="radio"] {
     position: relative;
+    float: left;
     width: 20px;
     height: 20px;
     margin: 2px 8px 2px 0;
@@ -392,7 +393,6 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     background: var(--bg4);
     border-radius: 4px;
     transition: background-color 0.2s;
-    float: left;
   }
   input[type="radio"] {
     border-radius: 50%;
@@ -512,6 +512,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     bottom: 0;
     left: 0;
     padding: 6px 12px 12px;
+    overflow: auto;
     transition: visibility 0.2s, opacity 0.2s;
   }
   /* agreement: default to be visable, and hide with ".off" class */
@@ -691,6 +692,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .action > .operations > *,
   body > .action > .entries.common-files > * {
     margin: 0 12px 6px 0;
+    vertical-align: top;
   }
   body > .action > .operations > menu {
     position: absolute;
