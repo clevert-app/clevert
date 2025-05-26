@@ -18,11 +18,16 @@ const i18nRes = (() => {
     dumpAudio: () => "Dump audio",
     dumpAudioDescription: () =>
       "Extract audio track from video file, without re-encoding",
-    containsAudio: () => "Contains audio",
+    audio: () => "Audio",
     audioExtra: () => "Audio extra args",
-    containsVideo: () => "Contains video",
+    video: () => "Video",
     videoExtra: () => "Video extra args",
-    noMetadata: () => "Strip metadata",
+    codecOff: () => "off",
+    codecCopy: () => "copy",
+    codecCustom: () => "custom",
+    bitrate: () => "Bitrate",
+    fastStart: () => "Optimize for playback fast start",
+    noMeta: () => "Strip metadata",
     none: () => "None",
     defaultHint: () => "Keep default",
   };
@@ -36,11 +41,16 @@ const i18nRes = (() => {
     toMp3Description: () => "将音频或视频转换为 MP3 格式音频",
     dumpAudio: () => "提取音频",
     dumpAudioDescription: () => "从视频文件中提取音频轨道，无需重新编码",
-    containsAudio: () => "包含音频",
+    audio: () => "音频",
     audioExtra: () => "音频附加参数",
-    containsVideo: () => "包含视频",
+    video: () => "视频",
     videoExtra: () => "视频附加参数",
-    noMetadata: () => "不保留元数据",
+    codecOff: () => "不包含",
+    codecCopy: () => "复制",
+    codecCustom: () => "自定义",
+    bitrate: () => "比特率",
+    fastStart: () => "优化快速播放",
+    noMeta: () => "不保留元数据",
     none: () => "无",
     defaultHint: () => "保持默认",
   };
@@ -132,8 +142,14 @@ export default {
           .action .root {
             margin-right: -12px;
           }
-          .action .root > * {
+          .action .root > *,
+          .action .root section > div > * {
             margin: 0 12px 6px 0;
+          }
+          .action .root > fieldset {
+            display: inline-grid;
+            grid: auto / repeat(3, auto);
+            gap: 0 6px;
           }
           .action .root .contains-switch {
             display: block;
@@ -150,6 +166,7 @@ export default {
           .action .root section.off {
             grid-template-rows: 0fr;
             opacity: 0;
+            margin-bottom: 0;
           }
           .action .root section > div {
             min-height: 0;
@@ -158,70 +175,179 @@ export default {
         `;
         $root.addEventListener("post-remove", (e) => console.log(e));
 
-        const $audioLabel = document.createElement("label");
-        $root.appendChild($audioLabel);
-        $audioLabel.classList.add("contains-switch");
-        $audioLabel.textContent = i18n.containsAudio();
-        const $audio = document.createElement("input");
-        $audioLabel.appendChild($audio);
-        $audio.type = "checkbox";
-        $audio.checked = profile.audio;
-        $audio.onchange = () =>
-          $audioSectionContainer.classList.toggle("off", !$audio.checked);
-        const $audioSectionContainer = document.createElement("section");
-        $root.appendChild($audioSectionContainer);
-        $audioSectionContainer.classList.toggle("off", !$audio.checked);
-        const $audioSection = document.createElement("div");
-        $audioSectionContainer.appendChild($audioSection);
+        const $audio = document.createElement("fieldset");
+        $root.appendChild($audio);
+        const $audioLegend = document.createElement("legend");
+        $audio.appendChild($audioLegend);
+        $audioLegend.textContent = i18n.audio();
+        const g$audioRadio = (value, label) => {
+          const $radioLabel = document.createElement("label");
+          $audio.appendChild($radioLabel);
+          $radioLabel.textContent = label || value;
+          const $radio = document.createElement("input");
+          $radioLabel.appendChild($radio);
+          $radio.type = "radio";
+          $radio.name = "audio";
+          $radio.value = value;
+          return $radio;
+        };
+        g$audioRadio("off", i18n.codecOff()).checked =
+          profile.audioCodec === "off";
+        g$audioRadio("copy", i18n.codecCopy()).checked =
+          profile.audioCodec === "copy";
+        $audio.onchange = () => {
+          $aCustomSection.classList.toggle("off", !$aCustomRadio.checked);
+          $aacSection.classList.toggle("off", !$aacRadio.checked);
+          $libopusSection.classList.toggle("off", !$libopusRadio.checked);
+          $libmp3lameSection.classList.toggle("off", !$libmp3lameRadio.checked);
+        };
 
-        const $audioExtraLabel = document.createElement("label");
-        $audioSection.appendChild($audioExtraLabel);
-        $audioExtraLabel.textContent = i18n.audioExtra();
-        const $audioExtra = document.createElement("input");
-        $audioExtraLabel.appendChild($audioExtra);
-        $audioExtra.value = profile.audioExtra || "";
-        $audioExtra.placeholder = i18n.none();
+        const $aCustomRadio = g$audioRadio("aCustom", i18n.codecCustom());
+        $aCustomRadio.checked = profile.audioCodec === "custom";
+        const $aCustomSection = document.createElement("section");
+        $root.appendChild($aCustomSection);
+        $aCustomSection.classList.toggle("off", !$aCustomRadio.checked);
+        const $aCustomDiv = document.createElement("div");
+        $aCustomSection.appendChild($aCustomDiv);
+        const $aCustomExtraLabel = document.createElement("label");
+        $aCustomDiv.appendChild($aCustomExtraLabel);
+        $aCustomExtraLabel.textContent = i18n.audioExtra();
+        const $aCustomExtra = document.createElement("input");
+        $aCustomExtraLabel.appendChild($aCustomExtra);
+        $aCustomExtra.value = profile.codecs.aCustom.extra || "";
+        $aCustomExtra.placeholder = i18n.none();
 
-        const $videoLabel = document.createElement("label");
-        $root.appendChild($videoLabel);
-        $videoLabel.classList.add("contains-switch");
-        $videoLabel.textContent = i18n.containsVideo();
-        const $video = document.createElement("input");
-        $videoLabel.appendChild($video);
-        $video.type = "checkbox";
-        $video.checked = profile.video;
-        $video.onchange = () =>
-          $videoSectionContainer.classList.toggle("off", !$video.checked);
-        const $videoSectionContainer = document.createElement("section");
-        $root.appendChild($videoSectionContainer);
-        $videoSectionContainer.classList.toggle("off", !$video.checked);
-        const $videoSection = document.createElement("div");
-        $videoSectionContainer.appendChild($videoSection);
+        const $aacRadio = g$audioRadio("aac");
+        $aacRadio.checked = profile.audioCodec === "aac";
+        const $aacSection = document.createElement("section");
+        $root.appendChild($aacSection);
+        $aacSection.classList.toggle("off", !$aacRadio.checked);
+        const $aacDiv = document.createElement("div");
+        $aacSection.appendChild($aacDiv);
+        const $aacBitrateLabel = document.createElement("label");
+        $aacDiv.appendChild($aacBitrateLabel);
+        $aacBitrateLabel.textContent = i18n.bitrate();
+        const $aacBitrate = document.createElement("input");
+        $aacBitrateLabel.appendChild($aacBitrate);
+        $aacBitrate.value = profile.codecs.aac.bitrate || "";
+        $aacBitrate.placeholder = i18n.defaultHint();
 
-        const $videoExtraLabel = document.createElement("label");
-        $videoSection.appendChild($videoExtraLabel);
-        $videoExtraLabel.textContent = i18n.videoExtra();
-        const $videoExtra = document.createElement("input");
-        $videoExtraLabel.appendChild($videoExtra);
-        $videoExtra.value = profile.videoExtra || "";
-        $videoExtra.placeholder = i18n.none();
+        const $libopusRadio = g$audioRadio("libopus");
+        $libopusRadio.checked = profile.audioCodec === "libopus";
+        const $libopusSection = document.createElement("section");
+        $root.appendChild($libopusSection);
+        $libopusSection.classList.toggle("off", !$libopusRadio.checked);
+        const $libopusDiv = document.createElement("div");
+        $libopusSection.appendChild($libopusDiv);
+        const $libopusBitrateLabel = document.createElement("label");
+        $libopusDiv.appendChild($libopusBitrateLabel);
+        $libopusBitrateLabel.textContent = i18n.bitrate();
+        const $libopusBitrate = document.createElement("input");
+        $libopusBitrateLabel.appendChild($libopusBitrate);
+        $libopusBitrate.value = profile.codecs.libopus.bitrate || "";
+        $libopusBitrate.placeholder = i18n.defaultHint();
+        const $libopusCompLevelLabel = document.createElement("label");
+        $libopusDiv.appendChild($libopusCompLevelLabel);
+        $libopusCompLevelLabel.textContent = "Compression level";
+        const $libopusCompLevel = document.createElement("input");
+        $libopusCompLevelLabel.appendChild($libopusCompLevel);
+        $libopusCompLevel.value = profile.codecs.libopus.compressionLevel;
+        $libopusCompLevel.placeholder = i18n.defaultHint();
 
-        const $noMetadataLabel = document.createElement("label");
-        $root.appendChild($noMetadataLabel);
-        $noMetadataLabel.textContent = i18n.noMetadata();
-        const $noMetadata = document.createElement("input");
-        $noMetadataLabel.appendChild($noMetadata);
-        $noMetadata.type = "checkbox";
-        $noMetadata.checked = profile.noMetadata;
+        const $libmp3lameRadio = g$audioRadio("libmp3lame");
+        $libmp3lameRadio.checked = profile.audioCodec === "libmp3lame";
+        const $libmp3lameSection = document.createElement("section");
+        $root.appendChild($libmp3lameSection);
+        $libmp3lameSection.classList.toggle("off", !$libmp3lameRadio.checked);
+        const $libmp3lameDiv = document.createElement("div");
+        $libmp3lameSection.appendChild($libmp3lameDiv);
+        const $libmp3lameBitrateLabel = document.createElement("label");
+        $libmp3lameDiv.appendChild($libmp3lameBitrateLabel);
+        $libmp3lameBitrateLabel.textContent = i18n.bitrate();
+        const $libmp3lameBitrate = document.createElement("input");
+        $libmp3lameBitrateLabel.appendChild($libmp3lameBitrate);
+        $libmp3lameBitrate.value = profile.codecs.libmp3lame.bitrate || "";
+        $libmp3lameBitrate.placeholder = i18n.defaultHint();
+
+        const $video = document.createElement("fieldset");
+        $root.appendChild($video);
+        const $videoLegend = document.createElement("legend");
+        $video.appendChild($videoLegend);
+        $videoLegend.textContent = i18n.video();
+        const g$videoRadio = (value, label) => {
+          const $radioLabel = document.createElement("label");
+          $video.appendChild($radioLabel);
+          $radioLabel.textContent = label || value;
+          const $radio = document.createElement("input");
+          $radioLabel.appendChild($radio);
+          $radio.type = "radio";
+          $radio.name = "video";
+          $radio.value = value;
+          return $radio;
+        };
+        g$videoRadio("off", i18n.codecOff()).checked =
+          profile.videoCodec === "off";
+        g$videoRadio("copy", i18n.codecCopy()).checked =
+          profile.videoCodec === "copy";
+        $video.onchange = () => {
+          $vCustomSection.classList.toggle("off", !$vCustomRadio.checked);
+        };
+
+        const $vCustomRadio = g$videoRadio("vCustom", i18n.codecCustom());
+        $vCustomRadio.checked = profile.audioCodec === "custom";
+        const $vCustomSection = document.createElement("section");
+        $root.appendChild($vCustomSection);
+        $vCustomSection.classList.toggle("off", !$vCustomRadio.checked);
+        const $vCustomDiv = document.createElement("div");
+        $vCustomSection.appendChild($vCustomDiv);
+        const $vCustomExtraLabel = document.createElement("label");
+        $vCustomDiv.appendChild($vCustomExtraLabel);
+        $vCustomExtraLabel.textContent = i18n.videoExtra();
+        const $vCustomExtra = document.createElement("input");
+        $vCustomExtraLabel.appendChild($vCustomExtra);
+        $vCustomExtra.value = profile.codecs.vCustom.extra || "";
+        $vCustomExtra.placeholder = i18n.none();
+
+        const $fastStartLabel = document.createElement("label");
+        $root.appendChild($fastStartLabel);
+        $fastStartLabel.textContent = i18n.fastStart();
+        const $fastStart = document.createElement("input");
+        $fastStartLabel.appendChild($fastStart);
+        $fastStart.type = "checkbox";
+        $fastStart.checked = profile.fastStart;
+
+        const $noMetaLabel = document.createElement("label");
+        $root.appendChild($noMetaLabel);
+        $noMetaLabel.textContent = i18n.noMeta();
+        const $noMeta = document.createElement("input");
+        $noMetaLabel.appendChild($noMeta);
+        $noMeta.type = "checkbox";
+        $noMeta.checked = profile.noMeta;
 
         return {
           root: $root,
           profile: () => {
-            profile.audio = $audio.checked;
-            profile.audioExtra = profile.audio ? $audioExtra.value.trim() : "";
-            profile.video = $video.checked;
-            profile.videoExtra = profile.video ? $videoExtra.value.trim() : "";
-            profile.noMetadata = $noMetadata.checked;
+            profile.audioCodec = /** @type {any} */ (
+              $audio.querySelector("input[type=radio]:checked")
+            ).value;
+
+            profile.codecs.aCustom.extra = $aCustomExtra.value;
+
+            profile.codecs.aac.bitrate = $aacBitrate.value;
+
+            profile.codecs.libopus.bitrate = $libopusBitrate.value;
+            profile.codecs.libopus.compressionLevel = $libopusCompLevel.value;
+
+            profile.codecs.libmp3lame.bitrate = $libmp3lameBitrate.value;
+
+            profile.videoCodec = /** @type {any} */ (
+              $video.querySelector("input[type=radio]:checked")
+            ).value;
+
+            profile.codecs.vCustom.extra = $vCustomExtra.value;
+
+            profile.fastStart = $fastStart.checked;
+            profile.noMeta = $noMeta.checked;
             return profile;
           },
         };
@@ -229,22 +355,22 @@ export default {
       execute: (profile, { input, output }) => {
         // ffmpeg -hide_banner -i i.mp4 -vn -c:a copy -movflags faststart -map_metadata -1 -y o.mp4
         const args = ["-hide_banner", "-i", input];
-        if (profile.audio) {
-          if (profile.audioExtra) {
-            args.push(...profile.audioExtra.split(" ")); // todo: keep quotes
-          }
-        } else {
+        if (profile.audioCodec === "off") {
           args.push("-an");
+        } else if (profile.audioCodec === "copy") {
+          args.push("-c:a", "copy");
+        } else if (profile.audioCodec === "aCustom") {
+          args.push(...profile.codecs.aCustom.extra.split(" ")); // todo: keep quotes
         }
-        if (profile.video) {
-          if (profile.videoExtra) {
-            args.push(...profile.videoExtra.split(" ")); // todo: keep quotes
-          }
-        } else {
+        if (profile.videoCodec === "off") {
           args.push("-vn");
+        } else if (profile.videoCodec === "copy") {
+          args.push("-c:v", "copy");
+        } else if (profile.videoCodec === "vCustom") {
+          args.push(...profile.codecs.vCustom.extra.split(" "));
         }
-        // args.push("-movflags", "faststart");
-        if (profile.noMetadata) args.push("-map_metadata", "-1");
+        if (profile.fastStart) args.push("-movflags", "faststart"); // this option is only for MP4, M4A, M4V, MOV
+        if (profile.noMeta) args.push("-map_metadata", "-1");
         args.push(output);
         return executeWithProgress(args);
       },
@@ -267,18 +393,18 @@ export default {
         `;
         $root.addEventListener("post-remove", (e) => console.log(e));
 
-        const $noMetadataLabel = document.createElement("label");
-        $root.appendChild($noMetadataLabel);
-        $noMetadataLabel.textContent = i18n.noMetadata();
-        const $noMetadata = document.createElement("input");
-        $noMetadataLabel.appendChild($noMetadata);
-        $noMetadata.type = "checkbox";
-        $noMetadata.checked = profile.noMetadata;
+        const $noMetaLabel = document.createElement("label");
+        $root.appendChild($noMetaLabel);
+        $noMetaLabel.textContent = i18n.noMeta();
+        const $noMeta = document.createElement("input");
+        $noMetaLabel.appendChild($noMeta);
+        $noMeta.type = "checkbox";
+        $noMeta.checked = profile.noMeta;
 
         return {
           root: $root,
           profile: () => {
-            profile.noMetadata = $noMetadata.checked;
+            profile.noMeta = $noMeta.checked;
             return profile;
           },
         };
@@ -287,7 +413,7 @@ export default {
         // ffmpeg -hide_banner -i i.mp4 -vn -c:a copy -movflags faststart -map_metadata -1 -y o.mp4
         const args = ["-hide_banner", "-i", input, "-vn", "-c:a", "copy"];
         args.push("-movflags", "faststart");
-        if (profile.noMetadata) args.push("-map_metadata", "-1");
+        if (profile.noMeta) args.push("-map_metadata", "-1");
         args.push("-y", output);
         const { promise, resolve, reject } = Promise.withResolvers();
         const child = child_process.spawn(consts.exe, args);
@@ -470,10 +596,27 @@ export default {
       extensionId: "ffmpeg",
       extensionVersion: "0.1.0",
       // below are fields for action
-      audio: true,
-      // audioExtra: "-c:a copy",
-      video: true,
-      // videoExtra: "-c:v copy",
+      codecs: {
+        aCustom: { extra: "" },
+        vCustom: { extra: "" },
+        aac: {
+          bitrate: "128k",
+          profile: "aac_low", // aac_low | mpeg2_aac_low | aac_ltp
+        },
+        libopus: {
+          bitrate: "128k",
+          // vbr: "on",
+          compressionLevel: "10",
+          application: "audio", // voip | audio | lowdelay
+        },
+        libmp3lame: {
+          bitrate: "128k",
+        },
+      },
+      audioCodec: "off",
+      videoCodec: "off",
+      fastStart: true,
+      noMeta: false,
       // below are fields for entries
       entries: {
         // inputDir: "/home/kkocdko/misc/code/clevert/temp/_test_res/video_i",
@@ -490,10 +633,14 @@ export default {
       extensionId: "ffmpeg",
       extensionVersion: "0.1.0",
       // below are fields for action
-      audio: true,
-      audioExtra: "-c:a libmp3lame -b:a 128k",
-      video: false,
-      // videoExtra: "",
+      // codecs: {
+      //   aCustom: { extra: "" },
+      //   vCustom: { extra: "" },
+      // },
+      // audioCodec: "libmp3lame",
+      // videoCodec: "off",
+      fastStart: true,
+      noMeta: false,
       // below are fields for entries
       entries: {
         outputExtensions: ["mp3"],
@@ -532,7 +679,7 @@ export default {
       audioExtra: "-c:a copy",
       video: false,
       // videoExtra: "",
-      noMetadata: true,
+      noMeta: true,
       // below are fields for entries
       entries: {
         // inputExtensions: [],
