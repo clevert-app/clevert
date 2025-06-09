@@ -668,7 +668,8 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     line-height: 19px;
   }
   body > .home figure ~ button::before,
-  body > .action > .entries label > button::before {
+  body > .action > .entries label > button::before,
+  body > .action > .entries.common-files li > button::before {
     clip-path: path(
       "m1.6,5.4 a1.6,1.6,0,1,0,.01,0 m5.4,0 a1.6,1.6,0,1,0,.01,0 m5.4,0 a1.6,1.6,0,1,0,.01,0"
     );
@@ -679,6 +680,12 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     content: "";
     background: var(--fg);
     opacity: 0.9;
+  }
+  body > .action > .entries.common-files button.add::before {
+    clip-path: path("M1,6v2h12v-2z M6,1h2v5h-2z m0,7h2v5h-2z");
+  }
+  body > .action > .entries.common-files button.remove::before {
+    clip-path: path("M1,6v2h12v-2z");
   }
   body > .home menu {
     position: absolute;
@@ -714,10 +721,12 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   body > .action > .entries.common-files li > * {
     margin-right: 12px;
+    vertical-align: bottom;
   }
   body > .action > .entries.common-files li input {
     width: calc(50vw - 100px);
     max-width: 320px;
+    padding-right: calc(8px + 30px);
   }
   body > .action > .entries.common-files fieldset {
     display: inline-grid;
@@ -1258,10 +1267,11 @@ const pageMain = async () => {
       $entries.classList.add("entries");
       $entries.classList.add("common-files");
       $entries.onsubmit = (e) => e.preventDefault();
+
       const r$entries$dir = () => {
         $entries.replaceChildren();
 
-        const $inputDirLabel = document.createElement("label");
+        const $inputDirLabel = document.createElement("label"); // agreement: don't use web components, it's hard to fine-tune after encapsulation and cause unnecessary nesting (like <the-switch> <label> <input/> </label> </the-switch> )
         $entries.appendChild($inputDirLabel);
         $inputDirLabel.textContent = i18n.entriesInputDir();
         $inputDirLabel.ondragover = (e) =>
@@ -1362,9 +1372,8 @@ const pageMain = async () => {
           $radio.name = "if-exists";
           return $radio;
         };
-        const ifExistsInit = /** @type {EntriesCommonFiles["ifExists"]} */ (
-          profile.entries?.ifExists ?? "noop"
-        );
+        /** @type {EntriesCommonFiles["ifExists"]} */
+        const ifExistsInit = profile.entries?.ifExists ?? "noop";
         const $ifExistsNoop = g$ifExistsRadio(i18n.entriesIfExistsNoop());
         const $ifExistsForce = g$ifExistsRadio(i18n.entriesIfExistsForce());
         const $ifExistsSkip = g$ifExistsRadio(i18n.entriesIfExistsSkip());
@@ -1396,95 +1405,97 @@ const pageMain = async () => {
       const r$entries$files = () => {
         $entries.replaceChildren();
 
-        /** @type {Map<HTMLLIElement, { $input: HTMLInputElement, $output: HTMLInputElement }>} */
-        const m = new Map();
-
-        const $add = document.createElement("button");
-        $entries.appendChild($add);
-        $add.textContent = "Add";
-        $add.onclick = () => {
-          const $entry = document.createElement("li");
-          $list.appendChild($entry);
-          const $inputLabel = document.createElement("label");
-          $entry.appendChild($inputLabel);
-          $inputLabel.ondragover = (e) =>
-            e.preventDefault() ?? $inputLabel.classList.add("drop-hint");
-          $inputLabel.ondragleave = (e) =>
-            e.preventDefault() ?? $inputLabel.classList.remove("drop-hint");
-          $inputLabel.ondrop = (e) => {
-            e.preventDefault() ?? $inputLabel.classList.remove("drop-hint");
-            const file = e?.dataTransfer?.items?.[0]?.getAsFile();
-            $input.value = globalThis.electron.webUtils.getPathForFile(file);
-          };
-          // todo: after drop to $input, autofill the $output
-          // todo: https://www.electronjs.org/docs/latest/tutorial/native-file-drag-drop/
-          const $input = document.createElement("input");
-          $inputLabel.appendChild($input);
-          $input.placeholder = "Input file";
-          const $inputButton = document.createElement("button");
-          $inputLabel.appendChild($inputButton);
-          $inputButton.onclick = async () => {
-            /** @type {ShowOpenDialogRequest} */
-            const request = { properties: ["openFile"] };
-            if ($input.value) request.defaultPath = $input.value;
-            /** @type {ShowOpenDialogResponse} */
-            const response = await fetch("/show-open-dialog", {
-              method: "POST",
-              body: JSON.stringify(request),
-            }).then((r) => r.json());
-            if (response.filePaths.length) $input.value = response.filePaths[0];
-          };
-          const $outputLabel = document.createElement("label");
-          $entry.appendChild($outputLabel);
-          $outputLabel.ondragover = (e) =>
-            e.preventDefault() ?? $outputLabel.classList.add("drop-hint");
-          $outputLabel.ondragleave = (e) =>
-            e.preventDefault() ?? $outputLabel.classList.remove("drop-hint");
-          $outputLabel.ondrop = (e) => {
-            e.preventDefault() ?? $outputLabel.classList.remove("drop-hint");
-            const file = e?.dataTransfer?.items?.[0]?.getAsFile();
-            $output.value = globalThis.electron.webUtils.getPathForFile(file);
-          };
-          const $output = document.createElement("input");
-          $outputLabel.appendChild($output);
-          $output.placeholder = "Output file";
-          const $outputButton = document.createElement("button");
-          $outputLabel.appendChild($outputButton);
-          $outputButton.onclick = async () => {
-            /** @type {ShowSaveDialogRequest} */
-            const request = { properties: [] };
-            if ($output.value) request.defaultPath = $output.value;
-            if (profile.entries?.outputExtensions) {
-              const toFilter = (v) => ({ name: v, extensions: [v] });
-              request.filters = profile.entries.outputExtensions.map(toFilter);
-            }
-            /** @type {ShowSaveDialogResponse} */
-            const response = await fetch("/show-save-dialog", {
-              method: "POST",
-              body: JSON.stringify(request),
-            }).then((r) => r.json());
-            if (response.filePath) $output.value = response.filePath;
-          };
-          m.set($entry, { $input, $output });
-          const $removeButton = document.createElement("button");
-          $entry.appendChild($removeButton);
-          $removeButton.textContent = "✕";
-          $removeButton.onclick = () => {
-            m.delete($entry);
-            $entry.remove();
-          };
-        };
-        const $clear = document.createElement("button");
-        $entries.appendChild($clear);
-        $clear.textContent = "Clear";
-        $clear.onclick = () => {
-          m.clear();
-          $list.replaceChildren();
-          $add.click();
-        };
         const $list = document.createElement("ul");
         $entries.appendChild($list);
-        $add.click();
+        const $entry = document.createElement("li");
+        $list.appendChild($entry);
+        const $add = document.createElement("button");
+        $add.classList.add("add");
+        $entry.appendChild($add);
+        $add.onclick = () => {
+          assert($input.value && $output.value);
+          const $entry = document.createElement("li");
+          $list.insertBefore($entry, $add.parentNode);
+          const $remove = document.createElement("button");
+          $entry.appendChild($remove);
+          $remove.classList.add("remove");
+          $remove.onclick = () => $entry.remove();
+          const $iLabel = document.createElement("label");
+          $entry.appendChild($iLabel);
+          const $i = document.createElement("input");
+          $iLabel.appendChild($i);
+          $i.readOnly = true;
+          $i.value = $input.value;
+          $input.value = "";
+          const $oLabel = document.createElement("label");
+          $entry.appendChild($oLabel);
+          const $o = document.createElement("input");
+          $oLabel.appendChild($o);
+          $o.readOnly = true;
+          $o.value = $output.value;
+          $output.value = "";
+          $add.scrollIntoView({ behavior: "smooth" });
+        };
+        const $inputLabel = document.createElement("label");
+        $entry.appendChild($inputLabel);
+        $inputLabel.ondragover = (e) =>
+          e.preventDefault() ?? $inputLabel.classList.add("drop-hint");
+        $inputLabel.ondragleave = (e) =>
+          e.preventDefault() ?? $inputLabel.classList.remove("drop-hint");
+        $inputLabel.ondrop = (e) => {
+          e.preventDefault() ?? $inputLabel.classList.remove("drop-hint");
+          const file = e?.dataTransfer?.items?.[0]?.getAsFile();
+          $input.value = globalThis.electron.webUtils.getPathForFile(file);
+        };
+        // todo: after drop to $input, autofill the $output
+        // todo: https://www.electronjs.org/docs/latest/tutorial/native-file-drag-drop/
+        const $input = document.createElement("input");
+        $inputLabel.appendChild($input);
+        $input.placeholder = "Input file";
+        const $inputButton = document.createElement("button");
+        $inputLabel.appendChild($inputButton);
+        $inputButton.onclick = async () => {
+          /** @type {ShowOpenDialogRequest} */
+          const request = { properties: ["openFile"] };
+          if ($input.value) request.defaultPath = $input.value;
+          /** @type {ShowOpenDialogResponse} */
+          const response = await fetch("/show-open-dialog", {
+            method: "POST",
+            body: JSON.stringify(request),
+          }).then((r) => r.json());
+          if (response.filePaths.length) $input.value = response.filePaths[0];
+        };
+        const $outputLabel = document.createElement("label");
+        $entry.appendChild($outputLabel);
+        $outputLabel.ondragover = (e) =>
+          e.preventDefault() ?? $outputLabel.classList.add("drop-hint");
+        $outputLabel.ondragleave = (e) =>
+          e.preventDefault() ?? $outputLabel.classList.remove("drop-hint");
+        $outputLabel.ondrop = (e) => {
+          e.preventDefault() ?? $outputLabel.classList.remove("drop-hint");
+          const file = e?.dataTransfer?.items?.[0]?.getAsFile();
+          $output.value = globalThis.electron.webUtils.getPathForFile(file);
+        };
+        const $output = document.createElement("input");
+        $outputLabel.appendChild($output);
+        $output.placeholder = "Output file";
+        const $outputButton = document.createElement("button");
+        $outputLabel.appendChild($outputButton);
+        $outputButton.onclick = async () => {
+          /** @type {ShowSaveDialogRequest} */
+          const request = { properties: [] };
+          if ($output.value) request.defaultPath = $output.value;
+          if (profile.entries?.outputExtensions) {
+            const toFilter = (v) => ({ name: v, extensions: [v] });
+            request.filters = profile.entries.outputExtensions.map(toFilter);
+          }
+          /** @type {ShowSaveDialogResponse} */
+          const response = await fetch("/show-save-dialog", {
+            method: "POST",
+            body: JSON.stringify(request),
+          }).then((r) => r.json());
+          if (response.filePath) $output.value = response.filePath;
+        };
 
         getEntries = () => {
           /** @type {EntriesCommonFiles} */
@@ -1493,11 +1504,14 @@ const pageMain = async () => {
             ifExists: "noop",
             mode: "files",
             inplace: false,
-            entries: [...m.values()].map(({ $input, $output }) => ({
-              input: $input.value,
-              output: $output.value,
-            })),
+            entries: [],
           };
+          let inputValue = "";
+          $list.querySelectorAll("input").forEach(({ value }, i) => {
+            if (i % 2 === 0) inputValue = value;
+            else if (inputValue && value)
+              entries.entries.push({ input: inputValue, output: value });
+          });
           return entries;
         };
       };
