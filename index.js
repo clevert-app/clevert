@@ -57,11 +57,6 @@ import child_process from "node:child_process";
   Omit<Extension, "actions"> & { actions: Omit<Action, "ui" | "execute">[] }
 )[]} ListExtensionsResponse
 @typedef {{
-  kind: "number-sequence";
-  begin: number;
-  end: number;
-}} EntriesNumberSequence May be useful later.
-@typedef {{
   kind: "common-files";
   ifExists: "noop" | "force" | "skip";
 } & ({
@@ -72,16 +67,16 @@ import child_process from "node:child_process";
   outputExtension: string;
 } | {
   mode: "files";
-  inplace: boolean;
   entries: {
     input: string,
-    output?: string;
+    output: string;
   }[];
-})} EntriesCommonFiles The most common.
+})} EntriesCommonFiles The most common kind. One file input + one file output. In the future we should supports inplace mode.
 @typedef {{
-  kind: "custom";
+  kind: "output-dir";
+  outputDir: string;
   entries: any[];
-}} EntriesCustom Just `entries` itself, may useful for `yt-dlp` and other scenario that a file comes from nowhere.
+}} EntriesOutputDir Useful for `yt-dlp` and other scenario that a file comes from nowhere.
 @typedef {{
   begin: number;
   end?: number;
@@ -104,7 +99,7 @@ import child_process from "node:child_process";
   extensionVersion: string;
   actionId: string;
   profile: any;
-  entries: EntriesCommonFiles | EntriesCustom | EntriesNumberSequence;
+  entries: EntriesCommonFiles | EntriesOutputDir;
   parallel: number;
 }} RunActionRequest
 @typedef {{
@@ -329,6 +324,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
       --bg6: #a6c3ee;
       --bg7: #9dabc6;
       --fg: #000;
+      --mask: #0007;
     }
   }
   /* initial theme for dark mode */
@@ -342,6 +338,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
       --bg6: #666666;
       --bg7: #aaaaaa;
       --fg: #fff;
+      --mask: #0007;
     }
   }
   /* todo: custom themes like "html.theme-abc { body { } }" */
@@ -364,9 +361,14 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   a {
     color: #a8c7fa;
   }
+  ::placeholder {
+    color: var(--fg);
+    opacity: 0.5;
+  }
   input[type="text"],
   input[type="number"],
-  input:not([type]) {
+  input:not([type]),
+  textarea {
     width: calc(200px - 8px - 10px);
     padding: 5px 8px 5px 10px;
     font-size: 14px;
@@ -378,7 +380,8 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   input[type="text"]:focus,
   input[type="number"]:focus,
-  input:not([type]):focus {
+  input:not([type]):focus,
+  textarea:focus {
     background: var(--bg5);
   }
   input[type="checkbox"],
@@ -406,7 +409,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     height: 20px;
     clip-path: polygon(24% 49%, 18% 56%, 43% 78%, 82% 31%, 75% 26%, 42% 65%);
     content: "";
-    background-image: linear-gradient(90deg, var(--fg) 50%, #0000 50%);
+    background: linear-gradient(90deg, var(--fg) 50%, #0000 50%);
     background-position-x: 100%;
     background-size: 200%;
     transition: background-position-x 0.2s;
@@ -623,7 +626,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     width: 100%;
     height: 3px;
     content: "";
-    background-image: linear-gradient(90deg, var(--bg7) 50%, var(--bg5) 50%);
+    background: linear-gradient(90deg, var(--bg7) 50%, var(--bg5) 50%);
     background-position-x: calc(100% - var(--progress));
     background-size: 200%;
     border-radius: 4px;
@@ -701,6 +704,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     margin: 0 12px 6px 0;
     vertical-align: top;
   }
+  /* body > .action > .operations > button.run-action::after { clip-path: path("m1,1h1.8l2,6l-2,6h-1.8l2,-6zm5,0h1.8l2,6l-2,6h-1.8l2,-6"); } */
   body > .action > .operations > menu {
     position: absolute;
     bottom: 0;
@@ -708,7 +712,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     display: grid;
     gap: 12px;
     padding: 12px;
-    box-shadow: 0 0 0 6px var(--bg);
+    box-shadow: 0 0 0 calc(100vmax - 48px) var(--mask);
   }
   body > .action > .entries.common-files ul {
     width: fit-content;
@@ -737,7 +741,10 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     margin-top: 12px;
     margin-bottom: 12px;
   }
-  body > .action label > input:not([type="radio"]):not([type="checkbox"]) {
+  body > .action label > input[type="text"],
+  body > .action label > input[type="number"],
+  body > .action label > input:not([type]),
+  body > .action label > textarea {
     display: block;
     margin-top: 4px;
   }
@@ -789,10 +796,6 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     inset: 0;
   }
   body > .top {
-    position: fixed;
-    top: 0;
-    right: 0;
-    left: 0;
     padding: 8px 12px;
   }
   body > .top > button:not(:last-child) {
@@ -1501,9 +1504,8 @@ const pageMain = async () => {
           /** @type {EntriesCommonFiles} */
           const entries = {
             kind: "common-files",
-            ifExists: "noop",
             mode: "files",
-            inplace: false,
+            ifExists: "noop",
             entries: [],
           };
           let inputValue = "";
@@ -1517,12 +1519,48 @@ const pageMain = async () => {
       };
       if (mode === "dir") r$entries$dir();
       if (mode === "files") r$entries$files();
-    } else if (action.kind === "custom") {
+    } else if (action.kind === "output-dir") {
+      const $entries = document.createElement("form");
+      $action.appendChild($entries);
+      $entries.classList.add("entries");
+      $entries.classList.add("output-dir");
+      $entries.onsubmit = (e) => e.preventDefault();
+
+      const $outputDirLabel = document.createElement("label");
+      $entries.appendChild($outputDirLabel);
+      $outputDirLabel.textContent = i18n.entriesOutputDir();
+      $outputDirLabel.ondragover = (e) =>
+        e.preventDefault() ?? $outputDirLabel.classList.add("drop-hint");
+      $outputDirLabel.ondragleave = (e) =>
+        e.preventDefault() ?? $outputDirLabel.classList.remove("drop-hint");
+      $outputDirLabel.ondrop = (e) => {
+        e.preventDefault() ?? $outputDirLabel.classList.remove("drop-hint");
+        const file = e?.dataTransfer?.items?.[0]?.getAsFile();
+        $outputDir.value = globalThis.electron.webUtils.getPathForFile(file);
+      };
+      const $outputDir = document.createElement("input");
+      $outputDirLabel.appendChild($outputDir);
+      $outputDir.value = profile.entries.outputDir ?? "";
+      const $outputDirButton = document.createElement("button");
+      $outputDirLabel.appendChild($outputDirButton);
+      $outputDirButton.onclick = async () => {
+        /** @type {ShowOpenDialogRequest} */
+        const request = { properties: ["openDirectory"] };
+        if ($outputDir.value) request.defaultPath = $outputDir.value;
+        /** @type {ShowOpenDialogResponse} */
+        const response = await fetch("/show-open-dialog", {
+          method: "POST",
+          body: JSON.stringify(request),
+        }).then((r) => r.json());
+        if (response.filePaths.length) $outputDir.value = response.filePaths[0];
+      };
+
       getEntries = () => {
         assert(controller.entries);
-        /** @type {EntriesCustom} */
+        /** @type {EntriesOutputDir} */
         const entries = {
-          kind: "custom",
+          kind: "output-dir",
+          outputDir: $outputDir.value,
           entries: controller.entries(),
         };
         return entries;
@@ -2176,7 +2214,8 @@ const serverMain = async () => {
   };
 
   /**
-   * @type {{ (opts: EntriesCommonFiles): Promise<{ input: string; output: string; }[]>; (opts: EntriesCustom): Promise<any[]>; (opts: EntriesNumberSequence): Promise<any[]>; }}
+   * @param {RunActionRequest["entries"]} opts
+   * @type {{(opts: EntriesCommonFiles): Promise<{ input: string; output: string; }[]>; (opts: EntriesOutputDir): Promise<any[]>; }}
    */
   const solveEntries = async (opts) => {
     if (opts.kind === "common-files" && opts.mode === "dir") {
@@ -2197,9 +2236,9 @@ const serverMain = async () => {
       }
       return entries;
     } else if (opts.kind === "common-files" && opts.mode === "files") {
-      // question: what about the usage of `.inplace` ?
       return opts.entries;
-    } else if (opts.kind === "custom") {
+    } else if (opts.kind === "output-dir") {
+      for (const entry of opts.entries) entry.outputDir = opts.outputDir;
       return opts.entries;
     } else {
       assert(false, "todo");
@@ -2411,9 +2450,7 @@ const serverMain = async () => {
         ? assert(false)
         : request.entries.kind === "common-files"
         ? await solveEntries(request.entries)
-        : request.entries.kind === "custom"
-        ? await solveEntries(request.entries)
-        : request.entries.kind === "number-sequence"
+        : request.entries.kind === "output-dir"
         ? await solveEntries(request.entries)
         : assert(false);
       const amount = entries.length;
