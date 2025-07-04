@@ -158,7 +158,7 @@ import child_process from "node:child_process";
   assert: typeof assert;
   debounce: typeof debounce;
   sleep: typeof sleep;
-  nextId: () => Promise<string>; // agreement: the id is unique globally, so client should fetch it from server, that's why async
+  nextId: () => string | Promise<string>; // agreement: the id is unique globally, so client should fetch it from server, that's why async
   locale: keyof i18nRes;
 }} ClevertUtils Will be passed to `globalThis.clevertUtils`.
 @typedef {{
@@ -1951,7 +1951,7 @@ const serverMain = async () => {
     assert,
     debounce,
     sleep,
-    nextId: async () => nextId(),
+    nextId:()=>nextId(),
     locale: config.locale,
   };
   globalThis.clevertUtils = cu;

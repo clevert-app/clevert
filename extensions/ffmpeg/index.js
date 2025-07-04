@@ -1,8 +1,10 @@
 // @ts-check
 /** @import { ClevertUtils, Extension, Action, Profile } from "../../index.js" */
-import child_process from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
+import net from "node:net";
+import child_process from "node:child_process";
 const /** @type {ClevertUtils} */ cu = globalThis.clevertUtils;
 const consts = globalThis.process && {
   exe: path.join(import.meta.dirname, "ffmpeg"),
@@ -20,6 +22,9 @@ const i18nRes = (() => {
       "Extract audio track from video file, without re-encoding",
     xiaowan: () => "Classic XiaoWan toolbox",
     xiaowanDescription: () => "H264 + AAC, same as classic XiaoWal toolbox",
+    uarchive: () => "Ultra Compress and Slice for Archive",
+    uarchiveDescription: () =>
+      "With SVT-AV1 and OPUS, supports multi part slice",
     audio: () => "Audio",
     audioCustom: () => "Audio custom args",
     video: () => "Video",
@@ -49,6 +54,8 @@ const i18nRes = (() => {
     dumpAudioDescription: () => "从视频文件中提取音频轨道，无需重新编码",
     xiaowan: () => "小丸工具箱预设",
     xiaowanDescription: () => "H264 + AAC，参数与 小丸工具箱 相同",
+    uarchive: () => "超高压缩切片存档",
+    uarchiveDescription: () => "使用 SVT-AV1 和 OPUS，支持多切片",
     audio: () => "音频",
     audioCustom: () => "音频自定义参数",
     video: () => "视频",
@@ -73,14 +80,16 @@ const i18nRes = (() => {
 })();
 const i18n = i18nRes[cu.locale];
 
-const executeWithProgress = (args) => {
+const executeWithProgress = (args, totalLength = 0) => {
   /** `time2secs("00:03:22.45") === 202.45` */
   const time2secs = (/** @type {string} */ t) =>
     t.split(":").reduce((prev, cur) => +prev * 60 + +cur, 0); // [ 34, +"034", +034 ]
   const { promise, resolve, reject } = Promise.withResolvers();
-  const child = child_process.spawn(consts.exe, args);
+  const child = child_process.spawn(consts.exe, args, {
+    stdio: ["ignore", "ignore", "pipe"],
+  });
   let finished = 0;
-  let amount = 0;
+  let amount = totalLength;
   let pre = "";
   child.stderr.on("data", (/** @type {Buffer} */ data) => {
     const chunk = data.toString();
@@ -526,6 +535,129 @@ export default {
   actions: [
     generalAction,
     {
+      id: "uarchive",
+      name: i18n.uarchive(),
+      description: i18n.uarchiveDescription(),
+      kind: "common-files",
+      ui: (profile) => {
+        const $root = document.createElement("form");
+        $root.classList.add("root");
+        const css = String.raw;
+        $root.appendChild(document.createElement("style")).textContent = css`
+          .action .root {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 12px;
+          }
+          .action textarea {
+            width: calc(100vw - 56px);
+            resize: vertical;
+            height: 5em;
+          }
+        `;
+        $root.addEventListener("post-remove", (e) => console.log(e));
+
+        const $partsLabel = document.createElement("label");
+        $root.appendChild($partsLabel);
+        $partsLabel.textContent = "Parts";
+        const $parts = document.createElement("input");
+        $partsLabel.appendChild($parts);
+        $parts.value = profile.parts ?? "";
+
+        const $seekPadLabel = document.createElement("label");
+        $root.appendChild($seekPadLabel);
+        $seekPadLabel.textContent = "Seek Pad";
+        const $seekPad = document.createElement("input");
+        $seekPadLabel.appendChild($seekPad);
+        $seekPad.type = "number";
+        $seekPad.value = profile.seekPad ?? "";
+
+        const $extraParamsLabel = document.createElement("label");
+        $root.appendChild($extraParamsLabel);
+        $extraParamsLabel.textContent = "Extra Params";
+        const $extraParams = document.createElement("textarea");
+        $extraParamsLabel.appendChild($extraParams);
+        $extraParams.value = profile.extraParams ?? "";
+
+        return {
+          root: $root,
+          profile: () => {
+            profile.parts = $parts.value;
+            profile.seekPad = $seekPad.value;
+            profile.extraParams = $extraParams.value;
+            return profile;
+          },
+        };
+      },
+      execute: (profile, { input, output }) => {
+        const partsArgs = [];
+        const seekPad = Number(profile.seekPad);
+        let totalLength = 0;
+        for (const part of profile.parts.split(/,\s?/)) {
+          const [begin, end] = part.split("-").map((v) => Number(v));
+          totalLength += end - begin;
+          const cur = ["-hide_banner"];
+          // the -ss before -i do fast inaccurate keyframe-seek, so we seek to near the begin then use slow accurate decoded-seek
+          if (begin > seekPad) {
+            cur.push("-ss", String(begin - seekPad));
+            cur.push("-i", input);
+            cur.push("-ss", String(seekPad));
+            cur.push("-to", String(end - begin + seekPad));
+          } else {
+            cur.push("-ss", String(0));
+            cur.push("-i", input);
+            cur.push("-ss", String(begin));
+            cur.push("-to", String(end));
+          }
+          cur.push("-c:v", "rawvideo", "-c:a", "pcm_s16le");
+          cur.push("-f", "matroska", "-y", "-");
+          partsArgs.push(cur);
+        }
+        const servers = [];
+        const pipes = [];
+        let ffconcat = "";
+        if (process.platform === "win32") {
+          ffconcat = "ffconcat version 1.0\r\n";
+          const pipePrefix =
+            "\\\\.\\pipe\\" + "clevert_ffmpeg_uarchive_" + cu.nextId();
+          for (const [i, v] of partsArgs.entries()) {
+            const server = net.createServer((socket) => {
+              const child = child_process.spawn(consts.exe, v, {
+                stdio: ["ignore", "pipe", "ignore"],
+              });
+              child.stdout.pipe(socket);
+            });
+            const pipe = pipePrefix + "_" + String(i).padStart(6, "0") + ".mkv";
+            pipes.push(pipe);
+            server.listen(pipe);
+            servers.push(server);
+            ffconcat += "file " + pipe.replaceAll("\\", "\\\\") + "\r\n";
+          }
+        } else {
+          throw new Error("not implemented yet");
+        }
+        const ffconcatFilePath = output + ".ffconcat";
+        fs.writeFileSync(ffconcatFilePath, ffconcat);
+        const args = ["-hide_banner", "-safe", "0", "-i", ffconcatFilePath];
+        args.push(...profile.extraParams.split(" "));
+        args.push(output);
+        const cleanup = async () => {
+          await Promise.all(servers.map((s) => new Promise(s.close)));
+          pipes.forEach((pipe) => fs.unlink(pipe, () => {}));
+        };
+        const controller = executeWithProgress(args, totalLength);
+        controller.promise.finally(cleanup);
+        return {
+          progress: controller.progress,
+          stop() {
+            controller.stop();
+            cleanup();
+          },
+          promise: controller.promise,
+        };
+      },
+    },
+    {
       // todo: work in progress
       id: "slice_download",
       name: "slice_download",
@@ -751,6 +883,24 @@ export default {
         outputExtensions: ["mp4", "mkv", "webm"],
       },
     },
+    {
+      id: "uarchive",
+      name: i18n.uarchive(),
+      description: i18n.uarchiveDescription(),
+      actionId: "uarchive",
+      extensionId: "ffmpeg",
+      extensionVersion: "0.1.0",
+      // below are fields for action
+      parts: "40-55,162-172,203-217",
+      seekPad: "30", // most videos have keyframe gap less than 30s
+      extraParams:
+        "-c:v libsvtav1 -preset 0 -crf 49 -svtav1-params tune=0 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -map_metadata -1 -movflags faststart",
+      // below are fields for entries
+      entries: {
+        inputExtensions: ["mp4"],
+        outputExtensions: ["mp4"],
+      },
+    },
     /*
     {
       // todo: work in progress
@@ -778,3 +928,33 @@ export default {
 
 // https://blog.csdn.net/kunyus/article/details/109111759
 // https://zhuanlan.zhihu.com/p/1919229481572340130
+
+/*
+
+# https://t.me/cfdlw/13557
+# id = sdab-129, source (uncensored leaked) = magnet:?xt=urn:btih:FECD57CEE94AEAA00325BCF5F85703CCFA334ECA
+ranges="100,111|235,242|570,716|1446,1605|2277,2356|2674,2778"
+printf "ffconcat version 1.0\n" > i.txt
+i="1"
+for range in $(echo $ranges | sed "s/|/ /g"); do
+mkfifo i.$i.mkv
+printf "file i.$i.mkv\n" >> i.txt
+i=$(awk "BEGIN{print $i + 1; exit}")
+done
+../ffmpeg -hide_banner -i i.txt -c:v libsvtav1 -preset 0 -crf 49 -svtav1-params tune=0 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -movflags faststart -map_metadata -1 -y o.mp4 &
+main_pid=$!
+i="1"
+printf "[i.log]\n" > i.log
+for range in $(echo $ranges | sed "s/|/ /g"); do
+begin=$(echo $range | cut -d, -f1)
+end=$(echo $range | cut -d, -f2)
+printf "[i.$i.log]\nbegin=$begin,end=$end\n" >> i.log
+../ffmpeg -hide_banner -ss $(awk "BEGIN{print $begin - 30; exit}") -i i.mp4 -ss 30 -to $(awk "BEGIN{print $end - $begin + 30; exit}") -c:v rawvideo -c:a pcm_s16le -y -f matroska - > i.$i.mkv 2>> i.log
+i=$(awk "BEGIN{print $i + 1; exit}")
+done
+waitpid $main_pid
+sleep 1
+echo "[finished]"
+rm -f i.*.mkv i.txt
+
+*/
