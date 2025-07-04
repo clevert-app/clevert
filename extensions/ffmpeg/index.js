@@ -530,7 +530,7 @@ export default {
       id: "slice_download",
       name: "slice_download",
       description: "slice_download",
-      kind: "custom",
+      kind: "output-dir",
       ui: (profile) => {
         const $root = document.createElement("form");
         $root.classList.add("root");
@@ -777,3 +777,4 @@ export default {
 };
 
 // https://blog.csdn.net/kunyus/article/details/109111759
+// https://zhuanlan.zhihu.com/p/1919229481572340130
