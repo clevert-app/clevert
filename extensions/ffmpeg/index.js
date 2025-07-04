@@ -174,7 +174,7 @@ const generalAction = {
     const $audioLegend = document.createElement("legend");
     $audio.appendChild($audioLegend);
     $audioLegend.textContent = i18n.audio();
-    const g$audioRadio = (value, label) => {
+    const g$audioRadio = (value, label = "") => {
       const $radioLabel = document.createElement("label");
       $audio.appendChild($radioLabel);
       $radioLabel.textContent = label || value;
@@ -610,29 +610,56 @@ export default {
             cur.push("-to", String(end));
           }
           cur.push("-c:v", "rawvideo", "-c:a", "pcm_s16le");
-          cur.push("-f", "matroska", "-y", "-");
+          cur.push("-f", "matroska", "-y");
           partsArgs.push(cur);
         }
-        const servers = [];
+        const stopHandlers = [];
         const pipes = [];
         let ffconcat = "";
         if (process.platform === "win32") {
           ffconcat = "ffconcat version 1.0\r\n";
+          // windows use many named pipe
           const pipePrefix =
             "\\\\.\\pipe\\" + "clevert_ffmpeg_uarchive_" + cu.nextId();
           for (const [i, v] of partsArgs.entries()) {
+            v.push("-");
             const server = net.createServer((socket) => {
               const child = child_process.spawn(consts.exe, v, {
                 stdio: ["ignore", "pipe", "ignore"],
               });
               child.stdout.pipe(socket);
+              server.on("close", () => {
+                if (child.exitCode === null) child.kill();
+              });
             });
             const pipe = pipePrefix + "_" + String(i).padStart(6, "0") + ".mkv";
             pipes.push(pipe);
             server.listen(pipe);
-            servers.push(server);
+            stopHandlers.push(() => new Promise((r) => server.close(r)));
             ffconcat += "file " + pipe.replaceAll("\\", "\\\\") + "\r\n";
           }
+        } else if (process.platform === "linux") {
+          ffconcat = "ffconcat version 1.0\n";
+          // linux use single fifo
+          const pipe = "/tmp/clevert_ffmpeg_uarchive_" + cu.nextId() + ".mkv";
+          pipes.push(pipe);
+          child_process.spawnSync("mkfifo", [pipe]);
+          ffconcat += ("file " + pipe + "\n").repeat(partsArgs.length);
+          (async () => {
+            for (const v of partsArgs) {
+              v.push(pipe);
+              const child = child_process.spawn(consts.exe, v, {
+                stdio: ["ignore", "ignore", "ignore"],
+              });
+              const { resolve, promise } = Promise.withResolvers();
+              child.on("exit", () => resolve(false));
+              stopHandlers.push(() => {
+                if (child.exitCode === null) child.kill();
+                resolve(true);
+              });
+              if (await promise) break;
+            }
+          })();
         } else {
           throw new Error("not implemented yet");
         }
@@ -642,8 +669,9 @@ export default {
         args.push(...profile.extraParams.split(" "));
         args.push(output);
         const cleanup = async () => {
-          await Promise.all(servers.map((s) => new Promise((r) => s.close(r))));
-          pipes.forEach((pipe) => fs.promises.unlink(pipe));
+          await Promise.all(stopHandlers.map((stop) => stop()));
+          await cu.sleep(100);
+          pipes.forEach((pipe) => fs.unlink(pipe, () => {}));
         };
         const controller = executeWithProgress(args, totalLength);
         controller.promise.finally(cleanup);
@@ -897,6 +925,7 @@ export default {
         "-c:v libsvtav1 -preset 0 -crf 49 -svtav1-params tune=0 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -map_metadata -1 -movflags faststart",
       // below are fields for entries
       entries: {
+        mode: "files",
         inputExtensions: ["mp4"],
         outputExtensions: ["mp4"],
       },
