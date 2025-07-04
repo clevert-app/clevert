@@ -642,8 +642,8 @@ export default {
         args.push(...profile.extraParams.split(" "));
         args.push(output);
         const cleanup = async () => {
-          await Promise.all(servers.map((s) => new Promise(s.close)));
-          pipes.forEach((pipe) => fs.unlink(pipe, () => {}));
+          await Promise.all(servers.map((s) => new Promise((r) => s.close(r))));
+          pipes.forEach((pipe) => fs.promises.unlink(pipe));
         };
         const controller = executeWithProgress(args, totalLength);
         controller.promise.finally(cleanup);
