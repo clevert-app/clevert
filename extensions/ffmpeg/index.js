@@ -80,7 +80,7 @@ const i18nRes = (() => {
 })();
 const i18n = i18nRes[cu.locale];
 
-const executeWithProgress = (args, totalLength = 0) => {
+const executeWithProgress = (args, totalInput = 0) => {
   /** `time2secs("00:03:22.45") === 202.45` */
   const time2secs = (/** @type {string} */ t) =>
     t.split(":").reduce((prev, cur) => +prev * 60 + +cur, 0); // [ 34, +"034", +034 ]
@@ -89,20 +89,20 @@ const executeWithProgress = (args, totalLength = 0) => {
     stdio: ["ignore", "ignore", "pipe"],
   });
   let finished = 0;
-  let amount = totalLength;
+  let total = totalInput;
   let pre = "";
   child.stderr.on("data", (/** @type {Buffer} */ data) => {
     const chunk = data.toString();
-    if (amount === 0) {
+    if (total === 0) {
       pre += chunk;
       const matched = pre.match(/(?<= Duration: ).+?(?=,)/);
       if (matched) {
-        amount = time2secs(matched[0]);
+        total = time2secs(matched[0]);
         pre = "";
       }
     }
     if (!chunk.startsWith("frame=")) return;
-    if (amount === 0) amount = 1; // the progress is already started, but still can not get duration
+    if (total === 0) total = 1; // the progress is already started, but still can not get duration
     const sliced = chunk.split(" time=")?.[1]?.split(" ")?.[0];
     if (!sliced || sliced === "N/A" || sliced.startsWith("-")) return; // deal with invalid timestamps like "-577014:32:22.77"
     finished = time2secs(sliced);
@@ -111,7 +111,7 @@ const executeWithProgress = (args, totalLength = 0) => {
   child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
   return {
     progress: () => {
-      let ret = finished / (amount || 1);
+      let ret = finished / (total || 1);
       return ret;
     },
     stop: () => {

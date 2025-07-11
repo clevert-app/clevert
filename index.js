@@ -84,7 +84,7 @@ import child_process from "node:child_process";
 @typedef {{
   finished: number;
   running: number;
-  amount: number;
+  total: number;
 }} RunActionProgress The `running` property may be float.
 @typedef {{
   title: string;
@@ -104,7 +104,7 @@ import child_process from "node:child_process";
 }} RunActionRequest
 @typedef {{
   finished: number;
-  amount: number;
+  total: number;
 }} InstallExtensionProgress Assets download progress in bytes.
 @typedef {{
   title: string;
@@ -930,20 +930,17 @@ const pageMain = async () => {
       // const [$pause, $stop, $pin] = $operations.children;
       $title.textContent = e.title;
       $title.title = e.title;
-      const amount = e.progress.amount || 1024;
-      const current = Math.min(
-        e.progress.finished + e.progress.running,
-        amount
-      );
-      const percent = 100 * (current / amount);
+      const total = e.progress.total || 1024;
+      const current = Math.min(e.progress.finished + e.progress.running, total);
+      const percent = 100 * (current / total);
       $progress.style.setProperty("--progress", percent + "%");
       if (e.pending) {
         const speed = current / (Date.now() / 1000 - e.time.begin);
-        const remainTime = (amount - current) / speed;
+        const remainTime = (total - current) / speed;
         const currentText = e.progress.running ? current.toFixed(2) : current;
         $tips.textContent =
           `${Math.round(Number.isFinite(remainTime) ? remainTime : 0)}s - ` +
-          `${currentText}/${amount}`;
+          `${currentText}/${total}`;
       } else if (e.error) {
         $tips.textContent = "Error: " + e.error.message;
         $stop?.classList?.add("off");
@@ -959,14 +956,14 @@ const pageMain = async () => {
       // const [$stop, $pin] = $operations.children;
       $title.textContent = e.title;
       $title.title = e.title;
-      const amount = e.progress.amount || 1024; // may be zero, cause Infinity percent
-      const current = Math.min(e.progress.finished, amount);
-      const percent = 100 * (current / amount);
+      const total = e.progress.total || 1024; // may be zero, cause Infinity percent
+      const current = Math.min(e.progress.finished, total);
+      const percent = 100 * (current / total);
       $progress.style.setProperty("--progress", percent + "%");
       $tips.textContent =
         (current / 1024 / 1024).toFixed(1) +
         "/" +
-        (amount / 1024 / 1024).toFixed(1) +
+        (total / 1024 / 1024).toFixed(1) +
         " M"; // this is MiB
       if (e.pending) {
       } else if (e.error) {
@@ -2129,7 +2126,7 @@ const serverMain = async () => {
    * @param {string} url
    * @param {fs.PathLike} path
    * @param {AbortSignal} signal
-   * @param {(amountSize: number) => void} onStart
+   * @param {(totalSize: number) => void} onStart
    * @param {(chunkSize: number) => void} onChunk
    */
   const download = async (url, path, signal, onStart, onChunk) => {
@@ -2318,7 +2315,7 @@ const serverMain = async () => {
       /** @type {InstallExtensionRequest} */
       const request = await readJson();
       let finished = 0;
-      let amount = 0;
+      let total = 0;
       const abortController = new AbortController();
       const tempPaths = /** @type {Set<string>} */ new Set();
       const promise = (async () => {
@@ -2328,7 +2325,7 @@ const serverMain = async () => {
           request.url,
           indexJsTemp,
           abortController.signal,
-          (amountSize) => (amount += amountSize),
+          (totalSize) => (total += totalSize),
           (chunkSize) => (finished += chunkSize)
         );
         const extension = /** @type {Extension} */ (
@@ -2363,7 +2360,7 @@ const serverMain = async () => {
             asset.url,
             assetTemp,
             abortController.signal,
-            (amountSize) => (amount += amountSize),
+            (totalSize) => (total += totalSize),
             (chunkSize) => (finished += chunkSize)
           );
           if (asset.kind === "bin") {
@@ -2421,7 +2418,7 @@ const serverMain = async () => {
       });
       installExtensionControllers.set(nextId(), {
         title: request.title,
-        progress: () => ({ finished, amount }),
+        progress: () => ({ finished, total }),
         stop,
         promise,
       });
@@ -2489,7 +2486,7 @@ const serverMain = async () => {
         : request.entries.kind === "output-dir"
         ? await solveEntries(request.entries)
         : assert(false);
-      const amount = entries.length;
+      const total = entries.length;
       let finished = 0;
       const runningControllers = /** @type {Set<ActionExecuteController>} */ (
         new Set()
@@ -2535,7 +2532,7 @@ const serverMain = async () => {
           for (const controller of runningControllers) {
             running += controller.progress();
           }
-          return { finished, running, amount };
+          return { finished, running, total };
         },
         stop: () => {
           for (const controller of runningControllers) {
