@@ -109,6 +109,7 @@ import child_process from "node:child_process";
 @typedef {{
   title: string;
   progress: () => InstallExtensionProgress;
+  stop: () => void;
   promise: Promise<any>;
 }} InstallExtensionController
 @typedef {{
@@ -292,7 +293,7 @@ const assert = (value, info = "assertion failed") => {
  * @returns {T}
  */
 const debounce = (f, ms) => {
-  let timer;
+  let /** @type {ReturnType<setTimeout>} */ timer;
   return /** @type {any} */ (
     (...args) => {
       clearTimeout(timer);
@@ -876,7 +877,7 @@ const pageMain = async () => {
       const $progress = document.createElement("progress");
       $figure.appendChild($progress);
       $progress.value = 0;
-      $progress.style.setProperty("--progress", "30%");
+      $progress.style.setProperty("--progress", "0%");
       if (e.kind === "run-action-progress") {
         const $stop = document.createElement("button");
         $task.appendChild($stop);
@@ -929,16 +930,20 @@ const pageMain = async () => {
       // const [$pause, $stop, $pin] = $operations.children;
       $title.textContent = e.title;
       $title.title = e.title;
-      const current = e.progress.finished + e.progress.running;
-      const percent = (current / e.progress.amount) * 100;
+      const amount = e.progress.amount || 1024;
+      const current = Math.min(
+        e.progress.finished + e.progress.running,
+        amount
+      );
+      const percent = 100 * (current / amount);
       $progress.style.setProperty("--progress", percent + "%");
       if (e.pending) {
         const speed = current / (Date.now() / 1000 - e.time.begin);
-        const remainTime = (e.progress.amount - current) / speed;
+        const remainTime = (amount - current) / speed;
         const currentText = e.progress.running ? current.toFixed(2) : current;
         $tips.textContent =
           `${Math.round(Number.isFinite(remainTime) ? remainTime : 0)}s - ` +
-          `${currentText}/${e.progress.amount}`;
+          `${currentText}/${amount}`;
       } else if (e.error) {
         $tips.textContent = "Error: " + e.error.message;
         $stop?.classList?.add("off");
@@ -954,12 +959,14 @@ const pageMain = async () => {
       // const [$stop, $pin] = $operations.children;
       $title.textContent = e.title;
       $title.title = e.title;
-      const percent = (e.progress.finished / e.progress.amount) * 100;
+      const amount = e.progress.amount || 1024; // may be zero, cause Infinity percent
+      const current = Math.min(e.progress.finished, amount);
+      const percent = 100 * (current / amount);
       $progress.style.setProperty("--progress", percent + "%");
       $tips.textContent =
-        (e.progress.finished / 1024 / 1024).toFixed(1) +
+        (current / 1024 / 1024).toFixed(1) +
         "/" +
-        (e.progress.amount / 1024 / 1024).toFixed(1) +
+        (amount / 1024 / 1024).toFixed(1) +
         " M"; // this is MiB
       if (e.pending) {
       } else if (e.error) {
@@ -1876,6 +1883,8 @@ const serverMain = async () => {
   };
 
   const PATH_DATA = solvePath("temp");
+
+  // await fs.promises.rm(solvePath(PATH_DATA, "cache"), { recursive: true }); // todo: remove cache dir at launch
   for (const entry of ["cache", "extensions"])
     await fs.promises.mkdir(solvePath(PATH_DATA, entry), { recursive: true });
 
@@ -1939,6 +1948,7 @@ const serverMain = async () => {
   });
   /** @type {Config} */
   const config = await openJsonMmap(solvePath(PATH_DATA, "config.json")); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
+  const /** @type {boolean} */ isFirstLaunch = !!config.locale;
   for (const k in defaultConfig) {
     // be relax, Object.hasOwn({ a: undefined }, "a") === true
     if (!Object.hasOwn(config, k)) {
@@ -1960,9 +1970,23 @@ const serverMain = async () => {
 
   const serverPort = Promise.withResolvers();
 
+  let beforeQuitCalled = false;
   const beforeQuit = async () => {
+    if (beforeQuitCalled) return;
+    beforeQuitCalled = true;
+    for (const [, controller] of runActionControllers) controller.stop();
+    for (const [, controller] of installExtensionControllers) controller.stop();
     await sleep(100); // wait for config file sync (30ms), however ctrl+c still cause force exit
   };
+
+  const sigtermHandler = async () => {
+    console.log("quit by signal");
+    await beforeQuit();
+    process.exit(0);
+  };
+  process.on("SIGINT", sigtermHandler); // ctrl + c
+  process.on("SIGQUIT", sigtermHandler); // keyboard quit
+  process.on("SIGTERM", sigtermHandler); // the `kill` command
 
   const electronRun = electronImport.then(async (electron) => {
     const { app, BrowserWindow, MenuItem, nativeTheme, screen } = electron; // agreement: keep electron optional, as a simple webview, users can choose node + browser
@@ -2033,42 +2057,53 @@ const serverMain = async () => {
   /** @type {Map<string, InstallExtensionController>} */
   const installExtensionControllers = new Map();
 
+  // todo: auto set mirrorsEnabled at first launch, if situation changed, ask user to change
   const gfwDetector = fetch("https://www.google.com/generate_204"); // detect google instead of github because github interfered with by gfw has erratic behaviour, e.g. it works now but fails on future requests
-  gfwDetector.catch(() => console.log("gfw detected"));
+  gfwDetector.catch(() => {
+    console.log("gfw detected"); // todo: faster timeout
+    if (isFirstLaunch) {
+      config.mirrorsEnabled = true;
+    }
+    if (config.mirrorsEnabled) {
+      mirrors.refresh();
+    } else {
+      // todo: ask user to change?
+      console.log("mirrors is not enabled, please enable it in config file");
+    }
+  });
 
   const mirrors = Object.seal({
     sources: {
       "https://github.com": {
         bench: {
           suffix:
-            "/electron/electron/releases/download/v33.2.1/electron-v33.2.1-win32-x64-toolchain-profile.zip",
-          size: 75306,
+            "/electron/electron/releases/download/v33.4.11/electron-v33.4.11-win32-x64-toolchain-profile.zip",
+          size: 75077,
         },
         list: [
-          "https://gh.xiu2.us.kg/https://github.com",
-          "https://slink.ltd/https://github.com",
-          "https://gh-proxy.com/https://github.com",
-          "https://cors.isteed.cc/github.com",
-          "https://sciproxy.com/github.com",
-          "https://ghproxy.cc/https://github.com",
-          "https://cf.ghproxy.cc/https://github.com",
-          "https://www.ghproxy.cc/https://github.com",
-          "https://ghproxy.cn/https://github.com",
-          "https://www.ghproxy.cn/https://github.com",
-          "https://github.site",
-          "https://github.store",
-          "https://github.tmby.shop/https://github.com",
-          "https://github.moeyy.xyz/https://github.com",
-          "https://hub.whtrys.space",
-          "https://dgithub.xyz",
-          "https://gh-proxy.ygxz.in/https://github.com",
-          "https://download.ixnic.net",
+          "https://gh.xx9527.cn/https://github.com",
+          "https://firewall.lxstd.org/https://github.com",
+          "https://ghfile.geekertao.top/https://github.com",
+          "https://ghpxy.hwinzniej.top/https://github.com",
           "https://ghproxy.net/https://github.com",
-          "https://ghp.ci/https://github.com",
-          "https://kkgithub.com",
+          "https://ghfast.top/https://github.com",
+          "https://wget.la/https://github.com",
           // from https://github.com/XIU2/UserScript/blob/master/GithubEnhanced-High-Speed-Download.user.js
         ],
       },
+      /*
+      "https://huggingface.co": {
+        bench: {
+          suffix:
+            "https://hf-mirror.com/datasets/fka/awesome-chatgpt-prompts/resolve/main/prompts.csv",
+          size: 104186,
+        },
+        list: [
+          "https://hf-mirror.com",
+          // todo: more
+        ],
+      },
+      */
     },
     map: new Map([["https://from.example.com", "https://to.example.com"]]),
     refresh: async () => {
@@ -2082,7 +2117,7 @@ const serverMain = async () => {
           const size = (await response.arrayBuffer()).byteLength;
           assert(size === source.bench.size);
           controller.abort();
-          mirrors.map.set(origin, prefix); // console.log({ origin, prefix });
+          mirrors.map.set(origin, prefix); // tidy: remove controller.abort() then use console.log(origin + " - " + prefix);
         });
         await Promise.any(promises).catch(() => {});
       }
@@ -2375,18 +2410,19 @@ const serverMain = async () => {
           await chmod777(extensionDir);
         }
       })();
+      const stop = async () => {
+        abortController.abort();
+        for (const v of tempPaths)
+          await new Promise((r) => fs.rm(v, { recursive: true }, r));
+      };
       promise.catch(async (e) => {
         console.error("install-extension-error", e);
-        // in vscode, cancel is not supported, and it has auto cleaning, we follow this strategy
-        // todo: needs fix, if user close app during installing. however this seems fine because everytime after launch the cache dir is cleaned, and what about the extensionDir?
-        abortController.abort();
-        for (const v of tempPaths) {
-          await fs.promises.rm(v, { force: true, recursive: true });
-        }
+        stop(); // in vscode, cancel is not supported, and it has auto cleaning, but here we do not follow this strategy
       });
       installExtensionControllers.set(nextId(), {
         title: request.title,
         progress: () => ({ finished, amount }),
+        stop,
         promise,
       });
       r.end();
