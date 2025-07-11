@@ -683,6 +683,32 @@ export default {
           },
           promise: controller.promise,
         };
+        /*
+          # id = sdab-129, source (uncensored leaked) = magnet:?xt=urn:btih:FECD57CEE94AEAA00325BCF5F85703CCFA334ECA
+          ranges="100,111|235,242|570,716|1446,1605|2277,2356|2674,2778"
+          printf "ffconcat version 1.0\n" > i.txt
+          i="1"
+          for range in $(echo $ranges | sed "s/|/ /g"); do
+          mkfifo i.$i.mkv
+          printf "file i.$i.mkv\n" >> i.txt
+          i=$(awk "BEGIN{print $i + 1; exit}")
+          done
+          ../ffmpeg -hide_banner -i i.txt -c:v libsvtav1 -preset 0 -crf 49 -svtav1-params tune=0 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -movflags faststart -map_metadata -1 -y o.mp4 &
+          main_pid=$!
+          i="1"
+          printf "[i.log]\n" > i.log
+          for range in $(echo $ranges | sed "s/|/ /g"); do
+          begin=$(echo $range | cut -d, -f1)
+          end=$(echo $range | cut -d, -f2)
+          printf "[i.$i.log]\nbegin=$begin,end=$end\n" >> i.log
+          ../ffmpeg -hide_banner -ss $(awk "BEGIN{print $begin - 30; exit}") -i i.mp4 -ss 30 -to $(awk "BEGIN{print $end - $begin + 30; exit}") -c:v rawvideo -c:a pcm_s16le -y -f matroska - > i.$i.mkv 2>> i.log
+          i=$(awk "BEGIN{print $i + 1; exit}")
+          done
+          waitpid $main_pid
+          sleep 1
+          echo "[finished]"
+          rm -f i.*.mkv i.txt
+        */
       },
     },
     {
@@ -957,33 +983,3 @@ export default {
 
 // https://blog.csdn.net/kunyus/article/details/109111759
 // https://zhuanlan.zhihu.com/p/1919229481572340130
-
-/*
-
-# https://t.me/cfdlw/13557
-# id = sdab-129, source (uncensored leaked) = magnet:?xt=urn:btih:FECD57CEE94AEAA00325BCF5F85703CCFA334ECA
-ranges="100,111|235,242|570,716|1446,1605|2277,2356|2674,2778"
-printf "ffconcat version 1.0\n" > i.txt
-i="1"
-for range in $(echo $ranges | sed "s/|/ /g"); do
-mkfifo i.$i.mkv
-printf "file i.$i.mkv\n" >> i.txt
-i=$(awk "BEGIN{print $i + 1; exit}")
-done
-../ffmpeg -hide_banner -i i.txt -c:v libsvtav1 -preset 0 -crf 49 -svtav1-params tune=0 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -movflags faststart -map_metadata -1 -y o.mp4 &
-main_pid=$!
-i="1"
-printf "[i.log]\n" > i.log
-for range in $(echo $ranges | sed "s/|/ /g"); do
-begin=$(echo $range | cut -d, -f1)
-end=$(echo $range | cut -d, -f2)
-printf "[i.$i.log]\nbegin=$begin,end=$end\n" >> i.log
-../ffmpeg -hide_banner -ss $(awk "BEGIN{print $begin - 30; exit}") -i i.mp4 -ss 30 -to $(awk "BEGIN{print $end - $begin + 30; exit}") -c:v rawvideo -c:a pcm_s16le -y -f matroska - > i.$i.mkv 2>> i.log
-i=$(awk "BEGIN{print $i + 1; exit}")
-done
-waitpid $main_pid
-sleep 1
-echo "[finished]"
-rm -f i.*.mkv i.txt
-
-*/
