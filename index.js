@@ -168,6 +168,7 @@ import child_process from "node:child_process";
   windowMaximized: boolean;
   locale: keyof i18nRes;
   mirrorsEnabled: boolean;
+  serverHost: string;
   serverPort: number;
   profiles: Profile[];
 }} Config
@@ -1940,6 +1941,7 @@ const serverMain = async () => {
       Intl.DateTimeFormat().resolvedOptions().locale // todo: set to nearest lang?
     ),
     mirrorsEnabled: false,
+    serverHost: "127.0.0.1",
     serverPort: 9393,
     profiles: [],
   });
@@ -2823,10 +2825,10 @@ const serverMain = async () => {
     );
     setTimeout(() => {
       server.close();
-      server.listen(config.serverPort, "127.0.0.1");
+      server.listen(config.serverPort, config.serverHost);
     });
   });
-  server.listen(config.serverPort, "127.0.0.1");
+  server.listen(config.serverPort, config.serverHost);
 };
 
 // const utilsMain = async () => {
