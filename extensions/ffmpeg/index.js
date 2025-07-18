@@ -3,7 +3,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
-import net from "node:net";
 import child_process from "node:child_process";
 const /** @type {ClevertUtils} */ cu = globalThis.clevertUtils;
 const consts = globalThis.process && {
@@ -85,9 +84,7 @@ const executeWithProgress = (args, totalInput = 0) => {
   const time2secs = (/** @type {string} */ t) =>
     t.split(":").reduce((prev, cur) => +prev * 60 + +cur, 0); // [ 34, +"034", +034 ]
   const { promise, resolve, reject } = Promise.withResolvers();
-  const child = child_process.spawn(consts.exe, args, {
-    stdio: ["ignore", "ignore", "pipe"],
-  });
+  const child = child_process.spawn(consts.exe, args);
   let finished = 0;
   let total = totalInput;
   let pre = "";
@@ -110,15 +107,16 @@ const executeWithProgress = (args, totalInput = 0) => {
   child.on("error", (error) => reject(error));
   child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
   return {
-    progress: () => {
-      let ret = finished / (total || 1);
-      return ret;
+    child,
+    controller: {
+      progress: () => finished / (total || 1),
+      stop: () => {
+        console.log("stopping ffmpeg");
+        child.kill();
+        // todo: use stdin command quit?
+      },
+      promise,
     },
-    stop: () => {
-      console.log("stopping ffmpeg");
-      child.kill();
-    },
-    promise,
   };
 };
 
@@ -450,7 +448,7 @@ const generalAction = {
     if (profile.fastStart) args.push("-movflags", "faststart"); // this option is only for MP4, M4A, M4V, MOV
     if (profile.noMeta) args.push("-map_metadata", "-1");
     args.push(output);
-    return executeWithProgress(args);
+    return executeWithProgress(args).controller;
   },
 };
 
@@ -590,10 +588,10 @@ export default {
         };
       },
       execute: (profile, { input, output }) => {
-        const partsArgs = [];
+        const /** @type {string[][]} */ partsArgs = [];
         const seekPad = Number(profile.seekPad);
         let totalLength = 0;
-        for (const part of profile.parts.split(/,\s?/)) {
+        for (const part of profile.parts.trim().split(/,\s?/)) {
           const [begin, end] = part.split("-").map((v) => Number(v));
           totalLength += end - begin;
           const cur = ["-hide_banner"];
@@ -610,71 +608,47 @@ export default {
             cur.push("-to", String(end));
           }
           cur.push("-c:v", "rawvideo", "-c:a", "pcm_s16le");
-          cur.push("-f", "matroska", "-y");
+          cur.push("-f", "matroska", "-y", "-");
           partsArgs.push(cur);
         }
-        const stopHandlers = [];
-        const pipes = [];
-        let ffconcat = "";
-        if (process.platform === "win32") {
-          ffconcat = "ffconcat version 1.0\r\n";
-          // windows use many named pipe
-          const pipePrefix =
-            "\\\\.\\pipe\\" + "clevert_ffmpeg_uarchive_" + cu.nextId();
-          for (const [i, v] of partsArgs.entries()) {
-            v.push("-");
-            const server = net.createServer((socket) => {
-              const child = child_process.spawn(consts.exe, v, {
-                stdio: ["ignore", "pipe", "ignore"],
-              });
-              child.stdout.pipe(socket);
-              server.on("close", () => {
-                if (child.exitCode === null) child.kill();
-              });
-            });
-            const pipe = pipePrefix + "_" + String(i).padStart(6, "0") + ".mkv";
-            pipes.push(pipe);
-            server.listen(pipe);
-            stopHandlers.push(() => new Promise((r) => server.close(r)));
-            ffconcat += "file " + pipe.replaceAll("\\", "\\\\") + "\r\n";
-          }
-        } else if (process.platform === "linux") {
-          ffconcat = "ffconcat version 1.0\n";
-          // linux use single fifo
-          const pipe = "/tmp/clevert_ffmpeg_uarchive_" + cu.nextId() + ".mkv";
-          pipes.push(pipe);
-          child_process.spawnSync("mkfifo", [pipe]);
-          ffconcat += ("file " + pipe + "\n").repeat(partsArgs.length);
-          (async () => {
-            for (const v of partsArgs) {
-              v.push(pipe);
-              const child = child_process.spawn(consts.exe, v, {
-                stdio: ["ignore", "ignore", "ignore"],
-              });
-              const { resolve, promise } = Promise.withResolvers();
-              child.on("exit", () => resolve(false));
-              stopHandlers.push(() => {
-                if (child.exitCode === null) child.kill();
-                resolve(true);
-              });
-              if (await promise) break;
-            }
-          })();
-        } else {
-          throw new Error("not implemented yet");
-        }
-        const ffconcatFilePath = output + ".ffconcat";
-        fs.writeFileSync(ffconcatFilePath, ffconcat);
-        const args = ["-hide_banner", "-safe", "0", "-i", ffconcatFilePath];
+        let cleanup = () => console.warn("empty cleanup function");
+        const server = http.createServer((_, res) => {
+          const v = partsArgs.shift();
+          if (!v) return console.warn("no more parts");
+          const child = child_process.spawn(consts.exe, v, {
+            stdio: ["ignore", "pipe", "ignore"],
+          });
+          cleanup = () => {
+            if (child.exitCode === null) child.kill();
+            server.close(() => {});
+          };
+          child.stdout
+            .pipe(res)
+            .on("error", (e) => console.error(e))
+            .on("close", () => console.info("stream closed"));
+        });
+        server.listen(0, "127.0.0.1", () => {
+          const port = /** @type {any} */ (server.address())?.port;
+          child.stdin.end(
+            "ffconcat version 1.0\n" +
+              `file 'http://127.0.0.1:${port}'\n`.repeat(partsArgs.length)
+          );
+        });
+        const args = [
+          "-hide_banner",
+          "-f",
+          "concat",
+          "-safe",
+          "0",
+          "-protocol_whitelist",
+          "file,http,tcp,fd",
+          "-i",
+          "-",
+        ];
         args.push(...profile.extraParams.split(" "));
         args.push(output);
-        const cleanup = async () => {
-          await Promise.all(stopHandlers.map((stop) => stop()));
-          await cu.sleep(100);
-          pipes.forEach((pipe) => fs.unlink(pipe, () => {}));
-        };
-        const controller = executeWithProgress(args, totalLength);
-        controller.promise.finally(cleanup);
+        const { child, controller } = executeWithProgress(args, totalLength);
+        controller.promise.finally(() => cleanup());
         return {
           progress: controller.progress,
           stop() {
@@ -683,6 +657,38 @@ export default {
           },
           promise: controller.promise,
         };
+        // todo: Svt[warn]: Failed to set thread priority: Invalid argument
+        // child.stdout
+        //   .pipe(fs.createWriteStream(pipe, { highWaterMark: 1024 }))
+        //   .on("error", (e) => console.error(e))
+        //   .on("close", () => (console.info("stream closed"), resolve(0)));
+        // scp -P3322 extensions\ffmpeg\index.js root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/temp/extensions/ffmpeg_0.1.0/
+        // ./setpl 15 15
+        // ./lzchalctl 140 0 0
+        // /run/lzcsys/boot/lzc-os-init/misc/chunks/carib-111613-480.origin.mp4
+        // 795-797,979-981,1113-1133
+        // -vf scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2 -sws_flags lanczos -c:v libsvtav1 -preset 2 -crf 49 -svtav1-params tune=0 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -map_metadata -1 -movflags faststart -y
+        // /run/lzcsys/boot/lzc-os-init/misc/
+        // frame= 1127 fps=5.8 q=45.0 size=     768KiB time=00:00:18.81 bitrate= 334.3kbits/s dup=0 drop=118 speed=0.0961x elapsed=0:03:15.79
+        // frame= 1132 fps=5.8 q=49.0 size=     768KiB time=00:00:18.90 bitrate= 332.9kbits/s dup=0 drop=118 speed=0.0962x elapsed=0:03:16.40
+        // stream closed
+        // frame= 1141 fps=5.8 q=32.0 size=     768KiB time=00:00:19.05 bitrate= 330.2kbits/s dup=0 drop=118 speed=0.0968x elapsed=0:03:16.90
+        // ...
+        // frame= 1160 fps=3.1 q=49.0 size=     768KiB time=00:00:19.36 bitrate= 324.8kbits/s dup=0 drop=118 speed=0.0522x elapsed=0:06:11.02
+        // frame= 1160 fps=3.1 q=49.0 size=     768KiB time=00:00:19.36 bitrate= 324.8kbits/s dup=0 drop=118 speed=0.0521x elapsed=0:06:12.02
+        // [matroska,webm @ 0x55fbc939fa80] Format matroska,webm detected only with low score of 1, misdetection possible!
+        // [matroska,webm @ 0x55fbc939fa80] EBML header parsing failed
+        // [concat @ 0x55fbc939e840] Impossible to open '/tmp/clevert_ffmpeg_uarchive_1753017143_000000.mkv'
+        // [in#0/concat @ 0x55fbc939e640] Error during demuxing: Invalid data found when processing input
+        // frame= 1265 fps=3.4 q=22.0 size=    1024KiB time=N/A bitrate=N/A dup=0 drop=118 speed=N/A elapsed=0:06:12.52
+        // frame= 1265 fps=3.4 q=22.0 size=    1024KiB time=N/A bitrate=N/A dup=0 drop=118 speed=N/A elapsed=0:06:13.02
+        // ...
+        // frame= 1305 fps=3.4 q=35.0 size=    1024KiB time=N/A bitrate=N/A dup=0 drop=118 speed=N/A elapsed=0:06:27.04
+        // frame= 1309 fps=3.4 q=40.0 size=    1024KiB time=N/A bitrate=N/A dup=0 drop=118 speed=N/A elapsed=0:06:27.54
+        // [mp4 @ 0x55fbc93b0480] Starting second pass: moving the moov atom to the beginning of the file
+        // [out#0/mp4 @ 0x55fbc93b0340] video:934KiB audio:174KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 2.135064%
+        // frame= 1318 fps=3.4 q=49.0 Lsize=    1132KiB time=00:00:22.00 bitrate= 421.5kbits/s dup=0 drop=118 speed=0.0567x elapsed=0:06:27.71
+
         /*
           # id = sdab-129, source (uncensored leaked) = magnet:?xt=urn:btih:FECD57CEE94AEAA00325BCF5F85703CCFA334ECA
           ranges="100,111|235,242|570,716|1446,1605|2277,2356|2674,2778"
