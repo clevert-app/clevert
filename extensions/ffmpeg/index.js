@@ -597,13 +597,11 @@ export default {
           const cur = ["-hide_banner"];
           // the -ss before -i do fast inaccurate keyframe-seek, so we seek to near the begin then use slow accurate decoded-seek
           if (begin > seekPad) {
-            cur.push("-ss", String(begin - seekPad));
-            cur.push("-i", input);
+            cur.push("-ss", String(begin - seekPad), "-i", input);
             cur.push("-ss", String(seekPad));
             cur.push("-to", String(end - begin + seekPad));
           } else {
-            cur.push("-ss", String(0));
-            cur.push("-i", input);
+            cur.push("-ss", String(0), "-i", input);
             cur.push("-ss", String(begin));
             cur.push("-to", String(end));
           }
@@ -615,17 +613,12 @@ export default {
         const server = http.createServer((_, res) => {
           const v = partsArgs.shift();
           if (!v) return console.warn("no more parts");
-          const child = child_process.spawn(consts.exe, v, {
-            stdio: ["ignore", "pipe", "ignore"],
-          });
+          const child = child_process.spawn(consts.exe, v);
           cleanup = () => {
             if (child.exitCode === null) child.kill();
             server.close(() => {});
           };
-          child.stdout
-            .pipe(res)
-            .on("error", (e) => console.error(e))
-            .on("close", () => console.info("stream closed"));
+          child.stdout.pipe(res);
         });
         server.listen(0, "127.0.0.1", () => {
           const port = /** @type {any} */ (server.address())?.port;
@@ -634,17 +627,9 @@ export default {
               `file 'http://127.0.0.1:${port}'\n`.repeat(partsArgs.length)
           );
         });
-        const args = [
-          "-hide_banner",
-          "-f",
-          "concat",
-          "-safe",
-          "0",
-          "-protocol_whitelist",
-          "file,http,tcp,fd",
-          "-i",
-          "-",
-        ];
+        const args = ["-hide_banner"];
+        args.push("-safe", "0", "-protocol_whitelist", "file,http,tcp,fd");
+        args.push("-f", "concat", "-i", "-");
         args.push(...profile.extraParams.split(" "));
         args.push(output);
         const { child, controller } = executeWithProgress(args, totalLength);
@@ -658,63 +643,6 @@ export default {
           promise: controller.promise,
         };
         // todo: Svt[warn]: Failed to set thread priority: Invalid argument
-        // child.stdout
-        //   .pipe(fs.createWriteStream(pipe, { highWaterMark: 1024 }))
-        //   .on("error", (e) => console.error(e))
-        //   .on("close", () => (console.info("stream closed"), resolve(0)));
-        // scp -P3322 extensions\ffmpeg\index.js root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/temp/extensions/ffmpeg_0.1.0/
-        // ./setpl 15 15
-        // ./lzchalctl 140 0 0
-        // /run/lzcsys/boot/lzc-os-init/misc/chunks/carib-111613-480.origin.mp4
-        // 795-797,979-981,1113-1133
-        // -vf scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2 -sws_flags lanczos -c:v libsvtav1 -preset 2 -crf 49 -svtav1-params tune=0 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -map_metadata -1 -movflags faststart -y
-        // /run/lzcsys/boot/lzc-os-init/misc/
-        // frame= 1127 fps=5.8 q=45.0 size=     768KiB time=00:00:18.81 bitrate= 334.3kbits/s dup=0 drop=118 speed=0.0961x elapsed=0:03:15.79
-        // frame= 1132 fps=5.8 q=49.0 size=     768KiB time=00:00:18.90 bitrate= 332.9kbits/s dup=0 drop=118 speed=0.0962x elapsed=0:03:16.40
-        // stream closed
-        // frame= 1141 fps=5.8 q=32.0 size=     768KiB time=00:00:19.05 bitrate= 330.2kbits/s dup=0 drop=118 speed=0.0968x elapsed=0:03:16.90
-        // ...
-        // frame= 1160 fps=3.1 q=49.0 size=     768KiB time=00:00:19.36 bitrate= 324.8kbits/s dup=0 drop=118 speed=0.0522x elapsed=0:06:11.02
-        // frame= 1160 fps=3.1 q=49.0 size=     768KiB time=00:00:19.36 bitrate= 324.8kbits/s dup=0 drop=118 speed=0.0521x elapsed=0:06:12.02
-        // [matroska,webm @ 0x55fbc939fa80] Format matroska,webm detected only with low score of 1, misdetection possible!
-        // [matroska,webm @ 0x55fbc939fa80] EBML header parsing failed
-        // [concat @ 0x55fbc939e840] Impossible to open '/tmp/clevert_ffmpeg_uarchive_1753017143_000000.mkv'
-        // [in#0/concat @ 0x55fbc939e640] Error during demuxing: Invalid data found when processing input
-        // frame= 1265 fps=3.4 q=22.0 size=    1024KiB time=N/A bitrate=N/A dup=0 drop=118 speed=N/A elapsed=0:06:12.52
-        // frame= 1265 fps=3.4 q=22.0 size=    1024KiB time=N/A bitrate=N/A dup=0 drop=118 speed=N/A elapsed=0:06:13.02
-        // ...
-        // frame= 1305 fps=3.4 q=35.0 size=    1024KiB time=N/A bitrate=N/A dup=0 drop=118 speed=N/A elapsed=0:06:27.04
-        // frame= 1309 fps=3.4 q=40.0 size=    1024KiB time=N/A bitrate=N/A dup=0 drop=118 speed=N/A elapsed=0:06:27.54
-        // [mp4 @ 0x55fbc93b0480] Starting second pass: moving the moov atom to the beginning of the file
-        // [out#0/mp4 @ 0x55fbc93b0340] video:934KiB audio:174KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 2.135064%
-        // frame= 1318 fps=3.4 q=49.0 Lsize=    1132KiB time=00:00:22.00 bitrate= 421.5kbits/s dup=0 drop=118 speed=0.0567x elapsed=0:06:27.71
-
-        /*
-          # id = sdab-129, source (uncensored leaked) = magnet:?xt=urn:btih:FECD57CEE94AEAA00325BCF5F85703CCFA334ECA
-          ranges="100,111|235,242|570,716|1446,1605|2277,2356|2674,2778"
-          printf "ffconcat version 1.0\n" > i.txt
-          i="1"
-          for range in $(echo $ranges | sed "s/|/ /g"); do
-          mkfifo i.$i.mkv
-          printf "file i.$i.mkv\n" >> i.txt
-          i=$(awk "BEGIN{print $i + 1; exit}")
-          done
-          ../ffmpeg -hide_banner -i i.txt -c:v libsvtav1 -preset 0 -crf 49 -svtav1-params tune=0 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -movflags faststart -map_metadata -1 -y o.mp4 &
-          main_pid=$!
-          i="1"
-          printf "[i.log]\n" > i.log
-          for range in $(echo $ranges | sed "s/|/ /g"); do
-          begin=$(echo $range | cut -d, -f1)
-          end=$(echo $range | cut -d, -f2)
-          printf "[i.$i.log]\nbegin=$begin,end=$end\n" >> i.log
-          ../ffmpeg -hide_banner -ss $(awk "BEGIN{print $begin - 30; exit}") -i i.mp4 -ss 30 -to $(awk "BEGIN{print $end - $begin + 30; exit}") -c:v rawvideo -c:a pcm_s16le -y -f matroska - > i.$i.mkv 2>> i.log
-          i=$(awk "BEGIN{print $i + 1; exit}")
-          done
-          waitpid $main_pid
-          sleep 1
-          echo "[finished]"
-          rm -f i.*.mkv i.txt
-        */
       },
     },
     {
