@@ -90,6 +90,7 @@ const executeWithProgress = (args, totalInput = 0) => {
   let pre = "";
   child.stderr.on("data", (/** @type {Buffer} */ data) => {
     const chunk = data.toString();
+    console.log("> " + chunk.trim());
     if (total === 0) {
       pre += chunk;
       const matched = pre.match(/(?<= Duration: ).+?(?=,)/);
@@ -613,12 +614,19 @@ export default {
         const server = http.createServer((_, res) => {
           const v = partsArgs.shift();
           if (!v) return console.warn("no more parts");
-          const child = child_process.spawn(consts.exe, v);
+          const child = child_process.spawn(consts.exe, v, {
+            stdio: ["pipe", "pipe", "inherit"],
+          });
           cleanup = () => {
             if (child.exitCode === null) child.kill();
             server.close(() => {});
           };
-          child.stdout.pipe(res);
+          console.log("res pipe started");
+          child.stdout
+            .pipe(res)
+            .on("error", (e) => console.error(e))
+            .on("end", () => console.log("res pipe ended"))
+            .on("close", () => console.log("res pipe closed"));
         });
         server.listen(0, "127.0.0.1", () => {
           const port = /** @type {any} */ (server.address())?.port;
@@ -628,20 +636,23 @@ export default {
           );
         });
         const args = ["-hide_banner"];
-        args.push("-safe", "0", "-protocol_whitelist", "file,http,tcp,fd");
+        args.push("-safe", "0", "-protocol_whitelist", "file,http,tcp,fd"); // https://stackoverflow.com/a/49349684
         args.push("-f", "concat", "-i", "-");
         args.push(...profile.extraParams.split(" "));
         args.push(output);
         const { child, controller } = executeWithProgress(args, totalLength);
         controller.promise.finally(() => cleanup());
-        return {
-          progress: controller.progress,
-          stop() {
-            controller.stop();
-            cleanup();
-          },
-          promise: controller.promise,
-        };
+        return controller;
+        /*
+        scp -P3322 extensions\ffmpeg\index.js root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/temp/extensions/ffmpeg_0.1.0/
+        scp -P3322 index.js root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/
+        C:\misc\ffmpeg\temp\carib-111613-480.origin.mp4
+        /run/lzcsys/boot/lzc-os-init/misc/chunks/carib-111613-480.origin.mp4
+        795-877,979-1031,1113-1245
+        -vf scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2 -sws_flags lanczos -c:v libsvtav1 -preset 2 -crf 49 -svtav1-params tune=0:lp=1:pin=1 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -map_metadata -1 -movflags faststart -y
+        powercfg /setacvalueindex SCHEME_BALANCED SUB_PROCESSOR PROCTHROTTLEMAX 99 && powercfg /s SCHEME_BALANCED
+        sudo ./ntop.exe -n ffmpeg,node
+        */
         // todo: Svt[warn]: Failed to set thread priority: Invalid argument
       },
     },
