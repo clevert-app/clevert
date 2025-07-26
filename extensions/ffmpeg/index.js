@@ -612,27 +612,34 @@ export default {
         }
         let cleanup = () => console.warn("empty cleanup function");
         const server = http.createServer((_, res) => {
+          if (res.req.url !== "/i.mkv") return console.warn("wrong url");
           const v = partsArgs.shift();
           if (!v) return console.warn("no more parts");
           const child = child_process.spawn(consts.exe, v, {
-            stdio: ["pipe", "pipe", "inherit"],
+            // stdio: ["ignore", "pipe", "inherit"],
           });
           cleanup = () => {
             if (child.exitCode === null) child.kill();
             server.close(() => {});
           };
-          console.log("res pipe started");
+          const len = partsArgs.length;
+          console.log("res pipe started, l=" + len);
+          child.on("exit", () => {
+            console.log("res pipe closed, exit, l=" + len);
+            res.end();
+          });
+          // child.stdout.pause;
           child.stdout
             .pipe(res)
             .on("error", (e) => console.error(e))
-            .on("end", () => console.log("res pipe ended"))
-            .on("close", () => console.log("res pipe closed"));
+            .on("end", () => console.log("res pipe ended, end, l=" + len))
+            .on("close", () => console.log("res pipe closed, close, l=" + len));
         });
         server.listen(0, "127.0.0.1", () => {
           const port = /** @type {any} */ (server.address())?.port;
           child.stdin.end(
             "ffconcat version 1.0\n" +
-              `file 'http://127.0.0.1:${port}'\n`.repeat(partsArgs.length)
+              `file 'http://127.0.0.1:${port}/i.mkv'\n`.repeat(partsArgs.length)
           );
         });
         const args = ["-hide_banner"];
@@ -644,12 +651,13 @@ export default {
         controller.promise.finally(() => cleanup());
         return controller;
         /*
+        scp -P3322 root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/typescript .
         scp -P3322 extensions\ffmpeg\index.js root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/temp/extensions/ffmpeg_0.1.0/
         scp -P3322 index.js root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/
         C:\misc\ffmpeg\temp\carib-111613-480.origin.mp4
         /run/lzcsys/boot/lzc-os-init/misc/chunks/carib-111613-480.origin.mp4
-        795-877,979-1031,1113-1245
-        -vf scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2 -sws_flags lanczos -c:v libsvtav1 -preset 2 -crf 49 -svtav1-params tune=0:lp=1:pin=1 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -map_metadata -1 -movflags faststart -y
+        // >>> The `ffmpeg:uarchive` will always broken in this edition, use below path, run powercfg, use default args, it will hang on 0.30 progress
+        /mnt/c/misc/ffmpeg/temp/carib-111613-480.origin.mp4
         powercfg /setacvalueindex SCHEME_BALANCED SUB_PROCESSOR PROCTHROTTLEMAX 99 && powercfg /s SCHEME_BALANCED
         sudo ./ntop.exe -n ffmpeg,node
         */
@@ -890,10 +898,10 @@ export default {
       extensionId: "ffmpeg",
       extensionVersion: "0.1.0",
       // below are fields for action
-      parts: "40-55,162-172,203-217",
+      parts: "795-877,979-1031,1113-1245",
       seekPad: "30", // most videos have keyframe gap less than 30s
       extraParams:
-        "-c:v libsvtav1 -preset 0 -crf 49 -svtav1-params tune=0 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -map_metadata -1 -movflags faststart",
+        "-c:v libsvtav1 -preset 6 -crf 49 -svtav1-params tune=0:lp=1 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -map_metadata -1 -movflags faststart -y",
       // below are fields for entries
       entries: {
         mode: "files",
