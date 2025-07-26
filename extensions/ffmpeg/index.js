@@ -617,7 +617,7 @@ export default {
           const v = partsArgs.shift();
           if (!v) return console.warn("no more parts");
           const decoderChild = child_process.spawn(consts.exe, v, {
-            // stdio: ["ignore", "pipe", "ignore"],
+            stdio: ["ignore", "pipe", "ignore"], // remember to "ignore" unused stdio, see commit "6b6984bc99028ca794792d6f580a2641da8a2bb4" for details
           });
           cleanup = () => {
             if (decoderChild.exitCode === null) decoderChild.kill();
