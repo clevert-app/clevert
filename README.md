@@ -14,13 +14,12 @@ The universal file converter platform.
 </details>
 
 <!--
-
+# git push on windows using proxy
 busybox sh -c "all_proxy=socks://127.0.0.1:9091 git push"
-
-# must be hard link instead of symbol link
-ln -f extensions/zcodecs/index.js temp/extensions/zcodecs_0.1.0/index.js
-# windows mklink command has reversed args order
-mklink /H temp\index_zcodecs.js extensions\zcodecs\index.js
-
-http://127.0.0.1:9393/static/index_zcodecs.js
+# must be hard link instead of symbol link, otherwise nodejs import.meta.dirname will not be expected
+ln -f extensions/ffmpeg/index.js temp/extensions/ffmpeg_0.1.0/index.js
+# windows mklink command has reversed args order, and git checkout will lose link
+mklink /H temp\extensions\ffmpeg_0.1.0\index.js extensions\ffmpeg\index.js
+# use this to get local file
+http://127.0.0.1:9393/static/config.json
 -->

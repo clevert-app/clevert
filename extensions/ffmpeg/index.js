@@ -90,8 +90,7 @@ const withProgress = (child, totalInput = 0) => {
   let pre = "";
   cu.assert(child.stderr);
   child.stderr.on("data", (/** @type {Buffer} */ data) => {
-    const chunk = data.toString();
-    // console.log("> " + chunk.trim());
+    const chunk = data.toString(); // console.log("> " + chunk.trim());
     if (total === 0) {
       pre += chunk;
       const matched = pre.match(/(?<= Duration: ).+?(?=,)/);
@@ -111,8 +110,8 @@ const withProgress = (child, totalInput = 0) => {
   return {
     progress: () => finished / (total || 1),
     stop: () => {
-      console.log("stopping ffmpeg");
-      child.kill();
+      if (child.exitCode === null)
+        child.kill("SIGKILL"), console.warn("SIGKILL:child");
       // todo: use stdin command quit?
     },
     promise,
@@ -616,28 +615,19 @@ export default {
           if (res.req.url !== "/i.mkv") return console.warn("wrong url");
           const v = partsArgs.shift();
           if (!v) return console.warn("no more parts");
-          const decoderChild = child_process.spawn(consts.exe, v, {
+          const decodeChild = child_process.spawn(consts.exe, v, {
             stdio: ["ignore", "pipe", "ignore"], // remember to "ignore" unused stdio, see commit "6b6984bc99028ca794792d6f580a2641da8a2bb4" for details
           });
           cleanup = () => {
-            if (decoderChild.exitCode === null) decoderChild.kill();
             server.close(() => {});
+            if (decodeChild.exitCode === null)
+              decodeChild.kill("SIGKILL"), console.warn("SIGKILL:decodeChild");
           };
-          const len = partsArgs.length;
-          console.log("res pipe started, l=" + len);
-          decoderChild.on("exit", () => {
-            console.log("res pipe closed, exit, l=" + len);
-            res.end();
-          });
-          decoderChild.stdout
-            .pipe(res)
-            .on("error", (e) => console.error(e))
-            .on("end", () => console.log("res pipe ended, end, l=" + len))
-            .on("close", () => console.log("res pipe closed, close, l=" + len));
+          decodeChild.stdout.pipe(res).on("error", (e) => console.error(e));
         });
         server.listen(0, "127.0.0.1", () => {
           const port = /** @type {any} */ (server.address())?.port;
-          encoderChild.stdin.end(
+          child.stdin.end(
             "ffconcat version 1.0\n" +
               `file 'http://127.0.0.1:${port}/i.mkv'\n`.repeat(partsArgs.length)
           );
@@ -647,23 +637,12 @@ export default {
         args.push("-f", "concat", "-i", "-");
         args.push(...profile.extraParams.split(" "));
         args.push(output);
-        const encoderChild = child_process.spawn(consts.exe, args, {
+        const child = child_process.spawn(consts.exe, args, {
           stdio: ["pipe", "ignore", "pipe"],
         });
-        const controller = withProgress(encoderChild, totalLength);
+        const controller = withProgress(child, totalLength);
         controller.promise.finally(() => cleanup());
         return controller;
-        /*
-        scp -P3322 root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/typescript .
-        scp -P3322 extensions\ffmpeg\index.js root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/temp/extensions/ffmpeg_0.1.0/
-        scp -P3322 index.js root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/
-        C:\misc\ffmpeg\temp\carib-111613-480.origin.mp4
-        /run/lzcsys/boot/lzc-os-init/misc/chunks/carib-111613-480.origin.mp4
-        // >>> The `ffmpeg:uarchive` will always broken in this edition, use below path, run powercfg, use default args, it will hang on 0.30 progress, use 00:11:37 time
-        /mnt/c/misc/ffmpeg/temp/carib-111613-480.origin.mp4
-        powercfg /setacvalueindex SCHEME_BALANCED SUB_PROCESSOR PROCTHROTTLEMAX 99 && powercfg /s SCHEME_BALANCED
-        sudo ./ntop.exe -n ffmpeg,node
-        */
         // todo: Svt[warn]: Failed to set thread priority: Invalid argument
       },
     },
