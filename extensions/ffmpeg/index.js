@@ -79,18 +79,19 @@ const i18nRes = (() => {
 })();
 const i18n = i18nRes[cu.locale];
 
-const executeWithProgress = (args, totalInput = 0) => {
+/** @param {child_process.ChildProcess} child */
+const withProgress = (child, totalInput = 0) => {
   /** `time2secs("00:03:22.45") === 202.45` */
   const time2secs = (/** @type {string} */ t) =>
     t.split(":").reduce((prev, cur) => +prev * 60 + +cur, 0); // [ 34, +"034", +034 ]
   const { promise, resolve, reject } = Promise.withResolvers();
-  const child = child_process.spawn(consts.exe, args);
   let finished = 0;
   let total = totalInput;
   let pre = "";
+  cu.assert(child.stderr);
   child.stderr.on("data", (/** @type {Buffer} */ data) => {
     const chunk = data.toString();
-    console.log("> " + chunk.trim());
+    // console.log("> " + chunk.trim());
     if (total === 0) {
       pre += chunk;
       const matched = pre.match(/(?<= Duration: ).+?(?=,)/);
@@ -108,16 +109,13 @@ const executeWithProgress = (args, totalInput = 0) => {
   child.on("error", (error) => reject(error));
   child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
   return {
-    child,
-    controller: {
-      progress: () => finished / (total || 1),
-      stop: () => {
-        console.log("stopping ffmpeg");
-        child.kill();
-        // todo: use stdin command quit?
-      },
-      promise,
+    progress: () => finished / (total || 1),
+    stop: () => {
+      console.log("stopping ffmpeg");
+      child.kill();
+      // todo: use stdin command quit?
     },
+    promise,
   };
 };
 
@@ -449,7 +447,10 @@ const generalAction = {
     if (profile.fastStart) args.push("-movflags", "faststart"); // this option is only for MP4, M4A, M4V, MOV
     if (profile.noMeta) args.push("-map_metadata", "-1");
     args.push(output);
-    return executeWithProgress(args).controller;
+    const child = child_process.spawn(consts.exe, args, {
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    return withProgress(child);
   },
 };
 
@@ -615,21 +616,20 @@ export default {
           if (res.req.url !== "/i.mkv") return console.warn("wrong url");
           const v = partsArgs.shift();
           if (!v) return console.warn("no more parts");
-          const child = child_process.spawn(consts.exe, v, {
-            // stdio: ["ignore", "pipe", "inherit"],
+          const decoderChild = child_process.spawn(consts.exe, v, {
+            // stdio: ["ignore", "pipe", "ignore"],
           });
           cleanup = () => {
-            if (child.exitCode === null) child.kill();
+            if (decoderChild.exitCode === null) decoderChild.kill();
             server.close(() => {});
           };
           const len = partsArgs.length;
           console.log("res pipe started, l=" + len);
-          child.on("exit", () => {
+          decoderChild.on("exit", () => {
             console.log("res pipe closed, exit, l=" + len);
             res.end();
           });
-          // child.stdout.pause;
-          child.stdout
+          decoderChild.stdout
             .pipe(res)
             .on("error", (e) => console.error(e))
             .on("end", () => console.log("res pipe ended, end, l=" + len))
@@ -637,7 +637,7 @@ export default {
         });
         server.listen(0, "127.0.0.1", () => {
           const port = /** @type {any} */ (server.address())?.port;
-          child.stdin.end(
+          encoderChild.stdin.end(
             "ffconcat version 1.0\n" +
               `file 'http://127.0.0.1:${port}/i.mkv'\n`.repeat(partsArgs.length)
           );
@@ -647,7 +647,10 @@ export default {
         args.push("-f", "concat", "-i", "-");
         args.push(...profile.extraParams.split(" "));
         args.push(output);
-        const { child, controller } = executeWithProgress(args, totalLength);
+        const encoderChild = child_process.spawn(consts.exe, args, {
+          stdio: ["pipe", "ignore", "pipe"],
+        });
+        const controller = withProgress(encoderChild, totalLength);
         controller.promise.finally(() => cleanup());
         return controller;
         /*
@@ -656,7 +659,7 @@ export default {
         scp -P3322 index.js root@13test.internal:/run/lzcsys/boot/lzc-os-init/misc/clevert/
         C:\misc\ffmpeg\temp\carib-111613-480.origin.mp4
         /run/lzcsys/boot/lzc-os-init/misc/chunks/carib-111613-480.origin.mp4
-        // >>> The `ffmpeg:uarchive` will always broken in this edition, use below path, run powercfg, use default args, it will hang on 0.30 progress
+        // >>> The `ffmpeg:uarchive` will always broken in this edition, use below path, run powercfg, use default args, it will hang on 0.30 progress, use 00:11:37 time
         /mnt/c/misc/ffmpeg/temp/carib-111613-480.origin.mp4
         powercfg /setacvalueindex SCHEME_BALANCED SUB_PROCESSOR PROCTHROTTLEMAX 99 && powercfg /s SCHEME_BALANCED
         sudo ./ntop.exe -n ffmpeg,node
@@ -901,7 +904,7 @@ export default {
       parts: "795-877,979-1031,1113-1245",
       seekPad: "30", // most videos have keyframe gap less than 30s
       extraParams:
-        "-c:v libsvtav1 -preset 6 -crf 49 -svtav1-params tune=0:lp=1 -g 300 -ac 1 -c:a libopus -vbr on -compression_level 10 -map_metadata -1 -movflags faststart -y",
+        "-c:v libsvtav1 -preset 7 -crf 49 -svtav1-params tune=0:lp=1 -map_metadata -1 -movflags faststart -y",
       // below are fields for entries
       entries: {
         mode: "files",
