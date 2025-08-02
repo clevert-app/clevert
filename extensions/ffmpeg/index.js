@@ -105,14 +105,13 @@ const withProgress = (child, totalInput = 0) => {
     if (!sliced || sliced === "N/A" || sliced.startsWith("-")) return; // deal with invalid timestamps like "-577014:32:22.77"
     finished = time2secs(sliced);
   });
-  child.on("error", (error) => reject(error));
+  child.on("error", (e) => reject(e));
   child.on("exit", (v) => (v ? reject(new Error("" + v)) : resolve(0)));
   return {
     progress: () => finished / (total || 1),
     stop: () => {
       if (child.exitCode === null)
         child.kill("SIGKILL"), console.warn("SIGKILL:child");
-      // todo: use stdin command quit?
     },
     promise,
   };

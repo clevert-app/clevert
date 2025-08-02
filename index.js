@@ -1067,8 +1067,9 @@ const pageMain = async () => {
           const $menu = document.createElement("menu");
           $choice.appendChild($menu);
           const removeMenu = () => {
+            e.preventDefault();
             removeEventListener("click", removeMenu); // agreement: prefer to use `.onevent`, avoid `.addEventListener` when possible, here's why, remove listener needs more code
-            $menu.onanimationend = $menu.onanimationcancel = $menu.remove; // agreement: depends on css animation, so, for future sans-animation feature, use `animation-duration:0s;animation-iteration-count:1`
+            $menu.onanimationend = $menu.remove; // agreement: depends on css animation, so, for future sans-animation feature, use `animation-duration:0s;animation-iteration-count:1`
             $menu.classList.add("off");
           };
           addEventListener("click", removeMenu);
@@ -1143,8 +1144,9 @@ const pageMain = async () => {
           const $menu = document.createElement("menu");
           $choice.appendChild($menu);
           const removeMenu = () => {
+            e.preventDefault();
             removeEventListener("click", removeMenu);
-            $menu.onanimationend = $menu.onanimationcancel = $menu.remove;
+            $menu.onanimationend = $menu.remove;
             $menu.classList.add("off");
           };
           addEventListener("click", removeMenu);
@@ -1594,9 +1596,10 @@ const pageMain = async () => {
       const $menu = document.createElement("menu");
       $operations.appendChild($menu);
       $menu.onclick = (e) => e.stopPropagation();
-      const removeMenu = () => {
+      const removeMenu = (e) => {
+        e.preventDefault();
         removeEventListener("click", removeMenu);
-        $menu.onanimationend = $menu.onanimationcancel = $menu.remove;
+        $menu.onanimationend = $menu.remove;
         $menu.classList.add("off");
       };
       addEventListener("click", removeMenu);
