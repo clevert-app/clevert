@@ -53,9 +53,6 @@ import child_process from "node:child_process";
   actions: Action[]; // agreement: use array, each has id field, instead of object[id]=action
   profiles: Profile[];
 }} Extension
-@typedef {(
-  Omit<Extension, "actions"> & { actions: Omit<Action, "ui" | "execute">[] }
-)[]} ListExtensionsResponse
 @typedef {{
   kind: "common-files";
   ifExists: "noop" | "force" | "skip";
@@ -120,18 +117,39 @@ import child_process from "node:child_process";
   id: string;
   version: string;
 }} RemoveExtensionRequest
-@typedef {
+@typedef {(
+  Omit<Extension, "actions"> & { actions: Omit<Action, "ui" | "execute">[] }
+)[]} ListExtensionsResponse
+@typedef {(
+  Profile
+)} SaveProfileRequest Save user-defined profile to json file, name must be same as id.
+@typedef {{
+  id: string;
+}} RemoveProfileRequest
+@typedef {{
+  pattern: string;
+}} ListProfilesRequest
+@typedef {{
+  id: string;
+}[]} ListProfilesResponse
+@typedef {{
+  id: string
+}} GetProfileRequest
+@typedef {(
+  Profile
+)} GetProfileResponse
+@typedef {(
   Electron.OpenDialogOptions
-} ShowOpenDialogRequest
-@typedef {
+)} ShowOpenDialogRequest
+@typedef {(
   Electron.OpenDialogReturnValue
-} ShowOpenDialogResponse
-@typedef {
+)} ShowOpenDialogResponse
+@typedef {(
   Electron.SaveDialogOptions
-} ShowSaveDialogRequest
-@typedef {
+)} ShowSaveDialogRequest
+@typedef {(
   Electron.SaveDialogReturnValue
-} ShowSaveDialogResponse
+)} ShowSaveDialogResponse
 @typedef {{
   path?: string;
 }} ListDirRequest
@@ -1884,9 +1902,8 @@ const serverMain = async () => {
   };
 
   const PATH_DATA = solvePath("temp");
-
   // await fs.promises.rm(solvePath(PATH_DATA, "cache"), { recursive: true }); // todo: remove cache dir at launch
-  for (const entry of ["cache", "extensions"])
+  for (const entry of ["cache", "extensions", "profiles"])
     await fs.promises.mkdir(solvePath(PATH_DATA, entry), { recursive: true });
 
   /** Copy from [MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types#important_mime_types_for_web_developers). */
@@ -2201,6 +2218,26 @@ const serverMain = async () => {
   };
 
   /**
+   * Percent encode, encode chars which may be invalid in filename. Do not use `encodeURIComponent`, it skips '*' and some other chars that is invalid as filename.
+   * @param {string} s
+   */
+  const percentEncodeFilename = (s) => {
+    const legal = /[\(\)\+\,\-\.\[\]_¢£¥©®\w À-ɏ\u4e00-\u9fa5\uff01-\uff9f]/; // includes legal symbols, words, space, common cjk chars and fullwidth variants, must remember to exclude '%' itself
+    const encoder = new TextEncoder();
+    let ret = "";
+    for (const c of s) {
+      if (legal.test(c)) {
+        ret += c; // char by char, instead of use String.replace()
+      } else {
+        for (const b of encoder.encode(c)) {
+          ret += "%" + b.toString(16).toUpperCase().padStart(2, "0");
+        }
+      }
+    }
+    return ret;
+  };
+
+  /**
    * Get next unique id. Format = `1716887172_000123` = unix stamp + underscore + sequence number inside this second.
    * @returns {string}
    */
@@ -2463,8 +2500,55 @@ const serverMain = async () => {
       return;
     }
 
-    // todo: implement /list-profiles /save-profile /remove-profile /profile/xxx
-    // design proposal: there are many profiles, save profile into ./profiles/the-profile-uuid.json , and build a profile index json, recent profiles name and
+    if (r.req.url === "/save-profile") {
+      /** @type {SaveProfileRequest} */
+      const request = await readJson();
+      assert(request.id === request.name);
+      assert(request.id.length < 128); // agreement: profile id must be less than 128 chars
+      const filename = percentEncodeFilename(request.id) + ".json";
+      const path = solvePath(PATH_DATA, "profiles", filename);
+      await fs.promises.writeFile(path, JSON.stringify(request));
+      r.end();
+      return;
+    }
+
+    if (r.req.url === "/remove-profile") {
+      /** @type {RemoveProfileRequest} */
+      const request = await readJson();
+      const filename = percentEncodeFilename(request.id) + ".json";
+      const path = solvePath(PATH_DATA, "profiles", filename);
+      await fs.promises.rm(path, { force: true });
+      r.end();
+      return;
+    }
+
+    if (r.req.url === "/list-profiles") {
+      /** @type {ListProfilesResponse} */
+      const response = [];
+      const path = solvePath(PATH_DATA, "profiles");
+      for (const name of await fs.promises.readdir(path)) {
+        response.push({ id: decodeURIComponent(name) });
+      }
+      r.setHeader("Content-Type", MIME.json);
+      r.end(JSON.stringify(response));
+      return;
+    }
+
+    if (r.req.url === "/get-profile") {
+      /** @type {GetProfileRequest} */
+      const request = await readJson();
+      const filename = percentEncodeFilename(request.id) + ".json";
+      const path = solvePath(PATH_DATA, "profiles", filename);
+      // const profile = /** @type {Profile} */ (
+      //   JSON.parse(await fs.promises.readFile(path, "utf-8"))
+      // );
+      // /** @type {GetProfileResponse} */
+      // const response = profile;
+      r.setHeader("Content-Type", MIME.json);
+      // r.end(response);
+      r.end(await fs.promises.readFile(path));
+      return;
+    }
 
     if (r.req.url === "/run-action") {
       /** @type {RunActionRequest} */
