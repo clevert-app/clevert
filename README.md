@@ -23,7 +23,7 @@ mklink /H temp\extensions\ffmpeg_0.1.0\index.js extensions\ffmpeg\index.js
 # use this to get local file
 http://127.0.0.1:9393/static/config.json
 
-- user defined profile
+- show user defined profile
 - store recent/pinned profile id list in main config.json
 - market
 - ffmpeg amr audio decode

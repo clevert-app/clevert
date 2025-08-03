@@ -39,7 +39,7 @@ import child_process from "node:child_process";
   name: string;
   description: string;
   actionId: string;
-  extensionId: string;
+  extensionId: string; // is "target extension id", the action to run is inside this extension, not "owned extension id", so that extension "foo" can own a profile that is used for extension "bar"
   extensionVersion: string;
   [key: string]: any;
 }} Profile
@@ -188,7 +188,7 @@ import child_process from "node:child_process";
   mirrorsEnabled: boolean;
   serverHost: string;
   serverPort: number;
-  profiles: Profile[];
+  recentProfiles: (Pick<Profile, "id" | "name"> & { ownedExtensionId: string; pinned: boolean; })[];
 }} Config
 */
 
@@ -1085,7 +1085,7 @@ const pageMain = async () => {
           const $menu = document.createElement("menu");
           $choice.appendChild($menu);
           const removeMenu = () => {
-            e.preventDefault();
+            e?.preventDefault();
             removeEventListener("click", removeMenu); // agreement: prefer to use `.onevent`, avoid `.addEventListener` when possible, here's why, remove listener needs more code
             $menu.onanimationend = $menu.remove; // agreement: depends on css animation, so, for future sans-animation feature, use `animation-duration:0s;animation-iteration-count:1`
             $menu.classList.add("off");
@@ -1162,7 +1162,7 @@ const pageMain = async () => {
           const $menu = document.createElement("menu");
           $choice.appendChild($menu);
           const removeMenu = () => {
-            e.preventDefault();
+            e?.preventDefault();
             removeEventListener("click", removeMenu);
             $menu.onanimationend = $menu.remove;
             $menu.classList.add("off");
@@ -1615,7 +1615,7 @@ const pageMain = async () => {
       $operations.appendChild($menu);
       $menu.onclick = (e) => e.stopPropagation();
       const removeMenu = (e) => {
-        e.preventDefault();
+        e?.preventDefault();
         removeEventListener("click", removeMenu);
         $menu.onanimationend = $menu.remove;
         $menu.classList.add("off");
@@ -1638,18 +1638,14 @@ const pageMain = async () => {
       $save.textContent = i18n.actionSaveProfileSave();
       $save.onclick = async () => {
         const profile = controller.profile();
-        profile.name = $name.value;
+        profile.id = profile.name = $name.value; // id = name
         profile.description = $description.value;
-        /** @type {Config} */
-        const config = await fetch("/get-config").then((r) => r.json());
-        const found = config.profiles.findIndex((v) => v.id === profile.id);
-        if (found === -1) {
-          profile.id = (await cu.nextId()) + "_" + profile.id;
-          config.profiles.push(profile);
-        } else {
-          config.profiles[found] = profile;
-        }
-        fetch("/set-config", { method: "POST", body: JSON.stringify(config) });
+        /** @type {SaveProfileRequest} */
+        const request = profile;
+        await fetch("/save-profile", {
+          method: "POST",
+          body: JSON.stringify(request),
+        });
         removeMenu();
       };
     };
@@ -1963,7 +1959,7 @@ const serverMain = async () => {
     mirrorsEnabled: false,
     serverHost: "127.0.0.1",
     serverPort: 9393,
-    profiles: [],
+    recentProfiles: [],
   });
   /** @type {Config} */
   const config = await openJsonMmap(solvePath(PATH_DATA, "config.json")); // developers write js extensions, common users will not modify config file manually, so the non-comments json is enough
@@ -2507,7 +2503,7 @@ const serverMain = async () => {
       assert(request.id.length < 128); // agreement: profile id must be less than 128 chars
       const filename = percentEncodeFilename(request.id) + ".json";
       const path = solvePath(PATH_DATA, "profiles", filename);
-      await fs.promises.writeFile(path, JSON.stringify(request));
+      await fs.promises.writeFile(path, JSON.stringify(request, null, 2));
       r.end();
       return;
     }
