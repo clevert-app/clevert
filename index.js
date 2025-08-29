@@ -92,10 +92,7 @@ import child_process from "node:child_process";
 }} RunActionController
 @typedef {{
   title: string;
-  extensionId: string;
-  extensionVersion: string;
-  actionId: string;
-  profile: any;
+  profile: Profile;
   entries: EntriesCommonFiles | EntriesOutputDir;
   parallel: number;
 }} RunActionRequest
@@ -206,14 +203,14 @@ const i18nRes = (() => {
     tasksResume: () => "Resume",
     tasksStop: () => "Stop",
     homeEmpty: () => "No items",
-    homeShowRecent: () => "Recent",
-    homeShowByName: () => "By Name",
-    homeShowExtensions: () => "Extensions",
-    homeShowProfiles: () => "Profiles",
+    homeToRecent: () => "Recent",
+    homeToExtensions: () => "Extensions",
+    homeToProfiles: () => "Profiles",
     homeMenuShare: () => "Share",
-    homeMenuDelete: () => "Delete",
+    homeMenuRemove: () => "Remove",
     homeMenuInfo: () => "Info",
     homeMoreOperations: () => "More operations",
+    homeChoiceRemoved: () => "Removed",
     entriesModeDir: () => "Directory mode",
     entriesModeFiles: () => "Files mode",
     entriesInputDir: () => "Input directory",
@@ -227,7 +224,6 @@ const i18nRes = (() => {
     actionRun: () => "Run",
     actionSaveProfile: () => "Save profile",
     actionSaveProfileName: () => "Profile name",
-    actionSaveProfileDescription: () => "Description",
     actionSaveProfileSave: () => "Save",
     settingsMirrorsTitle: () => "Mirrors",
     settingsMirrorsDescription: () => "May speed up downloads in some region.",
@@ -254,14 +250,14 @@ const i18nRes = (() => {
     tasksResume: () => "恢复",
     tasksStop: () => "停止",
     homeEmpty: () => "没有项目",
-    homeShowRecent: () => "最近",
-    homeShowByName: () => "按名称",
-    homeShowExtensions: () => "扩展",
-    homeShowProfiles: () => "配置",
+    homeToRecent: () => "最近",
+    homeToExtensions: () => "扩展",
+    homeToProfiles: () => "预设",
     homeMenuShare: () => "分享",
-    homeMenuDelete: () => "删除",
+    homeMenuRemove: () => "删除",
     homeMenuInfo: () => "详细信息",
     homeMoreOperations: () => "更多操作",
+    homeChoiceRemoved: () => "已删除",
     entriesModeDir: () => "文件夹模式",
     entriesModeFiles: () => "文件模式",
     entriesInputDir: () => "输入文件夹",
@@ -273,9 +269,8 @@ const i18nRes = (() => {
     entriesIfExistsForce: () => "强制覆盖",
     entriesIfExistsSkip: () => "跳过",
     actionRun: () => "运行",
-    actionSaveProfile: () => "保存配置",
-    actionSaveProfileName: () => "配置名称",
-    actionSaveProfileDescription: () => "描述",
+    actionSaveProfile: () => "保存预设",
+    actionSaveProfileName: () => "预设名称",
     actionSaveProfileSave: () => "保存",
     settingsMirrorsTitle: () => "镜像",
     settingsMirrorsDescription: () => "可能在某些地区提升下载速度。",
@@ -461,8 +456,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   }
   /* agreement: apply style to multi elements by css selector, not by util class */
   button,
-  body > .tasks figure,
-  body > .home figure {
+  body > :is(.tasks, .home) ul > li {
     position: relative;
     padding: 8px 12px;
     font-size: 14px;
@@ -471,14 +465,15 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     background: var(--bg4);
     border: none;
     border-radius: 6px;
-    transition: background-color 0.2s;
+    transition: background-color 0.2s, opacity 0.2s, visibility 0.2s;
   }
-  body > .tasks figure ~ button:not(:hover, :active),
-  body > .home figure ~ button:not(:hover, :active),
-  body > .home menu button:not(:hover, :active),
-  body > .home > button.off:not(:hover, :active),
-  body > .top > button.off:not(:hover, :active),
-  body > .action > button.off:not(:hover, :active) {
+  nav button {
+    padding: 6px 12px;
+    margin-right: 4px;
+  }
+  body > :is(.tasks, .home) li > button:not(:hover, :active),
+  menu button:not(:hover, :active),
+  nav button.off:not(:hover, :active) {
     background: #0000;
   }
   button:hover,
@@ -492,7 +487,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     background: var(--bg6);
   }
   button:active,
-  body > .home li figure:active {
+  body > :is(.tasks, .home) ul > li:active {
     transition: background-color 0s;
   }
   @keyframes menu-in {
@@ -520,6 +515,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     width: 100%;
     text-align: left;
   }
+  /* above are components stylesheet, ends here */
   body {
     height: 100vh;
     margin: 0;
@@ -528,8 +524,30 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     background: var(--bg);
     -webkit-tap-highlight-color: transparent; /* agreement: the shadcn has not ":active" in buttons, they "-webkit-tap-highlight-color" insteaad of , but we don't agree with that */
   }
-  body > div {
-    position: fixed;
+  /* agreement: always use strict prefix to scope the style, like "body > .foo", do not leak it to extension action */
+  body > .top,
+  body > .top button {
+    padding: 8px 12px;
+  }
+  body > .top button:last-child {
+    margin-right: 0;
+  }
+  body > .top .to-action + button {
+    float: right;
+  }
+  body > .top .to-settings::before {
+    display: block;
+    width: 14px;
+    height: 14px;
+    margin: 0 -2px;
+    clip-path: path("M0,1h14v2H0v3h14v2H0v3h14v2H0");
+    content: "";
+    background: var(--fg);
+    opacity: 0.9;
+  }
+  body > div,
+  body > .home > div {
+    position: absolute;
     top: 42px;
     right: 0;
     bottom: 0;
@@ -539,15 +557,15 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     transition: visibility 0.2s, opacity 0.2s;
   }
   /* agreement: default to be visable, and hide with ".off" class */
-  body > div.off {
+  body > div.off,
+  body > .home > div.off,
+  body > .tasks button.off,
+  body > .home .tabs > .to-inside.off,
+  body > .top .to-action.off {
     visibility: hidden;
     opacity: 0;
   }
-  /* agreement: always use strict prefix to scope the style, like "body > .foo", do not leak it to extension action */
-  body > .tasks {
-    overflow: auto;
-  }
-  body > .tasks:empty::before {
+  body > :is(.tasks, .home):empty::before {
     display: block;
     margin: 12px;
     font-size: 16px;
@@ -555,27 +573,27 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     content: "${i18n.tasksEmpty()}";
     opacity: 0.8;
   }
-  body > .tasks section {
-    position: relative;
-    margin-bottom: 6px;
+  body > :is(.tasks, .home) ul {
+    display: grid; /* todo: grid-template-columns: 1fr 1fr */
+    gap: 6px;
+    max-height: calc(100% - 38px);
+    padding: 0;
+    margin: 0;
+    overflow: auto;
+    border-radius: 6px;
   }
-  body > .tasks figure,
-  body > .home figure {
+  body > :is(.tasks, .home) ul > li {
     padding: 10px 14px;
     margin: 0;
     background: var(--bg3);
   }
-  body > .tasks figure:hover,
-  body > .home figure:hover {
+  body > :is(.tasks, .home) ul > li:hover {
     background: var(--bg4);
   }
-  body > .tasks figure:active,
-  body > .home figure:active {
+  body > :is(.tasks, .home) ul > li:active:not(:focus-within) {
     background: var(--bg5);
   }
-  /* todo: animation for removing */
-  body > .tasks figure h5,
-  body > .home figure h5 {
+  body > :is(.tasks, .home) ul > li h5 {
     display: inline-block;
     max-width: calc(100% - 120px);
     padding: 0 8px 6px 0;
@@ -589,14 +607,12 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     vertical-align: text-top;
     transition: text-indent 0.2s;
   }
-  body > .tasks figure sub,
-  body > .home figure sub {
+  body > :is(.tasks, .home) ul > li sub {
     font-size: 13px;
     vertical-align: inherit;
     opacity: 0.8;
   }
-  body > .tasks figure ~ button,
-  body > .home figure ~ button {
+  body > :is(.tasks, .home) ul > li > button {
     position: absolute;
     top: 6px;
     right: 6px;
@@ -606,9 +622,16 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     overflow: hidden;
     font-size: 18px;
   }
-  body > .tasks figure ~ button:nth-child(3),
-  body > .home figure ~ button:nth-child(3) {
+  body > :is(.tasks, .home) ul > li button:nth-last-child(2) {
     right: calc(6px + 28px + 4px);
+  }
+  body > :is(.tasks, .home) ul > li.removed {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  body > :is(.tasks, .home) ul > li.removed sub::after {
+    content: " (${i18n.homeChoiceRemoved()})";
+    font-style: italic;
   }
   body > .tasks button::before {
     display: block;
@@ -629,10 +652,6 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .tasks button.stop::before {
     translate: 0 -66.66%;
   }
-  body > .tasks button.off {
-    visibility: hidden;
-    opacity: 0;
-  }
   body > .tasks progress {
     --progress: 0%;
     display: block;
@@ -652,31 +671,11 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     border-radius: 4px;
     transition: background-position-x 0.2s;
   }
-  body > .home > button,
-  body > .action > button {
-    padding: 6px 12px;
-    margin: 0 4px 12px 0;
-  }
-  body > .home .separator {
-    display: inline-block;
-    width: 8px;
-  }
-  body > .home ul {
-    display: grid; /* todo: grid-template-columns: 1fr 1fr */
-    gap: 6px;
-    max-height: calc(100% - 38px);
-    padding: 0;
-    margin: 0;
-    overflow: auto;
-    border-radius: 6px;
+  body > .home > div {
+    top: 36px;
   }
   body > .home ul:empty::before {
-    display: block;
-    margin: 8px;
-    font-size: 16px;
-    text-align: center;
     content: "${i18n.homeEmpty()}";
-    opacity: 0.8;
   }
   body > .home ul::after {
     height: 10em;
@@ -686,11 +685,11 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     position: relative;
     list-style: none;
   }
-  body > .home figure p {
+  body > .home ul > li p {
     margin: 0;
     line-height: 19px;
   }
-  body > .home figure ~ button::before,
+  body > .home ul > li > button::before,
   body > .action > .entries label > button::before,
   body > .action > .entries.common-files li > button::before {
     clip-path: path(
@@ -719,24 +718,18 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   body > .market > input {
     margin-right: 4px;
   }
-  body > .action > .operations > *,
-  body > .action > .entries.common-files > * {
+  body > .action > * {
+    margin-bottom: 8px;
+  }
+  body > .action > .entries.common-files > *,
+  body > .action > .operations > * {
     margin: 0 12px 6px 0;
     vertical-align: top;
   }
   /* body > .action > .operations > button.run-action::after { clip-path: path("m1,1h1.8l2,6l-2,6h-1.8l2,-6zm5,0h1.8l2,6l-2,6h-1.8l2,-6"); } */
-  body > .action > .operations > menu {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    display: grid;
-    gap: 12px;
-    padding: 12px;
-    box-shadow: 0 0 0 calc(100vmax - 48px) var(--mask);
-  }
   body > .action > .entries.common-files ul {
     width: fit-content;
-    max-height: calc(50vh - 200px);
+    max-height: max(80px, calc(50vh - 200px));
     padding: 0;
     margin: 0;
     margin-right: max(4px, 100vw - 840px);
@@ -756,10 +749,6 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     display: inline-grid;
     grid: auto / repeat(3, auto);
     gap: 0 6px;
-  }
-  body > .action > .root {
-    margin-top: 12px;
-    margin-bottom: 12px;
   }
   body > .action label > input[type="text"],
   body > .action label > input[type="number"],
@@ -815,28 +804,6 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     position: absolute;
     inset: 0;
   }
-  body > .top {
-    padding: 8px 12px;
-  }
-  body > .top > button:not(:last-child) {
-    margin-right: 4px;
-  }
-  body > .top > button.to-action:empty {
-    visibility: hidden;
-  }
-  body > .top > button.to-action + button {
-    float: right;
-  }
-  body > .top > button.to-settings::before {
-    display: block;
-    width: 14px;
-    height: 14px;
-    margin: 0 -2px;
-    clip-path: path("M0,1h14v2H0v3h14v2H0v3h14v2H0");
-    content: "";
-    background: var(--fg);
-    opacity: 0.9;
-  }
   /* todo: about hover, https://stackoverflow.com/a/30303898 */
   /* todo: use box-shadow instead of background on hover? */
   /* todo: rtl right-to-left https://github.com/happylindz/blog/issues/16 */
@@ -874,38 +841,35 @@ const pageMain = async () => {
 
   const i18n = i18nRes[cu.locale];
 
+  // $top
+  const $top = document.createElement("nav"); // see g$topButton // 如果要移动端，就**不可能**侧栏了。而顶栏在桌面端也可以忍受
+  $top.classList.add("top");
+  document.body.appendChild($top);
+
   // $tasks
   const $tasks = document.createElement("div");
   document.body.appendChild($tasks);
   $tasks.classList.add("tasks"); // agreement: never set dom id, use class instead
   $tasks.classList.add("off");
+  const $tasksList = document.createElement("ul");
+  $tasks.appendChild($tasksList);
   new EventSource("/get-status").onmessage = async (message) => {
     const e = /** @type {GetStatusResponseEvent} */ (JSON.parse(message.data)); // agreement: the only sse endpoint, only one
     /** @type {HTMLElement | null} */
-    let $task = $tasks.querySelector(`section[data-id="${e.id}"]`);
+    let $task = $tasksList.querySelector(`li[data-id="${e.id}"]`);
     if (!$task) {
-      $task = document.createElement("section");
-      $tasks.insertBefore($task, $tasks.firstChild);
+      $task = document.createElement("li");
+      $tasksList.insertBefore($task, $tasksList.firstChild);
       $task.dataset.id = e.id;
-      const $figure = document.createElement("figure");
-      $task.appendChild($figure);
       const $title = document.createElement("h5");
-      $figure.appendChild($title);
+      $task.appendChild($title);
       const $tips = document.createElement("sub");
-      $figure.appendChild($tips);
+      $task.appendChild($tips);
       const $progress = document.createElement("progress");
-      $figure.appendChild($progress);
+      $task.appendChild($progress);
       $progress.value = 0;
       $progress.style.setProperty("--progress", "0%");
       if (e.kind === "run-action-progress") {
-        const $stop = document.createElement("button");
-        $task.appendChild($stop);
-        $stop.classList.add("stop");
-        $stop.title = i18n.tasksStop();
-        $stop.onclick = async () => {
-          assert(false, "todo");
-          // disable all buttons
-        };
         const $pause = document.createElement("button");
         $task.appendChild($pause);
         $pause.classList.add("pause");
@@ -924,6 +888,14 @@ const pageMain = async () => {
           assert(false, "todo");
           // todo: how can i know it is paused after page reload? add fields into controller?
         };
+        const $stop = document.createElement("button");
+        $task.appendChild($stop);
+        $stop.classList.add("stop");
+        $stop.title = i18n.tasksStop();
+        $stop.onclick = async () => {
+          assert(false, "todo");
+          // disable all buttons
+        };
         // todo: the "show in folder" button?
         // todo: 一开始是进度条，后来是完成时间与耗时
         // todo: 对于文件转换类任务，提供删除条目和打开文件夹的按钮
@@ -939,12 +911,8 @@ const pageMain = async () => {
         assert(false, "unreachable");
       }
     }
-    const [$figure, $stop, $pause] = /** @type {Iterable<HTMLElement>} */ (
-      $task.children
-    );
-    const [$title, $tips, $progress] = /** @type {Iterable<HTMLElement>} */ (
-      $figure.children
-    );
+    const [$title, $tips, $progress, $stop, $pause] =
+      /** @type {Iterable<HTMLElement>} */ ($task.children);
     if (e.kind === "run-action-progress") {
       // const [$pause, $stop, $pin] = $operations.children;
       $title.textContent = e.title;
@@ -1001,202 +969,210 @@ const pageMain = async () => {
   };
 
   // $home
-  const $home = document.createElement("div"); // 选择 extension，action，profile 等. 其实用户眼中应该全都是 profile，所有的目标都是 profile
+  const $home = document.createElement("div");
   document.body.appendChild($home);
   $home.classList.add("home");
   $home.classList.add("off");
-  /** @type {ListExtensionsResponse} */
-  let extensionsList = [];
-  // $showRecent
-  const $showRecent = document.createElement("button");
-  $home.appendChild($showRecent);
-  $showRecent.textContent = i18n.homeShowRecent();
-  $showRecent.onclick = () => {
-    $showRecent.classList.remove("off");
-    $showByName.classList.add("off");
-    r$choices();
-  };
-  // $showByName
-  const $showByName = document.createElement("button");
-  $home.appendChild($showByName);
-  $showByName.classList.add("off");
-  $showByName.textContent = i18n.homeShowByName();
-  $showByName.onclick = () => {
-    $showRecent.classList.add("off");
-    $showByName.classList.remove("off");
-    r$choices();
-  };
-  // separator
-  $home.appendChild(document.createElement("span")).classList.add("separator");
-  // $showExtensions
-  const $showExtensions = document.createElement("button");
-  $home.appendChild($showExtensions);
-  $showExtensions.textContent = i18n.homeShowExtensions();
-  $showExtensions.onclick = () => {
-    $showExtensions.classList.remove("off");
-    $showProfiles.classList.add("off");
-    delete $showProfiles.dataset.extensionId;
-    delete $showProfiles.dataset.extensionVersion;
-    r$choices();
-  };
-  // $showProfiles
-  const $showProfiles = document.createElement("button");
-  $home.appendChild($showProfiles);
-  $showProfiles.classList.add("off");
-  $showProfiles.textContent = i18n.homeShowProfiles();
-  $showProfiles.onclick = () => {
-    $showExtensions.classList.add("off");
-    $showProfiles.classList.remove("off");
-    r$choices();
-  };
-  // $choices
-  const $choices = document.createElement("ul");
-  $home.appendChild($choices);
-  $choices.classList.add("choices"); // todo: 2 columns?
-  const r$choices = () => {
-    $choices.replaceChildren();
-    if (!$showExtensions.classList.contains("off")) {
-      for (const extension of extensionsList) {
-        const $choice = document.createElement("li");
-        $choices.appendChild($choice);
-        const $figure = document.createElement("figure");
-        $choice.appendChild($figure);
-        $figure.onclick = () => {
-          $showProfiles.dataset.extensionId = extension.id;
-          $showProfiles.dataset.extensionVersion = extension.version;
-          $showProfiles.click();
+  const r$home = async () => {
+    /** @type {ListExtensionsResponse} */
+    const extensions = await fetch("/list-extensions").then((r) => r.json());
+    /** @type {ListProfilesResponse} */
+    const profiles = await fetch("/list-profiles").then((r) => r.json());
+    /** @type {Config} */
+    const config = await fetch("/get-config").then((r) => r.json());
+
+    // auto single-column / double-column by css
+    // tabs: [recent, all-extensions, user-profiles, {inside-extension-xxx}]
+    // > recent:
+    //   - recent profiles (max count 12) (can clear temp recent items)
+    //     - pinned (can unpin, can change order, must be placed before other recent)
+    //     - other recent (can pin)
+    //   - extensions by name
+    // > extensions (all-extensions) (can search):
+    //   - extensions by name (can remove)
+    // > profiles (user-profiles) (can search):
+    //   - profiles by name (can pin, can remove)
+    // > {inside-extension-xxx}
+    //   - profiles inside this extension
+    $home.replaceChildren();
+
+    const $tabs = document.createElement("nav"); // see g$tabsButton
+    $home.appendChild($tabs);
+    $tabs.classList.add("tabs");
+
+    const $recent = document.createElement("div");
+    $home.appendChild($recent);
+    $recent.classList.add("recent");
+
+    const $extensions = document.createElement("div");
+    $home.appendChild($extensions);
+    $extensions.classList.add("extensions");
+    const $extensionsList = document.createElement("ul");
+    $extensions.appendChild($extensionsList);
+    for (const extension of extensions) {
+      const $choice = document.createElement("li");
+      $extensionsList.appendChild($choice);
+      $choice.onclick = () => {
+        r$inside(extension);
+        $toInside.textContent = "〉" + extension.name; // todo: use css instead
+        $toInside.click();
+      };
+      const $name = document.createElement("h5");
+      $choice.appendChild($name);
+      $name.textContent = extension.name;
+      $name.title = extension.id;
+      const $version = document.createElement("sub");
+      $choice.appendChild($version);
+      $version.textContent = extension.version;
+      const $description = document.createElement("p");
+      $choice.appendChild($description);
+      $description.textContent = extension.description;
+      const $more = document.createElement("button");
+      $choice.appendChild($more);
+      $more.title = i18n.homeMoreOperations();
+      $more.onclick = async (e) => {
+        e.stopPropagation(); // important, avoid menu close immediately
+        const $menu = document.createElement("menu");
+        $choice.appendChild($menu);
+        const removeMenu = (e) => {
+          e?.preventDefault(), e?.stopPropagation();
+          removeEventListener("click", removeMenu); // agreement: prefer to use `.onevent`, avoid `.addEventListener` when possible, here's why, remove listener needs more code
+          $menu.onanimationend = $menu.remove; // agreement: depends on css animation, so, for future sans-animation feature, use `animation-duration:0s;animation-iteration-count:1`
+          $menu.classList.add("off");
         };
-        const $name = document.createElement("h5");
-        $figure.appendChild($name);
-        $name.textContent = extension.name;
-        $name.title = extension.id;
-        const $version = document.createElement("sub");
-        $figure.appendChild($version);
-        $version.textContent = extension.version;
-        $version.title = "Extension version";
-        const $description = document.createElement("p");
-        $figure.appendChild($description);
-        $description.textContent = extension.description;
-        const $more = document.createElement("button");
-        $choice.appendChild($more);
-        $more.title = i18n.homeMoreOperations();
-        $more.onclick = async (e) => {
-          e.stopPropagation(); // important, avoid menu close immediately
-          const $menu = document.createElement("menu");
-          $choice.appendChild($menu);
-          const removeMenu = () => {
-            e?.preventDefault();
-            removeEventListener("click", removeMenu); // agreement: prefer to use `.onevent`, avoid `.addEventListener` when possible, here's why, remove listener needs more code
-            $menu.onanimationend = $menu.remove; // agreement: depends on css animation, so, for future sans-animation feature, use `animation-duration:0s;animation-iteration-count:1`
-            $menu.classList.add("off");
-          };
-          addEventListener("click", removeMenu);
-          const $share = document.createElement("button");
-          $menu.appendChild(document.createElement("li")).appendChild($share);
-          $share.textContent = i18n.homeMenuShare();
-          $share.onclick = async () => {
-            assert(false, "todo");
-          };
-          const $delete = document.createElement("button");
-          $menu.appendChild(document.createElement("li")).appendChild($delete);
-          $delete.textContent = i18n.homeMenuDelete();
-          $delete.onclick = async () => {
-            /** @type {RemoveExtensionRequest} */
-            const request = {
-              id: extension.id,
-              version: extension.version,
-            };
-            await fetch("/remove-extension", {
-              method: "POST",
-              body: JSON.stringify(request),
-            });
-            r$home();
-          };
-          const $info = document.createElement("button");
-          $menu.appendChild(document.createElement("li")).appendChild($info);
-          $info.textContent = i18n.homeMenuInfo();
-          $info.onclick = async () => {
-            assert(false, "todo");
-          };
+        addEventListener("click", removeMenu); // add to global window
+        const g$menuButton = (label) => {
+          const $button = document.createElement("button");
+          $menu.appendChild(document.createElement("li")).appendChild($button);
+          $button.textContent = label;
+          $button.addEventListener("click", removeMenu);
+          return $button;
         };
-      }
-    } else if (!$showProfiles.classList.contains("off")) {
-      const profiles = /** @type {Profile[]} */ ([]);
-      for (const extension of extensionsList) {
-        if ($showProfiles.dataset.extensionId) {
-          if (
-            extension.id !== $showProfiles.dataset.extensionId ||
-            extension.version !== $showProfiles.dataset.extensionVersion
-          ) {
-            continue;
-          }
-        }
-        profiles.push(...extension.profiles);
-      }
-      for (const profile of profiles) {
+        const $info = g$menuButton(i18n.homeMenuInfo());
+        $info.onclick = async () => {
+          assert(false, "todo: go to market");
+        };
+        const $remove = g$menuButton(i18n.homeMenuRemove());
+        $remove.onclick = async () => {
+          /** @type {RemoveExtensionRequest} */
+          const request = { id: extension.id, version: extension.version };
+          await fetch("/remove-extension", {
+            method: "POST",
+            body: JSON.stringify(request),
+          });
+          $choice.classList.add("removed");
+        };
+      };
+    }
+
+    const $profiles = document.createElement("div");
+    $home.appendChild($profiles);
+    $profiles.classList.add("profiles");
+    const $profilesList = document.createElement("ul");
+    $profiles.appendChild($profilesList);
+    for (const profile of profiles) {
+      const $choice = document.createElement("li");
+      $profilesList.appendChild($choice);
+      $choice.onclick = async () => {
+        /** @type {GetProfileRequest} */
+        const request = profile;
+        /** @type {GetProfileResponse} */
+        const response = await fetch("/get-profile", {
+          method: "POST",
+          body: JSON.stringify(request),
+        }).then((r) => r.json());
+        await r$action(response);
+        $toAction.textContent = "〉" + response.name;
+        $toAction.click();
+      };
+      const $name = document.createElement("h5");
+      $choice.appendChild($name);
+      $name.textContent = profile.id;
+      $name.title = profile.id;
+      const $more = document.createElement("button");
+      $choice.appendChild($more);
+      $more.title = i18n.homeMoreOperations();
+      $more.onclick = async (e) => {
+        e.stopPropagation(); // important, avoid menu close immediately
+        const $menu = document.createElement("menu");
+        $choice.appendChild($menu);
+        const removeMenu = (e) => {
+          e?.preventDefault();
+          removeEventListener("click", removeMenu);
+          $menu.onanimationend = $menu.remove;
+          $menu.classList.add("off");
+        };
+        addEventListener("click", removeMenu);
+        const g$menuButton = (label) => {
+          const $button = document.createElement("button");
+          $menu.appendChild(document.createElement("li")).appendChild($button);
+          $button.textContent = label;
+          $button.addEventListener("click", removeMenu);
+          return $button;
+        };
+        const $share = g$menuButton(i18n.homeMenuShare());
+        $share.onclick = async () => {
+          assert(false, "todo");
+        };
+        const $remove = g$menuButton(i18n.homeMenuRemove());
+        $remove.onclick = async () => {
+          /** @type {RemoveProfileRequest} */
+          const request = { id: profile.id };
+          await fetch("/remove-profile", {
+            method: "POST",
+            body: JSON.stringify(request),
+          });
+          $choice.classList.add("removed");
+        };
+      };
+    }
+
+    const $inside = document.createElement("div");
+    $home.appendChild($inside);
+    $inside.classList.add("inside");
+    const $insideList = document.createElement("ul");
+    $inside.appendChild($insideList);
+    const r$inside = (/** @type {ListExtensionsResponse[0]} */ extension) => {
+      $insideList.replaceChildren();
+      for (const profile of extension.profiles) {
         const $choice = document.createElement("li");
-        $choices.appendChild($choice);
-        const $figure = document.createElement("figure");
-        $choice.appendChild($figure);
-        $figure.onclick = async () => {
-          r$action(profile.extensionId, profile.extensionVersion, profile.id);
+        $insideList.appendChild($choice);
+        $choice.onclick = async () => {
+          await r$action(profile);
           $toAction.textContent = "〉" + profile.name;
           $toAction.click();
         };
         const $name = document.createElement("h5");
-        $figure.appendChild($name);
+        $choice.appendChild($name);
         $name.textContent = profile.name;
         $name.title = profile.id;
-        const $version = document.createElement("sub");
-        $figure.appendChild($version);
-        $version.textContent = profile.extensionVersion;
-        $version.title = "Extension version";
         const $description = document.createElement("p");
-        $figure.appendChild($description);
+        $choice.appendChild($description);
         $description.textContent = profile.description;
-        const $more = document.createElement("button");
-        $choice.appendChild($more);
-        $more.title = i18n.homeMoreOperations();
-        $more.onclick = async (e) => {
-          e.stopPropagation();
-          const $menu = document.createElement("menu");
-          $choice.appendChild($menu);
-          const removeMenu = () => {
-            e?.preventDefault();
-            removeEventListener("click", removeMenu);
-            $menu.onanimationend = $menu.remove;
-            $menu.classList.add("off");
-          };
-          addEventListener("click", removeMenu);
-          const $share = document.createElement("button");
-          $menu.appendChild(document.createElement("li")).appendChild($share);
-          $share.textContent = i18n.homeMenuShare();
-          $share.onclick = async () => {
-            assert(false, "todo");
-          };
-          const $delete = document.createElement("button");
-          $menu.appendChild(document.createElement("li")).appendChild($delete);
-          $delete.textContent = i18n.homeMenuDelete();
-          $delete.onclick = async () => {
-            assert(false, "todo: delete user defined profile");
-          };
-          const $info = document.createElement("button");
-          $menu.appendChild(document.createElement("li")).appendChild($info);
-          $info.textContent = i18n.homeMenuInfo();
-          $info.onclick = async () => {
-            assert(false, "todo");
-          };
-        };
       }
-    } else {
-      assert(false, "unexpected state");
-    }
-  };
-  const r$home = async () => {
-    /** @type {ListExtensionsResponse} */
-    const response = await fetch("/list-extensions").then((r) => r.json());
-    extensionsList = response;
-    r$choices();
+    };
+
+    const g$tabsButton = ($tab, label) => {
+      const $button = document.createElement("button");
+      $tabs.appendChild($button);
+      $button.classList.add("off");
+      $button.textContent = label;
+      $button.onclick = () => {
+        for (const $el of [$toRecent, $toExtensions, $toProfiles, $toInside])
+          $el.classList.add("off");
+        for (const $el of [$recent, $extensions, $profiles, $inside])
+          $el.classList.add("off");
+        $button.classList.remove("off");
+        $tab.classList.remove("off");
+      };
+      return $button;
+    };
+    const $toRecent = g$tabsButton($recent, i18n.homeToRecent());
+    const $toExtensions = g$tabsButton($extensions, i18n.homeToExtensions());
+    const $toProfiles = g$tabsButton($profiles, i18n.homeToProfiles());
+    const $toInside = g$tabsButton($inside, ""); // todo: use css to hide if off
+    $toInside.classList.add("to-inside");
+    $toExtensions.click();
   };
   r$home();
 
@@ -1237,25 +1213,19 @@ const pageMain = async () => {
   r$market();
 
   // $action
-  const $action = document.createElement("div"); // 在选择好 action 之后，装入这个元素中
+  const $action = document.createElement("div"); // put action ui inside this
   document.body.appendChild($action);
   $action.classList.add("action");
   $action.classList.add("off");
-  /**
-   * @param {string} extensionId
-   * @param {string} extensionVersion
-   * @param {string} profileId
-   */
-  const r$action = async (extensionId, extensionVersion, profileId) => {
+  const r$action = async (/** @type {Profile}*/ profile) => {
     const extensionDir =
-      "/static/extensions/" + extensionId + "_" + extensionVersion;
+      "/static/extensions/" +
+      profile.extensionId +
+      "_" +
+      profile.extensionVersion;
     const extension = /** @type {Extension} */ (
       (await import(extensionDir + "/index.js")).default
     );
-    const profile = extension.profiles.find(
-      (profile) => profile.id === profileId
-    );
-    assert(profile !== undefined);
     const action = extension.actions.find(
       (action) => action.id === profile.actionId
     );
@@ -1267,8 +1237,12 @@ const pageMain = async () => {
       /** @type {EntriesCommonFiles["mode"]} */
       let mode = profile?.entries?.mode || "dir";
 
+      const $mode = document.createElement("nav");
+      $action.appendChild($mode);
+      $mode.classList.add("common-files-mode");
+
       const $modeDir = document.createElement("button");
-      $action.appendChild($modeDir);
+      $mode.appendChild($modeDir);
       $modeDir.textContent = i18n.entriesModeDir();
       $modeDir.onclick = () => {
         mode = "dir";
@@ -1278,7 +1252,7 @@ const pageMain = async () => {
       };
       if (mode !== "dir") $modeDir.classList.add("off");
       const $modeFiles = document.createElement("button");
-      $action.appendChild($modeFiles);
+      $mode.appendChild($modeFiles);
       $modeFiles.textContent = i18n.entriesModeFiles();
       $modeFiles.onclick = () => {
         mode = "files";
@@ -1287,8 +1261,6 @@ const pageMain = async () => {
         r$entries$files();
       };
       if (mode !== "files") $modeFiles.classList.add("off");
-
-      // todo: dir and file selector without electron
 
       const $entries = document.createElement("form");
       $action.appendChild($entries);
@@ -1609,45 +1581,19 @@ const pageMain = async () => {
     $operations.appendChild($saveProfile);
     $saveProfile.classList.add("save-profile");
     $saveProfile.textContent = i18n.actionSaveProfile();
-    $saveProfile.onclick = async (e) => {
-      e.stopPropagation();
-      const $menu = document.createElement("menu");
-      $operations.appendChild($menu);
-      $menu.onclick = (e) => e.stopPropagation();
-      const removeMenu = (e) => {
-        e?.preventDefault();
-        removeEventListener("click", removeMenu);
-        $menu.onanimationend = $menu.remove;
-        $menu.classList.add("off");
-      };
-      addEventListener("click", removeMenu);
-      const $nameLabel = document.createElement("label");
-      $menu.appendChild($nameLabel);
-      $nameLabel.textContent = i18n.actionSaveProfileName();
-      const $name = document.createElement("input");
-      $nameLabel.appendChild($name);
-      $name.value = profile.name;
-      const $descriptionLabel = document.createElement("label");
-      $menu.appendChild($descriptionLabel);
-      $descriptionLabel.textContent = i18n.actionSaveProfileDescription();
-      const $description = document.createElement("input");
-      $descriptionLabel.appendChild($description);
-      $description.value = profile.description;
-      const $save = document.createElement("button");
-      $menu.appendChild($save);
-      $save.textContent = i18n.actionSaveProfileSave();
-      $save.onclick = async () => {
-        const profile = controller.profile();
-        profile.id = profile.name = $name.value; // id = name
-        profile.description = $description.value;
-        /** @type {SaveProfileRequest} */
-        const request = profile;
-        await fetch("/save-profile", {
-          method: "POST",
-          body: JSON.stringify(request),
-        });
-        removeMenu();
-      };
+    $saveProfile.onclick = async () => {
+      // todo: better ui
+      const name = prompt(i18n.actionSaveProfileName());
+      if (!name) return;
+      const profile = controller.profile();
+      profile.id = profile.name = name; // id = name
+      profile.description = ""; // no description
+      /** @type {SaveProfileRequest} */
+      const request = profile;
+      await fetch("/save-profile", {
+        method: "POST",
+        body: JSON.stringify(request),
+      });
     };
     const $runAction = document.createElement("button");
     $operations.appendChild($runAction);
@@ -1656,10 +1602,7 @@ const pageMain = async () => {
     $runAction.onclick = async () => {
       /** @type {RunActionRequest} */
       const request = {
-        title: `${action.id} - ${extensionId}`,
-        extensionId,
-        extensionVersion,
-        actionId: action.id,
+        title: `${action.id} - ${profile.extensionId}`,
         profile: controller.profile(),
         entries: getEntries(),
         parallel: 2,
@@ -1772,95 +1715,29 @@ const pageMain = async () => {
   r$settings();
 
   // $top
-  const $top = document.createElement("header"); // 如果要移动端，就**不可能**侧栏了。而顶栏在桌面端也可以忍受
-  $top.classList.add("top");
-  document.body.appendChild($top);
-  const $toTasks = document.createElement("button");
-  $top.appendChild($toTasks);
-  $toTasks.classList.add("to-tasks");
-  $toTasks.classList.add("off");
-  $toTasks.textContent = i18n.toTasks();
-  $toTasks.onclick = () => {
-    $toTasks.classList.remove("off");
-    $toHome.classList.add("off");
-    $toMarket.classList.add("off");
-    $toAction.classList.add("off");
-    $toSettings.classList.add("off");
-    $tasks.classList.remove("off");
-    $home.classList.add("off");
-    $market.classList.add("off");
-    $action.classList.add("off");
-    $settings.classList.add("off");
+  const g$topButton = ($tab, label) => {
+    const $button = document.createElement("button");
+    $top.appendChild($button);
+    $button.classList.add("off");
+    $button.textContent = label;
+    $button.onclick = () => {
+      for (const $el of [$toTasks, $toHome, $toMarket, $toAction, $toSettings])
+        $el.classList.add("off");
+      for (const $el of [$tasks, $home, $market, $action, $settings])
+        $el.classList.add("off");
+      $button.classList.remove("off");
+      $tab.classList.remove("off");
+    };
+    return $button;
   };
-  const $toHome = document.createElement("button");
-  $top.appendChild($toHome);
-  $toHome.classList.add("to-home");
-  $toHome.classList.add("off");
-  $toHome.textContent = i18n.toHome();
-  $toHome.onclick = () => {
-    $toTasks.classList.add("off");
-    $toHome.classList.remove("off");
-    $toMarket.classList.add("off");
-    $toAction.classList.add("off");
-    $toSettings.classList.add("off");
-    $tasks.classList.add("off");
-    $home.classList.remove("off");
-    $market.classList.add("off");
-    $action.classList.add("off");
-    $settings.classList.add("off");
-  };
-  const $toMarket = document.createElement("button");
-  $top.appendChild($toMarket);
-  $toMarket.classList.add("to-market");
-  $toMarket.classList.add("off");
-  $toMarket.textContent = i18n.toMarket();
-  $toMarket.onclick = () => {
-    $toTasks.classList.add("off");
-    $toHome.classList.add("off");
-    $toMarket.classList.remove("off");
-    $toAction.classList.add("off");
-    $toSettings.classList.add("off");
-    $tasks.classList.add("off");
-    $home.classList.add("off");
-    $market.classList.remove("off");
-    $action.classList.add("off");
-    $settings.classList.add("off");
-  };
-  const $toAction = document.createElement("button");
-  $top.appendChild($toAction);
-  $toAction.classList.add("to-action");
-  $toAction.classList.add("off");
-  $toAction.textContent = "";
-  $toAction.onclick = () => {
-    assert($toAction.textContent !== "");
-    $toTasks.classList.add("off");
-    $toHome.classList.add("off");
-    $toMarket.classList.add("off");
-    $toAction.classList.remove("off");
-    $toSettings.classList.add("off");
-    $tasks.classList.add("off");
-    $home.classList.add("off");
-    $market.classList.add("off");
-    $action.classList.remove("off");
-    $settings.classList.add("off");
-  };
-  const $toSettings = document.createElement("button");
-  $top.appendChild($toSettings);
-  $toSettings.classList.add("to-settings");
-  $toSettings.classList.add("off");
+  const $toTasks = g$topButton($tasks, i18n.toTasks());
+  const $toHome = g$topButton($home, i18n.toHome());
+  const $toMarket = g$topButton($market, i18n.toMarket());
+  const $toAction = g$topButton($action, "");
+  $toAction.className = "to-action";
+  const $toSettings = g$topButton($settings, "");
+  $toSettings.className = "to-settings";
   $toSettings.title = i18n.toSettings();
-  $toSettings.onclick = () => {
-    $toTasks.classList.add("off");
-    $toHome.classList.add("off");
-    $toMarket.classList.add("off");
-    $toAction.classList.add("off");
-    $toSettings.classList.remove("off");
-    $tasks.classList.add("off");
-    $home.classList.add("off");
-    $market.classList.add("off");
-    $action.classList.add("off");
-    $settings.classList.remove("off");
-  };
 
   // main
   {
@@ -2503,7 +2380,8 @@ const serverMain = async () => {
       assert(request.id.length < 128); // agreement: profile id must be less than 128 chars
       const filename = percentEncodeFilename(request.id) + ".json";
       const path = solvePath(PATH_DATA, "profiles", filename);
-      await fs.promises.writeFile(path, JSON.stringify(request, null, 2));
+      const data = JSON.stringify(request, null, 2) + "\n";
+      await fs.promises.writeFile(path, data);
       r.end();
       return;
     }
@@ -2523,7 +2401,7 @@ const serverMain = async () => {
       const response = [];
       const path = solvePath(PATH_DATA, "profiles");
       for (const name of await fs.promises.readdir(path)) {
-        response.push({ id: decodeURIComponent(name) });
+        response.push({ id: decodeURIComponent(name).slice(0, -5) }); // 5 = ".json".length
       }
       r.setHeader("Content-Type", MIME.json);
       r.end(JSON.stringify(response));
@@ -2552,14 +2430,14 @@ const serverMain = async () => {
       const extensionIndexJs = solvePath(
         PATH_DATA,
         "extensions",
-        request.extensionId + "_" + request.extensionVersion,
+        request.profile.extensionId + "_" + request.profile.extensionVersion,
         "index.js"
       );
       const extension = /** @type {Extension} */ (
         (await import("file://" + extensionIndexJs)).default
       );
       const action = extension.actions.find(
-        (action) => action.id === request.actionId
+        (action) => action.id === request.profile.actionId
       );
       assert(action !== undefined, "action not found");
 

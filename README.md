@@ -29,4 +29,6 @@ http://127.0.0.1:9393/static/config.json
 - ffmpeg amr audio decode
 - try lit - https://github.com/lit/lit/ - https://developer.mozilla.org/en-US/docs/Web/API/Web_components
 
+./devolutions-gateway --config-path . --config-init-only
+
 -->

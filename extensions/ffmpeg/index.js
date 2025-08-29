@@ -133,7 +133,7 @@ const generalAction = {
       }
       .action .root > *,
       .action .root section > div > * {
-        margin: 0 12px 6px 0;
+        margin: 0 12px 4px 0;
       }
       .action .root fieldset {
         display: inline-grid;
@@ -150,7 +150,7 @@ const generalAction = {
         overflow: hidden;
         opacity: 1;
         transition: 0.3s;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
       }
       .action .root section.off {
         grid-template-rows: 0fr;
