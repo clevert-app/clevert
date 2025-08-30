@@ -559,9 +559,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
   /* agreement: default to be visable, and hide with ".off" class */
   body > div.off,
   body > .home > div.off,
-  body > .tasks button.off,
-  body > .home .tabs > .to-inside.off,
-  body > .top .to-action.off {
+  body > .tasks button.off {
     visibility: hidden;
     opacity: 0;
   }
@@ -1594,6 +1592,8 @@ const pageMain = async () => {
         method: "POST",
         body: JSON.stringify(request),
       });
+      // todo: better logic?
+      r$home();
     };
     const $runAction = document.createElement("button");
     $operations.appendChild($runAction);
