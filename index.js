@@ -554,7 +554,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     left: 0;
     padding: 6px 12px 12px;
     overflow: auto;
-    transition: visibility 0.2s, opacity 0.2s;
+    transition: 0.2s;
   }
   /* agreement: default to be visable, and hide with ".off" class */
   body > div.off,
@@ -563,7 +563,7 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     visibility: hidden;
     opacity: 0;
   }
-  body > :is(.tasks, .home):empty::before {
+  body > :is(.tasks, .home) ul:empty::before {
     display: block;
     margin: 12px;
     font-size: 16px;
@@ -620,16 +620,15 @@ const pageCss = (/** @type {i18nRes["en-US"]} */ i18n) => css`
     overflow: hidden;
     font-size: 18px;
   }
-  body > :is(.tasks, .home) ul > li button:nth-last-child(2) {
-    right: calc(6px + 28px + 4px);
-  }
   body > :is(.tasks, .home) ul > li.removed {
     opacity: 0.6;
     pointer-events: none;
   }
-  body > :is(.tasks, .home) ul > li.removed sub::after {
-    content: " (${i18n.homeChoiceRemoved()})";
-    font-style: italic;
+  body > :is(.tasks, .home) ul > li.removed h5 {
+    text-decoration: line-through double 1px;
+  }
+  body > .tasks button:is(.pause, .resume) {
+    right: calc(6px + 28px + 4px);
   }
   body > .tasks button::before {
     display: block;
@@ -1095,7 +1094,7 @@ const pageMain = async () => {
         const $menu = document.createElement("menu");
         $choice.appendChild($menu);
         const removeMenu = (e) => {
-          e?.preventDefault();
+          e?.preventDefault(), e?.stopPropagation();
           removeEventListener("click", removeMenu);
           $menu.onanimationend = $menu.remove;
           $menu.classList.add("off");
