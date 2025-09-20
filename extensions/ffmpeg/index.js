@@ -120,8 +120,6 @@ const withProgress = (child, totalInput = 0) => {
 /** @type {Action} */
 const generalAction = {
   id: "general",
-  name: i18n.general(),
-  description: i18n.generalDescription(),
   kind: "common-files",
   ui: (profile) => {
     const $root = document.createElement("form");
@@ -534,8 +532,6 @@ export default {
     generalAction,
     {
       id: "uarchive",
-      name: i18n.uarchive(),
-      description: i18n.uarchiveDescription(),
       kind: "common-files",
       ui: (profile) => {
         const $root = document.createElement("form");
@@ -648,8 +644,6 @@ export default {
     {
       // todo: work in progress
       id: "slice_download",
-      name: "slice_download",
-      description: "slice_download",
       kind: "output-dir",
       ui: (profile) => {
         const $root = document.createElement("form");

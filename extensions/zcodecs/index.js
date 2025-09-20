@@ -184,8 +184,6 @@ export default {
     // entries 是倾向于每次调用变动的，profile 是倾向于不变的
     {
       id: "cwebp",
-      name: "cwebp",
-      description: i18n.cwebpDescription(),
       kind: "common-files",
       ui: (profile) => {
         const $root = document.createElement("form");
@@ -392,8 +390,6 @@ export default {
     },
     {
       id: "dwebp",
-      name: "dwebp",
-      description: i18n.dwebpDescription(),
       kind: "common-files",
       ui: (profile) => {
         const $root = document.createElement("form");
@@ -478,8 +474,6 @@ export default {
     },
     {
       id: "gif2webp",
-      name: "gif2webp",
-      description: i18n.gif2webpDescription(),
       kind: "common-files",
       ui: (profile) => {
         const $root = document.createElement("form");
@@ -651,8 +645,6 @@ export default {
     },
     {
       id: "cjpegli",
-      name: "cjpegli",
-      description: i18n.cjpegliDescription(),
       kind: "common-files",
       // question: what about extract image from a.pdf, b.pdf to out/a/XXX.png out/b/XXX.png ?
       ui: (profile) => {
@@ -774,8 +766,6 @@ export default {
     },
     {
       id: "djpegli",
-      name: "djpegli",
-      description: i18n.djpegliDescription(),
       kind: "common-files",
       ui: (profile) => {
         const $root = document.createElement("form");
@@ -824,8 +814,6 @@ export default {
     },
     {
       id: "cjxl",
-      name: "cjxl",
-      description: i18n.cjxlDescription(),
       kind: "common-files",
       ui: (profile) => {
         const $root = document.createElement("form");
@@ -969,8 +957,6 @@ export default {
     },
     {
       id: "djxl",
-      name: "djxl",
-      description: i18n.djxlDescription(),
       kind: "common-files",
       ui: (profile) => {
         const $root = document.createElement("form");

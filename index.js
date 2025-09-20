@@ -28,8 +28,6 @@ import child_process from "node:child_process";
 }} ActionExecuteController Named "controller" because it looks like `AbortController`.
 @typedef {{
   id: string;
-  name: string;
-  description: string;
   kind: RunActionRequest["entries"]["kind"];
   ui: (profile: any) => ActionUiController;
   execute: (profile: any, entry: any) => ActionExecuteController;
