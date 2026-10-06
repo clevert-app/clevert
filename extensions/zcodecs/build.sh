@@ -1,10 +1,11 @@
 #!/bin/sh
-set -ex
+set -e
 trap exit INT
 type git tar zstd cmake ninja nasm > /dev/null # apt-get install ccache ninja-build nasm
 dist_dir=/media/kkocdko/KK_TMP_1/zcodecs/dist
 temp_dir=/media/kkocdko/KK_TMP_1/zcodecs/temp
 mkdir -p $dist_dir $temp_dir
+export TMPDIR="$temp_dir"
 
 export PATH="/usr/lib/ccache:$PATH" CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache # ln -sf /media/kkocdko/KK_TMP_1/home/.cache/ccache ~/.cache/ccache
 
@@ -52,7 +53,7 @@ if [ "$1" = fetch ]; then
 fi
 
 if [ "$1" = prepare ]; then
-  # === prepare for build, patch the source code, add multicall entries
+  # === prepare for build, modify the source code, add multicall entries
   rm -rf $temp_dir/build
   mkdir -p $temp_dir/build
   cd $temp_dir/build
@@ -64,6 +65,54 @@ if [ "$1" = prepare ]; then
   # > webp
   for applet in webpinfo cwebp dwebp gif2webp img2webp webpmux; do
     sed -i "s/int main(/int cmd_${applet}_main(/" webp/examples/$applet.c
+  done
+  # > jxl + jpegli
+  tar -c -C jpegli . | tar -x --skip-old-files -C jxl
+  sed -i -E \
+    -e 's@lib/(base|cms|extras)/(types|cms|color_encoding|codestream_header)\.h@jxl/\2.h@g' \
+    -e 's|lib/base/include_jpeglib.h|lib/extras/include_jpeglib.h|g' \
+    -e 's|lib/base/|lib/jxl/base/|g' \
+    -e 's@lib/(cms|extras)/(color_encoding_internal|simd_util)\.h@lib/jxl/\2.h@g' \
+    -e 's|lib/extras/xyb_transform.h|lib/jxl/enc_xyb.h|g' \
+    -e 's/Jpegli(DataType|Endianness)/Jxl\1/g' \
+    -e 's/JPEGLI_(ASSIGN_OR_QUIT|ASSIGN_OR_RETURN|BSWAP16|CRASH|CXX_17|CXX_LANG|DASSERT|DEBUG_ABORT|ENSURE|FAILURE|INLINE|IS_DEBUG_BUILD|MAYBE_UNUSED|MEMORY_SANITIZER|RESTRICT|RETURN_IF_ERROR|WARNING)/JXL_\1/g' \
+    -e 's/JPEGLI_(TYPE_[A-Z0-9_]+|NATIVE_ENDIAN|LITTLE_ENDIAN|BIG_ENDIAN|BOOL|TRUE|FALSE)/JXL_\1/g' \
+    jxl/lib/jpegli/* jxl/lib/extras/dec/jpegli.* jxl/lib/extras/enc/jpegli.* jxl/tools/cjpegli.cc jxl/tools/djpegli.cc
+  echo '
+    #ifndef LIB_JPEGLI_TYPES_H_
+    #define LIB_JPEGLI_TYPES_H_
+    #include <jxl/types.h>
+    extern "C" int jpegli_bytes_per_sample(JxlDataType data_type);
+    #endif
+  ' > jxl/lib/jpegli/types.h
+  sed -i '/#include "lib\/extras\/include_jpeglib.h"/a\
+#include "lib/jxl/base/common.h"\
+#include "lib/jpegli/types.h"\
+namespace jpegli { using namespace jxl; }' jxl/lib/jpegli/common.h
+  sed -i -e 's/JPEGLI_/JXL_/g' -e 's/Jpegli/Jxl/g' \
+    -e 's/namespace jpegli {/namespace jxl {/' -e 's/jpegli::/jxl::/g' \
+    -e 's/namespace jpegli_tools {/namespace jpegli_tools { using namespace jpegxl::tools;/' \
+    jxl/lib/extras/dec/jpegli.* jxl/lib/extras/enc/jpegli.* jxl/tools/cjpegli.cc jxl/tools/djpegli.cc
+  sed -n '/^set(JPEGLI_INTERNAL_JPEGLI_SOURCES/,/^)/p' jpegli/lib/jpegli_lists.cmake > jxl/lib/jpegli.cmake
+  echo '
+    add_library(jpegli-static STATIC ${JPEGLI_INTERNAL_JPEGLI_SOURCES})
+    target_compile_options(jpegli-static PRIVATE ${JPEGXL_INTERNAL_FLAGS})
+    target_link_libraries(jpegli-static PUBLIC jxl_base hwy Threads::Threads)
+    target_include_directories(jpegli-static PUBLIC ${JPEG_INCLUDE_DIRS})
+    target_sources(jxl_extras-internal PRIVATE extras/dec/jpegli.cc extras/enc/jpegli.cc)
+    target_link_libraries(jxl_extras-internal PRIVATE jpegli-static)
+  ' >> jxl/lib/jpegli.cmake
+  echo 'include(jpegli.cmake)' >> jxl/lib/CMakeLists.txt
+  echo '
+    foreach(BINARY cjpegli djpegli)
+      add_executable(${BINARY} ${BINARY}.cc)
+      target_link_libraries(${BINARY} jpegli-static jxl_extras-internal jxl_threads jxl_tool)
+    endforeach()
+  ' >> jxl/tools/CMakeLists.txt
+  for applet in jxlinfo cjxl djxl cjpegli djpegli; do
+    file=jxl/tools/$applet.cc
+    [ -e $file ] || file=jxl/tools/${applet}_main.cc
+    sed -i "s/int main(/extern \"C\" int cmd_${applet}_main(/" $file
   done
   # > zipalign
   cd zipalign
@@ -201,7 +250,7 @@ if [ "$1" = prepare ]; then
 fi
 
 if [ "$1" = build ]; then
-  # ===== build
+  # ===== build, should after prepare, without modify source code
   cd $temp_dir/build
   export CC="gcc" CXX="g++" CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3"
   export CXXFLAGS="$CFLAGS"
@@ -233,113 +282,35 @@ if [ "$1" = build ]; then
   )"
   ninja -C build $webp_targets
   cd ..
+  # > jxl + jpegli
+  cd jxl
+  rm -rf build
+  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF $deps_args \
+    -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_SKCMS=ON -DJPEGXL_ENABLE_BENCHMARK=OFF \
+    -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF \
+    -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_TCMALLOC=OFF
+  jxl_targets="$(
+    for applet in jxlinfo cjxl djxl cjpegli djpegli; do
+      ninja_targets CXX_EXECUTABLE_LINKER__${applet}_Release
+    done
+  )"
+  jxl_targets="$(echo "$jxl_targets" | sort -u | sed '/_nocodec/d')"
+  ninja -C build $jxl_targets
+  cd ..
   # > zipalign
   cd zipalign
   $CXX $CXXFLAGS -std=c++17 -I../ect -I../ect/zlib -I./include -c ZipAlignMain.cpp ZipAlign.cpp ZipEntry.cpp ZipFile.cpp
   cd ..
   # >>> multicall
-  $CXX $CXXFLAGS multicall.cc \
+  $CXX $CXXFLAGS multicall.cc -Wl,--start-group \
     $(cd ect/build ; realpath $ect_targets) \
     $(cd webp/build ; realpath $webp_targets) \
+    $(cd jxl/build ; realpath $jxl_targets) \
     $(cd zipalign ; realpath *.o) \
-    -o $dist_dir/zcodecs # -Wl,--start-group $(echo "$targets" | sort -u) -Wl,--end-group -pthread -lm
+    -Wl,--end-group -pthread -lm -o $dist_dir/zcodecs
   strip $dist_dir/zcodecs
   exit
-  # > jxl + jpegli
-  tar -c -C jpegli/lib . | tar -x --skip-old-files -C jxl/lib
-  cp jpegli/tools/*.* jxl/tools/
-  for source in jxl/lib/jpegli/* jxl/lib/extras/dec/jpegli.* jxl/lib/extras/enc/jpegli.* jxl/tools/cjpegli.cc jxl/tools/djpegli.cc; do
-    sed -i -E \
-      -e 's|lib/base/types.h|jxl/types.h|g' \
-      -e 's|lib/base/include_jpeglib.h|lib/extras/include_jpeglib.h|g' \
-      -e 's|lib/base/|lib/jxl/base/|g' \
-      -e 's|lib/cms/cms.h|jxl/cms.h|g' \
-      -e 's|lib/cms/color_encoding.h|jxl/color_encoding.h|g' \
-      -e 's|lib/cms/color_encoding_internal.h|lib/jxl/color_encoding_internal.h|g' \
-      -e 's|lib/extras/codestream_header.h|jxl/codestream_header.h|g' \
-      -e 's|lib/extras/simd_util.h|lib/jxl/simd_util.h|g' \
-      -e 's|lib/extras/xyb_transform.h|lib/jxl/enc_xyb.h|g' \
-      -e 's/JpegliDataType/JxlDataType/g; s/JpegliEndianness/JxlEndianness/g' \
-      -e 's/JPEGLI_(ASSIGN_OR_QUIT|ASSIGN_OR_RETURN|BSWAP16|CRASH|CXX_17|CXX_LANG|DASSERT|DEBUG_ABORT|ENSURE|FAILURE|INLINE|IS_DEBUG_BUILD|MAYBE_UNUSED|MEMORY_SANITIZER|RESTRICT|RETURN_IF_ERROR|WARNING)/JXL_\1/g' \
-      -e 's/JPEGLI_(TYPE_[A-Z0-9_]+|NATIVE_ENDIAN|LITTLE_ENDIAN|BIG_ENDIAN|BOOL|TRUE|FALSE)/JXL_\1/g' \
-      "$source"
-  done
-  cat <<'EOF' > jxl/lib/jpegli/types.h
-    #ifndef LIB_JPEGLI_TYPES_H_
-    #define LIB_JPEGLI_TYPES_H_
-    #include <jxl/types.h>
-    #define TO_JXL_BOOL(value) (!!(value) ? JXL_TRUE : JXL_FALSE)
-    #define FROM_JXL_BOOL(value) (static_cast<bool>(value))
-    extern "C" int jpegli_bytes_per_sample(JxlDataType data_type);
-    #endif
-EOF
-  sed -i '/#include "lib\/extras\/include_jpeglib.h"/a\
-#include "lib/jxl/base/common.h"\
-#include "lib/jpegli/types.h"\
-namespace jpegli { using namespace jxl; }' jxl/lib/jpegli/common.h
-  for source in jxl/lib/extras/dec/jpegli.* jxl/lib/extras/enc/jpegli.* jxl/tools/cjpegli.cc jxl/tools/djpegli.cc; do
-    sed -i -e 's/JPEGLI_/JXL_/g' -e 's/Jpegli/Jxl/g' \
-      -e 's/namespace jpegli {/namespace jxl {/' -e 's/jpegli::/jxl::/g' \
-      -e 's/namespace jpegli_tools {/namespace jpegli_tools { using namespace jpegxl::tools;/' "$source"
-  done
-  sed -n '/^set(JPEGLI_INTERNAL_JPEGLI_SOURCES/,/^)/p' jpegli/lib/jpegli_lists.cmake > jxl/lib/jpegli.cmake
-  cat <<'EOF' >> jxl/lib/jpegli.cmake
-    add_library(jpegli-static STATIC ${JPEGLI_INTERNAL_JPEGLI_SOURCES})
-    target_compile_options(jpegli-static PRIVATE ${JPEGXL_INTERNAL_FLAGS})
-    target_include_directories(jpegli-static PRIVATE
-      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include
-      ${CMAKE_CURRENT_BINARY_DIR}/include ${JXL_HWY_INCLUDE_DIRS})
-    target_link_libraries(jpegli-static PUBLIC hwy Threads::Threads)
-    target_include_directories(jpegli-static PUBLIC ${JPEG_INCLUDE_DIRS})
-    target_sources(jxl_extras-internal PRIVATE extras/dec/jpegli.cc extras/enc/jpegli.cc)
-    target_include_directories(jxl_extras-internal PRIVATE
-      ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include
-      ${CMAKE_CURRENT_BINARY_DIR}/include ${JXL_HWY_INCLUDE_DIRS})
-    target_link_libraries(jxl_extras-internal PRIVATE jpegli-static)
-EOF
-  echo 'include(jpegli.cmake)' >> jxl/lib/CMakeLists.txt
-  cat <<'EOF' >> jxl/tools/CMakeLists.txt
-    add_executable(cjpegli cjpegli.cc)
-    add_executable(djpegli djpegli.cc)
-    foreach(BINARY cjpegli djpegli)
-      target_link_libraries(${BINARY} jpegli-static jxl_extras-internal jxl_threads jxl_tool)
-    endforeach()
-EOF
-  for applet in jxlinfo cjxl djxl cjpegli djpegli; do
-    source=$applet
-    case $applet in cjxl|djxl) source=${applet}_main ;; esac
-    sed -i "s/int main(/extern \"C\" int cmd_${applet}_main(/" jxl/tools/$source.cc
-  done
-  # > zipalign
-  
-  # < now, pack all to tar
-  tar --zstd -cf ../patch.tar.zst -C .. patch
-  rm -rf ../patch/*
-  exit
 
-
-
-
-
-
-  
-  # > jxl
-  cd jxl
-  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-    -DZLIB_LIBRARY=$zlib_library -DZLIB_INCLUDE_DIR=$zlib_include \
-    -DPNG_LIBRARY=$png_library -DPNG_PNG_INCLUDE_DIR=$png_include \
-    -DJPEG_LIBRARY=$jpeg_library -DJPEG_INCLUDE_DIR=$jpeg_include \
-    -DGIF_LIBRARY=$gif_library \
-    -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_SKCMS=ON -DJPEGXL_ENABLE_BENCHMARK=OFF \
-    -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF \
-    -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_TCMALLOC=OFF
-  jxl_targets=""
-  for applet in jxlinfo cjxl djxl cjpegli djpegli; do
-    jxl_targets="$jxl_targets $(ninja_targets tools/$applet)"
-  done
-  jxl_targets=$(echo $jxl_targets | tr " " "\n" | sed '/_nocodec/d')
-  ninja -C build $jxl_targets
-  cd ..
 fi
 
 if [ "$1" = profile ]; then
