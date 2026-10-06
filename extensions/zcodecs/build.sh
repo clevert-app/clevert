@@ -1,14 +1,15 @@
 #!/bin/sh
-set -e
+set -ex
 trap exit INT
-type git tar zstd cmake ninja > /dev/null
+type git tar zstd cmake ninja nasm > /dev/null # apt-get install ccache ninja-build nasm
 dist_dir=/media/kkocdko/KK_TMP_1/zcodecs/dist
 temp_dir=/media/kkocdko/KK_TMP_1/zcodecs/temp
 mkdir -p $dist_dir $temp_dir
 
+export PATH="/usr/lib/ccache:$PATH" CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache # ln -sf /media/kkocdko/KK_TMP_1/home/.cache/ccache ~/.cache/ccache
+
 # goal: combine many modern codecs, into a single multi-call binary
 # - use intel iccx? skip for now.
-
 # ect is faster than google zopfli and https://github.com/MrKrzYch00/zopfli
 
 if [ "$1" = fetch ]; then
@@ -20,9 +21,15 @@ if [ "$1" = fetch ]; then
   mv Efficient-Compression-Tool-* ect
   curl -L https://github.com/pnggroup/libpng/archive/cd952f49f95bb27154ae77dbb103032d95f6e580.tar.gz | tar -zx --strip-components 1 -C ect/src/libpng # ect use 1.6.58 but we use 1.6.59
   curl -L https://github.com/mozilla/mozjpeg/archive/6bdd1ad6c08eddddd2c4c70aa1161e5d3c4a6618.tar.gz | tar -zx --strip-components 1 -C ect/src/mozjpeg # ect mod version
+  # > giflib
+  curl -L https://deb.debian.org/debian/pool/main/g/giflib/giflib_5.2.2.orig.tar.gz | tar -zx
+  mv giflib-* giflib
   # > webp
   curl -L https://github.com/webmproject/libwebp/archive/a1d89ff209ca01e7a87aca64317201890bac2749.tar.gz | tar -zx
   mv libwebp-* webp
+  # > jpegli
+  curl -L https://github.com/google/jpegli/archive/031a0077f5799a6041004267fc12b956c1f52a20.tar.gz | tar -zx
+  mv jpegli-* jpegli
   # > jxl
   curl -L https://github.com/libjxl/libjxl/archive/8ec4d2e8e3a4012481ec48a44873d14abc2b17f8.tar.gz | tar -zx
   mv libjxl-* jxl
@@ -30,41 +37,126 @@ if [ "$1" = fetch ]; then
   cat deps.sh | sed -E '/download_github +(testdata|third_party\/(zlib|libpng|libjpeg-turbo))/d' | bash
   rm -rf downloads third_party/skcms/profiles/*
   cd ..
-  # > jpegli
-  curl -L https://github.com/google/jpegli/archive/031a0077f5799a6041004267fc12b956c1f52a20.tar.gz | tar -zx
-  mv jpegli-* jpegli
   # > zipalign
-  git init -b main zipalign
+  # http://deb.debian.org/debian/pool/main/a/android-platform-build/android-platform-build_10.0.0+r36.orig.tar.xz
+  git clone --depth=1 --filter=blob:none --sparse --no-checkout https://android.googlesource.com/platform/build zipalign
   cd zipalign
-  git remote add origin https://android.googlesource.com/platform/build
-  git config core.sparseCheckout true
-  echo "tools/zipalign/" > .git/info/sparse-checkout # only zipalign dir
-  git fetch --depth=1 origin 045a3d6a3e359633a14853a5a5e1e4f2a11cbdae # old but already latest, 2026.10.05
-  git checkout -q FETCH_HEAD
+  git checkout 045a3d6a3e359633a14853a5a5e1e4f2a11cbdae
+  git sparse-checkout set tools/zipalign
   rm -rf .git
   cd ..
   # < now, pack all to tar
-  tar --zstd -cf ../fetch.tar.zst -C .. fetch
+  tar --zstd -cf $dist_dir/fetch.tar.zst -C .. fetch
   rm -rf ../fetch/*
   exit
 fi
 
-if [ "$1" = patch ]; then
-  # === patch the source code
-  # Produces /media/kkocdko/KK\_TMP\_1/zcodecs/dist/zcodecs, 7.8 MiB, with shared dependencies and PGO skipped.  
-  # Verified all 13 applets, lossless round trips, symlink dispatch, and zipalign alignment/recompression. NASM and giflib development files live under `temp/deps` and are used automatically.
-  rm -rf $temp_dir/patch
-  mkdir -p $temp_dir/patch
-  cd $temp_dir/patch
-  tar -xf ../fetch.tar.zst --strip-components 1
-  cat <<EOF > multicall.cc
+if [ "$1" = prepare ]; then
+  # === prepare for build, patch the source code, add multicall entries
+  rm -rf $temp_dir/build
+  mkdir -p $temp_dir/build
+  cd $temp_dir/build
+  tar -xf $dist_dir/fetch.tar.zst --strip-components 1
+  # > ect
+  mv ect/src/* ect/
+  echo "" > ect/pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
+  sed -i 's/int main(/extern "C" int cmd_ect_main(/' ect/main.cpp
+  # > webp
+  for applet in webpinfo cwebp dwebp gif2webp img2webp webpmux; do
+    sed -i "s/int main(/int cmd_${applet}_main(/" webp/examples/$applet.c
+  done
+  # > zipalign
+  cd zipalign
+  mv tools/zipalign/* .
+  echo '
+    #ifndef ZIPALIGN_COMPAT_H_
+    #define ZIPALIGN_COMPAT_H_
+    #include <errno.h>
+    #include <stdint.h>
+    #include <stdio.h>
+    #include <zlib.h>
+    #include <vector>
+    #include <cstdlib>
+    #define ALOGV(...) ((void)0)
+    #define ALOGD(...) ((void)0)
+    #define ALOGW(...) fprintf(stderr, __VA_ARGS__)
+    #define ALOGE(...) fprintf(stderr, __VA_ARGS__)
+    #define _Static_assert static_assert
+    namespace android {
+      typedef int32_t status_t; // from libutils/binder/include/utils/Errors.h
+      const status_t OK = 0;
+      const status_t UNKNOWN_ERROR = (-2147483647-1); // INT32_MIN value
+      const status_t NO_MEMORY = -ENOMEM;
+      const status_t INVALID_OPERATION = -ENOSYS;
+      const status_t NAME_NOT_FOUND = -ENOENT;
+      const status_t PERMISSION_DENIED = -EPERM;
+      const status_t ALREADY_EXISTS = -EEXIST;
+      template <typename T> using Vector = std::vector<T>;
+      inline int ZipInflateFile(FILE* input_file, size_t compressed_length, void* out_buf, size_t uncompressed_length) {
+        const size_t kBufSize = 32768; // https://android.googlesource.com/platform/system/core/+/refs/tags/android-11.0.0_r48/libziparchive/zip_archive.cc
+        std::vector<uint8_t> read_buf(kBufSize);
+        z_stream zstream = {};
+        zstream.next_out = static_cast<unsigned char*>(out_buf);
+        zstream.avail_out = uncompressed_length;
+        int zerr = inflateInit2(&zstream, -MAX_WBITS);
+        uint32_t remaining_bytes = compressed_length;
+        while (zerr == Z_OK) {
+          if (zstream.avail_in == 0 && remaining_bytes != 0) {
+            const size_t read_size = (remaining_bytes > kBufSize) ? kBufSize : remaining_bytes;
+            if (fread(&read_buf[0], 1, read_size, input_file) != read_size) {
+              ALOGW("Zip: inflate read failed, not enough data was read");
+              break;
+            }
+            remaining_bytes -= read_size;
+            zstream.next_in = &read_buf[0];
+            zstream.avail_in = read_size;
+          }
+          zerr = inflate(&zstream, Z_NO_FLUSH);
+        }
+        inflateEnd(&zstream);
+        if (zstream.total_out != uncompressed_length || remaining_bytes != 0 || zerr != Z_STREAM_END) {
+          ALOGW("Zip: inflate failed");
+          return 1;
+        }
+        return 0;
+      }
+    }
+    namespace zip_archive {
+      struct Reader {};
+      struct Writer { virtual bool Append(uint8_t* buf, size_t buf_size) = 0; };
+    }
+    inline int getZopfliLevel() {
+      static const int level = []() {
+        const char* s = getenv("ZIPALIGN_ZOPFLI_LEVEL");
+        int v = s ? strtol(s, NULL, 10) : -1;
+        return (3 <= v && v <= 9) ? v : 5;
+      }();
+      return level;
+    }
+    #endif
+  ' > compat.h # zlialign needs android libutils, here is our compat implementation
+  sed -i -E 's|#include <(utils\|ziparchive)/|#include "compat.h" //|' *.h *.cpp
+  sed -i \
+    -e 's/mEntries.add(/mEntries.push_back(/g' \
+    -e 's/mEntries.removeAt(i)/mEntries.erase(mEntries.begin()+i)/g' \
+    -e 's/ZopfliInitOptions(&options)/ZopfliInitOptions(\&options,getZopfliLevel(),0,0)/' \
+    -e 's/ZopfliDeflate(&options, 2,/ZopfliDeflate(\&options,/' \
+    -e 's/malloc(unlen)/malloc(unlen?unlen:1)/' \
+    -e '/const FileReader reader(mZipFp);/d' \
+    -e '/BufferWriter writer(buf, unlen);/d' \
+    -e 's/zip_archive::Inflate(reader, clen, unlen, &writer, nullptr)/ZipInflateFile(mZipFp, clen, buf, unlen)/' \
+    ZipFile.cpp # replace official zopfli to ect, with ZIPALIGN_ZOPFLI_LEVEL(3-9) env var support
+  sed -i 's/int main(/extern "C" int cmd_zipalign_main(/' ZipAlignMain.cpp
+  cd ..
+  # > multicall
+  echo '
     #include <stddef.h>
     #include <string.h>
     #include <stdio.h>
     #if defined(WIN32) || defined(_WIN32)
-    #define PATH_SEPARATOR '\\\\'
+    #define PATH_SEPARATOR char(0x5c)
     #else
-    #define PATH_SEPARATOR '/'
+    #define PATH_SEPARATOR char(0x2f)
     #endif
     extern "C" {
       int cmd_ect_main(int argc, char *argv[]);
@@ -104,27 +196,58 @@ if [ "$1" = patch ]; then
       puts("applets: ect webpinfo cwebp dwebp gif2webp img2webp webpmux jxlinfo cjxl djxl cjpegli djpegli zipalign");
       return 0;
     }
-EOF
+  ' > multicall.cc
+  exit
+fi
+
+if [ "$1" = build ]; then
+  # ===== build
+  cd $temp_dir/build
+  export CC="gcc" CXX="g++" CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3"
+  export CXXFLAGS="$CFLAGS"
+  ninja_targets(){ cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" ; } # # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
   # > ect
   cd ect
-  mv src/* ./
-  : > pngusr.h
-  sed -i '/message(FATAL_ERROR "The libjpeg-turbo build system cannot be integrated/d' mozjpeg/CMakeLists.txt
-  sed -i '/^ExternalProject_Add(mozjpeg/,/^set_property(TARGET mozjpeg-static/c\
-add_subdirectory(mozjpeg EXCLUDE_FROM_ALL)\
-set(BINARY_DIR "${CMAKE_BINARY_DIR}/mozjpeg")' CMakeLists.txt
-  sed -i -e 's/mozjpeg-static/jpeg-static/g' -e 's/add_dependencies(ect mozjpeg)/add_dependencies(ect jpeg-static)/' CMakeLists.txt
-  sed -i 's/int main(/extern "C" int cmd_ect_main(/' main.cpp
+  rm -rf build
+  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DECT_MULTITHREADING=OFF # ect use it's custom zlib, so link to system zlib is impossible
+  ect_targets="$(ninja_targets CXX_EXECUTABLE_LINKER__ect_Release)"
+  ninja -C build $ect_targets
+  cp -r libpng/* build/optipng/libpng # prepare for below other programs
+  cp -r mozjpeg/* build/mozjpeg-prefix/src/mozjpeg-build
+  deps_args="-DZLIB_LIBRARY=$(realpath build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath zlib) -DPNG_LIBRARY=$(realpath build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath build/optipng/libpng) -DJPEG_LIBRARY=$(realpath build/mozjpeg-prefix/src/mozjpeg-build/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath build/mozjpeg-prefix/src/mozjpeg-build)"
+  cd ..
+  # > giflib
+  cd giflib
+  make clean
+  make -j1 CC="$CC" CFLAGS="-std=gnu99 -fPIC -Wall $CFLAGS" libgif.a
+  deps_args="$deps_args -DGIF_LIBRARY=$(realpath libgif.a) -DGIF_INCLUDE_DIR=$(pwd)"
   cd ..
   # > webp
-  for applet in webpinfo cwebp dwebp gif2webp img2webp webpmux; do
-    sed -i "s/int main(/int cmd_${applet}_main(/" webp/examples/$applet.c
-  done
-  # > jpegli, restore inside jxl and share its helpers and dependencies
-  cp -r jpegli/lib/jpegli jxl/lib/
-  cp jpegli/lib/extras/dec/jpegli.* jxl/lib/extras/dec/
-  cp jpegli/lib/extras/enc/jpegli.* jxl/lib/extras/enc/
-  cp jpegli/tools/cjpegli.cc jpegli/tools/djpegli.cc jxl/tools/
+  cd webp
+  rm -rf build
+  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF $deps_args
+  webp_targets="$(
+    for applet in webpinfo cwebp dwebp gif2webp img2webp webpmux; do
+      ninja_targets C_EXECUTABLE_LINKER__${applet}_Release
+    done
+  )"
+  ninja -C build $webp_targets
+  cd ..
+  # > zipalign
+  cd zipalign
+  $CXX $CXXFLAGS -std=c++17 -I../ect -I../ect/zlib -I./include -c ZipAlignMain.cpp ZipAlign.cpp ZipEntry.cpp ZipFile.cpp
+  cd ..
+  # >>> multicall
+  $CXX $CXXFLAGS multicall.cc \
+    $(cd ect/build ; realpath $ect_targets) \
+    $(cd webp/build ; realpath $webp_targets) \
+    $(cd zipalign ; realpath *.o) \
+    -o $dist_dir/zcodecs # -Wl,--start-group $(echo "$targets" | sort -u) -Wl,--end-group -pthread -lm
+  strip $dist_dir/zcodecs
+  exit
+  # > jxl + jpegli
+  tar -c -C jpegli/lib . | tar -x --skip-old-files -C jxl/lib
+  cp jpegli/tools/*.* jxl/tools/
   for source in jxl/lib/jpegli/* jxl/lib/extras/dec/jpegli.* jxl/lib/extras/enc/jpegli.* jxl/tools/cjpegli.cc jxl/tools/djpegli.cc; do
     sed -i -E \
       -e 's|lib/base/types.h|jxl/types.h|g' \
@@ -138,7 +261,8 @@ set(BINARY_DIR "${CMAKE_BINARY_DIR}/mozjpeg")' CMakeLists.txt
       -e 's|lib/extras/xyb_transform.h|lib/jxl/enc_xyb.h|g' \
       -e 's/JpegliDataType/JxlDataType/g; s/JpegliEndianness/JxlEndianness/g' \
       -e 's/JPEGLI_(ASSIGN_OR_QUIT|ASSIGN_OR_RETURN|BSWAP16|CRASH|CXX_17|CXX_LANG|DASSERT|DEBUG_ABORT|ENSURE|FAILURE|INLINE|IS_DEBUG_BUILD|MAYBE_UNUSED|MEMORY_SANITIZER|RESTRICT|RETURN_IF_ERROR|WARNING)/JXL_\1/g' \
-      -e 's/JPEGLI_(TYPE_[A-Z0-9_]+|NATIVE_ENDIAN|LITTLE_ENDIAN|BIG_ENDIAN|BOOL|TRUE|FALSE)/JXL_\1/g' "$source"
+      -e 's/JPEGLI_(TYPE_[A-Z0-9_]+|NATIVE_ENDIAN|LITTLE_ENDIAN|BIG_ENDIAN|BOOL|TRUE|FALSE)/JXL_\1/g' \
+      "$source"
   done
   cat <<'EOF' > jxl/lib/jpegli/types.h
     #ifndef LIB_JPEGLI_TYPES_H_
@@ -187,126 +311,18 @@ EOF
     sed -i "s/int main(/extern \"C\" int cmd_${applet}_main(/" jxl/tools/$source.cc
   done
   # > zipalign
-  cd zipalign/tools/zipalign
-  sed -i 's/int main(/extern "C" int cmd_zipalign_main(/' ZipAlignMain.cpp
-  sed -i 's/^void usage(/static void usage(/' ZipAlignMain.cpp
-  sed -i -e 's|#include <utils/Errors.h>|#include "compat.h"|' ZipEntry.h ZipFile.h
-  sed -i -e 's|#include <utils/Vector.h>|#include <vector>|' -e 's/Vector<ZipEntry\*>/std::vector<ZipEntry*>/' ZipFile.h
-  sed -i -e 's|#include <utils/Log.h>|#include "compat.h"|' ZipEntry.cpp ZipFile.cpp
-  sed -i -e '/#include <ziparchive\/zip_archive.h>/d' \
-    -e 's/_Static_assert/static_assert/' -e 's/mEntries.add(/mEntries.push_back(/g' \
-    -e 's/mEntries.removeAt(i)/mEntries.erase(mEntries.begin() + i)/' \
-    -e 's/ZopfliInitOptions(&options)/ZopfliInitOptions(\&options, 3, 0, 0)/' \
-    -e 's/ZopfliDeflate(&options, 2, /ZopfliDeflate(\&options, /g' \
-    -e 's/malloc(unlen)/malloc(unlen ? unlen : 1)/' \
-    -e '/const FileReader reader(mZipFp);/d' -e '/BufferWriter writer(buf, unlen);/d' \
-    -e 's/zip_archive::Inflate(reader, clen, unlen, &writer, nullptr) != 0/!ZipInflate(mZipFp, clen, buf, unlen)/' ZipFile.cpp
-  sed -i "/^class BufferWriter /,/^\/\/ free the memory when you're done/d" ZipFile.cpp
-  cat <<'EOF' > compat.h
-    #ifndef ZIPALIGN_COMPAT_H_
-    #define ZIPALIGN_COMPAT_H_
-    #include <errno.h>
-    #include <stdint.h>
-    #include <stdio.h>
-    #include <zlib.h>
-    #define ALOGV(...) ((void)0)
-    #define ALOGD(...) ((void)0)
-    #define ALOGW(...) fprintf(stderr, __VA_ARGS__)
-    #define ALOGE(...) fprintf(stderr, __VA_ARGS__)
-    namespace android {
-      using status_t = int;
-      constexpr status_t OK = 0;
-      constexpr status_t UNKNOWN_ERROR = INT32_MIN;
-      constexpr status_t NO_MEMORY = -ENOMEM;
-      constexpr status_t INVALID_OPERATION = -ENOSYS;
-      constexpr status_t NAME_NOT_FOUND = -ENOENT;
-      constexpr status_t PERMISSION_DENIED = -EACCES;
-      constexpr status_t ALREADY_EXISTS = -EEXIST;
-      inline bool ZipInflate(FILE* source, size_t compressed_size, void* output, size_t output_size) {
-        unsigned char input[32768];
-        unsigned char empty;
-        z_stream stream = {};
-        stream.next_out = output_size ? static_cast<unsigned char*>(output) : &empty;
-        stream.avail_out = output_size ? output_size : 1;
-        if (inflateInit2(&stream, -MAX_WBITS) != Z_OK) return false;
-        size_t remaining = compressed_size;
-        int result = Z_OK;
-        while (result == Z_OK) {
-          if (stream.avail_in == 0 && remaining != 0) {
-            size_t count = remaining < sizeof(input) ? remaining : sizeof(input);
-            if (fread(input, 1, count, source) != count) break;
-            remaining -= count;
-            stream.next_in = input;
-            stream.avail_in = count;
-          }
-          result = inflate(&stream, Z_NO_FLUSH);
-        }
-        bool success = result == Z_STREAM_END && stream.total_in == compressed_size &&
-                       stream.total_out == output_size;
-        inflateEnd(&stream);
-        return success;
-      }
-    }
-    #endif
-EOF
-  cd ../../..
+  
   # < now, pack all to tar
   tar --zstd -cf ../patch.tar.zst -C .. patch
   rm -rf ../patch/*
   exit
-fi
 
-if [ "$1" = build ]; then
-  # === build the source code
-  mkdir -p $temp_dir/build
-  cd $temp_dir/build
-  tar -xf ../patch.tar.zst --strip-components 1
-  mkdir -p tmp
-  export TMPDIR=$(pwd)/tmp
-  if [ -d $temp_dir/deps/usr ]; then
-    export PATH="$temp_dir/deps/usr/bin:$PATH"
-    export CMAKE_PREFIX_PATH="$temp_dir/deps/usr${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
-  fi
-  export CC=${CC:-gcc} CXX=${CXX:-g++}
-  export CFLAGS="${CFLAGS:--O3 -fomit-frame-pointer -flto=auto}"
-  export CXXFLAGS="${CXXFLAGS:-$CFLAGS}"
-  ninja_targets(){
-    awk -v target="$1:" '$1 == "build" && $2 == target {
-      found = 1
-      for (field = 4; field <= NF && $field != "||"; field++)
-        if ($field ~ /\.(o|a)$/) print $field
-    } END { if (!found) exit 1 }' build/build.ninja
-  }
-  # > ect
-  cd ect
-  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-    -DECT_MULTITHREADING=OFF -DPNG_SHARED=OFF -DPNG_TESTS=OFF -DPNG_TOOLS=OFF
-  ect_targets=$(ninja_targets ect)
-  ninja -C build $ect_targets
-  cp libpng/*.h build/optipng/libpng/
-  cp mozjpeg/*.h build/mozjpeg/
-  cd ..
-  zlib_library=$(realpath ect/build/zlib/libzlib.a)
-  zlib_include=$(realpath ect/zlib)
-  png_library=$(realpath ect/build/optipng/libpng/libpng16.a)
-  png_include=$(realpath ect/build/optipng/libpng)
-  jpeg_library=$(realpath ect/build/mozjpeg/libjpeg.a)
-  jpeg_include=$(realpath ect/build/mozjpeg)
-  gif_library=${GIF_LIBRARY:-$(rg --files /usr/lib /usr/local/lib $temp_dir/deps/usr/lib 2>/dev/null | sed -n '\|/libgif.a$|{p;q;}')}
-  # > webp
-  cd webp
-  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-    -DZLIB_LIBRARY=$zlib_library -DZLIB_INCLUDE_DIR=$zlib_include \
-    -DPNG_LIBRARY=$png_library -DPNG_PNG_INCLUDE_DIR=$png_include \
-    -DJPEG_LIBRARY=$jpeg_library -DJPEG_INCLUDE_DIR=$jpeg_include \
-    -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF -DWEBP_BUILD_EXTRAS=OFF \
-    -DGIF_LIBRARY=$gif_library
-  webp_targets=""
-  for applet in webpinfo cwebp dwebp gif2webp img2webp webpmux; do
-    webp_targets="$webp_targets $(ninja_targets $applet)"
-  done
-  ninja -C build $webp_targets
-  cd ..
+
+
+
+
+
+  
   # > jxl
   cd jxl
   cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
@@ -324,21 +340,6 @@ if [ "$1" = build ]; then
   jxl_targets=$(echo $jxl_targets | tr " " "\n" | sed '/_nocodec/d')
   ninja -C build $jxl_targets
   cd ..
-  # > zipalign and multi call
-  $CXX $CXXFLAGS -std=c++17 -Iect -I$zlib_include -Izipalign/tools/zipalign/include \
-    -c zipalign/tools/zipalign/ZipAlignMain.cpp zipalign/tools/zipalign/ZipAlign.cpp \
-    zipalign/tools/zipalign/ZipEntry.cpp zipalign/tools/zipalign/ZipFile.cpp
-  targets=$(
-    (cd ect/build; realpath $ect_targets)
-    (cd webp/build; realpath $webp_targets)
-    (cd jxl/build; realpath $jxl_targets)
-  )
-  $CXX $CXXFLAGS multicall.cc ZipAlignMain.o ZipAlign.o ZipEntry.o ZipFile.o \
-    -Wl,--start-group $(echo "$targets" | sort -u) -Wl,--end-group -pthread -lm \
-    -o $dist_dir/zcodecs
-  strip $dist_dir/zcodecs
-  $dist_dir/zcodecs
-  exit
 fi
 
 if [ "$1" = profile ]; then
@@ -350,3 +351,5 @@ if [ "$1" = profile ]; then
 fi
 
 exit 1
+
+# https://blog.llvm.org/2019/09/closing-gap-cross-language-lto-between.html
