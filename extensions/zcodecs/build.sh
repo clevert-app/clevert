@@ -39,7 +39,6 @@ if [ "$1" = fetch ]; then
   rm -rf downloads third_party/skcms/profiles/*
   cd ..
   # > zipalign
-  # http://deb.debian.org/debian/pool/main/a/android-platform-build/android-platform-build_10.0.0+r36.orig.tar.xz
   git clone --depth=1 --filter=blob:none --sparse --no-checkout https://android.googlesource.com/platform/build zipalign
   cd zipalign
   git checkout 045a3d6a3e359633a14853a5a5e1e4f2a11cbdae
@@ -74,35 +73,25 @@ if [ "$1" = prepare ]; then
     -e 's|lib/base/|lib/jxl/base/|g' \
     -e 's@lib/(cms|extras)/(color_encoding_internal|simd_util)\.h@lib/jxl/\2.h@g' \
     -e 's|lib/extras/xyb_transform.h|lib/jxl/enc_xyb.h|g' \
-    -e 's/Jpegli(DataType|Endianness)/Jxl\1/g' \
-    -e 's/JPEGLI_(ASSIGN_OR_QUIT|ASSIGN_OR_RETURN|BSWAP16|CRASH|CXX_17|CXX_LANG|DASSERT|DEBUG_ABORT|ENSURE|FAILURE|INLINE|IS_DEBUG_BUILD|MAYBE_UNUSED|MEMORY_SANITIZER|RESTRICT|RETURN_IF_ERROR|WARNING)/JXL_\1/g' \
-    -e 's/JPEGLI_(TYPE_[A-Z0-9_]+|NATIVE_ENDIAN|LITTLE_ENDIAN|BIG_ENDIAN|BOOL|TRUE|FALSE)/JXL_\1/g' \
+    -e 's/Jpegli/Jxl/g; s/JPEGLI_/JXL_/g; s/JXL_(ERROR|WARN|TRACE|CHECK)\b/JPEGLI_\1/g' \
     jxl/lib/jpegli/* jxl/lib/extras/dec/jpegli.* jxl/lib/extras/enc/jpegli.* jxl/tools/cjpegli.cc jxl/tools/djpegli.cc
-  echo '
-    #ifndef LIB_JPEGLI_TYPES_H_
-    #define LIB_JPEGLI_TYPES_H_
-    #include <jxl/types.h>
-    extern "C" int jpegli_bytes_per_sample(JxlDataType data_type);
-    #endif
-  ' > jxl/lib/jpegli/types.h
-  sed -i '/#include "lib\/extras\/include_jpeglib.h"/a\
-#include "lib/jxl/base/common.h"\
-#include "lib/jpegli/types.h"\
-namespace jpegli { using namespace jxl; }' jxl/lib/jpegli/common.h
-  sed -i -e 's/JPEGLI_/JXL_/g' -e 's/Jpegli/Jxl/g' \
-    -e 's/namespace jpegli {/namespace jxl {/' -e 's/jpegli::/jxl::/g' \
-    -e 's/namespace jpegli_tools {/namespace jpegli_tools { using namespace jpegxl::tools;/' \
+  sed -i 's/} JxlDataType;/& int jpegli_bytes_per_sample(JxlDataType data_type);/' jxl/lib/include/jxl/types.h
+  ln -sf ../include/jxl/types.h jxl/lib/jpegli/types.h
+  sed -i 's|#include "lib/extras/include_jpeglib.h"|& \n #include "lib/jxl/base/common.h" \n namespace jpegli { using namespace jxl; }|' jxl/lib/jpegli/common.h
+  sed -i \
+    -e 's/namespace jpegli {/namespace jxl {/' \
+    -e 's/jpegli::/jxl::/g' \
+    -e 's/namespace jpegli_tools {/& using namespace jpegxl::tools;/' \
     jxl/lib/extras/dec/jpegli.* jxl/lib/extras/enc/jpegli.* jxl/tools/cjpegli.cc jxl/tools/djpegli.cc
-  sed -n '/^set(JPEGLI_INTERNAL_JPEGLI_SOURCES/,/^)/p' jpegli/lib/jpegli_lists.cmake > jxl/lib/jpegli.cmake
   echo '
+    include(jpegli_lists.cmake)
     add_library(jpegli-static STATIC ${JPEGLI_INTERNAL_JPEGLI_SOURCES})
     target_compile_options(jpegli-static PRIVATE ${JPEGXL_INTERNAL_FLAGS})
     target_link_libraries(jpegli-static PUBLIC jxl_base hwy Threads::Threads)
     target_include_directories(jpegli-static PUBLIC ${JPEG_INCLUDE_DIRS})
     target_sources(jxl_extras-internal PRIVATE extras/dec/jpegli.cc extras/enc/jpegli.cc)
     target_link_libraries(jxl_extras-internal PRIVATE jpegli-static)
-  ' >> jxl/lib/jpegli.cmake
-  echo 'include(jpegli.cmake)' >> jxl/lib/CMakeLists.txt
+  ' >> jxl/lib/CMakeLists.txt
   echo '
     foreach(BINARY cjpegli djpegli)
       add_executable(${BINARY} ${BINARY}.cc)
@@ -274,7 +263,8 @@ if [ "$1" = build ]; then
   # > webp
   cd webp
   rm -rf build
-  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF $deps_args
+  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF $deps_args \
+    -DWEBP_USE_THREAD=OFF -DWEBP_UNICODE=OFF
   webp_targets="$(
     for applet in webpinfo cwebp dwebp gif2webp img2webp webpmux; do
       ninja_targets C_EXECUTABLE_LINKER__${applet}_Release
@@ -285,16 +275,17 @@ if [ "$1" = build ]; then
   # > jxl + jpegli
   cd jxl
   rm -rf build
+  # > mac arm64 =  -DHWY_DISABLED_TARGETS="(HWY_NEON_BF16|HWY_SVE|HWY_SVE2|HWY_SVE_256|HWY_SVE2_128)" -DHWY_BASELINE_TARGETS=HWY_NEON -DHWY_COMPILE_ONLY_STATIC=ON'
+  CXXFLAGS="$CXXFLAGS -DHWY_COMPILE_ONLY_STATIC=ON -DHWY_BASELINE_TARGETS=HWY_AVX2 " \
+  CXXFLAGS="$CXXFLAGS -DHWY_COMPILE_ONLY_STATIC=ON -DHWY_BASELINE_TARGETS=HWY_AVX2 "'-DHWY_DISABLED_TARGETS="(HWY_SSE2|HWY_SSSE3|HWY_SSE4|HWY_AVX3|HWY_AVX3_SPR|HWY_AVX3_ZEN4)"' \
   cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF $deps_args \
-    -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_SKCMS=ON -DJPEGXL_ENABLE_BENCHMARK=OFF \
-    -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF -DJPEGXL_ENABLE_JNI=OFF \
-    -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_TCMALLOC=OFF
+    -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF \
+    -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_TCMALLOC=OFF
   jxl_targets="$(
     for applet in jxlinfo cjxl djxl cjpegli djpegli; do
       ninja_targets CXX_EXECUTABLE_LINKER__${applet}_Release
-    done
+    done | tr ' ' '\n' | awk '!a[$0]++' | grep -v _nocodec # keep order dedup, then exclude nocodecs stub implements
   )"
-  jxl_targets="$(echo "$jxl_targets" | sort -u | sed '/_nocodec/d')"
   ninja -C build $jxl_targets
   cd ..
   # > zipalign
@@ -310,7 +301,6 @@ if [ "$1" = build ]; then
     -Wl,--end-group -pthread -lm -o $dist_dir/zcodecs
   strip $dist_dir/zcodecs
   exit
-
 fi
 
 if [ "$1" = profile ]; then
