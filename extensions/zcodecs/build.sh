@@ -5,7 +5,6 @@ type git tar zstd cmake ninja nasm > /dev/null # apt-get install ccache ninja-bu
 dist_dir=/media/kkocdko/KK_TMP_1/zcodecs/dist
 temp_dir=/media/kkocdko/KK_TMP_1/zcodecs/temp
 mkdir -p $dist_dir $temp_dir
-export TMPDIR="$temp_dir"
 
 export PATH="/usr/lib/ccache:$PATH" CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache # ln -sf /media/kkocdko/KK_TMP_1/home/.cache/ccache ~/.cache/ccache
 
@@ -197,7 +196,7 @@ if [ "$1" = prepare ]; then
     #define PATH_SEPARATOR char(0x2f)
     #endif
     extern "C" {
-      int cmd_ect_main(int argc, char *argv[]);
+      int cmd_ect_main(int argc, const char *argv[]);
       int cmd_webpinfo_main(int argc, char *argv[]);
       int cmd_cwebp_main(int argc, char *argv[]);
       int cmd_dwebp_main(int argc, char *argv[]);
@@ -206,16 +205,16 @@ if [ "$1" = prepare ]; then
       int cmd_webpmux_main(int argc, char *argv[]);
       int cmd_jxlinfo_main(int argc, char *argv[]);
       int cmd_cjxl_main(int argc, char *argv[]);
-      int cmd_djxl_main(int argc, char *argv[]);
-      int cmd_cjpegli_main(int argc, char *argv[]);
-      int cmd_djpegli_main(int argc, char *argv[]);
-      int cmd_zipalign_main(int argc, char* argv[]);
+      int cmd_djxl_main(int argc, const char *argv[]);
+      int cmd_cjpegli_main(int argc, const char *argv[]);
+      int cmd_djpegli_main(int argc, const char *argv[]);
+      int cmd_zipalign_main(int argc, char* const argv[]);
     }
     int main(int argc, char *argv[]) {
       for (int i = 0; argc != 0 && i != 2; i++) {
-        const char *argv0 = strrchr(argv[0], PATH_SEPARATOR);
+        char *argv0 = strrchr(argv[0], PATH_SEPARATOR);
         if (argv0 == NULL) argv0 = argv[0]; else argv0++;
-        if (strcmp(argv0, "ect") == 0) return cmd_ect_main(argc, argv);
+        if (strcmp(argv0, "ect") == 0) return cmd_ect_main(argc, const_cast<const char**>(argv));
         if (strcmp(argv0, "webpinfo") == 0) return cmd_webpinfo_main(argc, argv);
         if (strcmp(argv0, "cwebp") == 0) return cmd_cwebp_main(argc, argv);
         if (strcmp(argv0, "dwebp") == 0) return cmd_dwebp_main(argc, argv);
@@ -224,9 +223,9 @@ if [ "$1" = prepare ]; then
         if (strcmp(argv0, "webpmux") == 0) return cmd_webpmux_main(argc, argv);
         if (strcmp(argv0, "jxlinfo") == 0) return cmd_jxlinfo_main(argc, argv);
         if (strcmp(argv0, "cjxl") == 0) return cmd_cjxl_main(argc, argv);
-        if (strcmp(argv0, "djxl") == 0) return cmd_djxl_main(argc, argv);
-        if (strcmp(argv0, "cjpegli") == 0) return cmd_cjpegli_main(argc, argv);
-        if (strcmp(argv0, "djpegli") == 0) return cmd_djpegli_main(argc, argv);
+        if (strcmp(argv0, "djxl") == 0) return cmd_djxl_main(argc, const_cast<const char**>(argv));
+        if (strcmp(argv0, "cjpegli") == 0) return cmd_cjpegli_main(argc, const_cast<const char**>(argv));
+        if (strcmp(argv0, "djpegli") == 0) return cmd_djpegli_main(argc, const_cast<const char**>(argv));
         if (strcmp(argv0, "zipalign") == 0) return cmd_zipalign_main(argc, argv);
         argv++;
         argc--;
@@ -241,7 +240,7 @@ fi
 if [ "$1" = build ]; then
   # ===== build, should after prepare, without modify source code
   cd $temp_dir/build
-  export CC="gcc" CXX="g++" CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3"
+  export CC="gcc" CXX="g++" CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto=auto"
   export CXXFLAGS="$CFLAGS"
   ninja_targets(){ cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" ; } # # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
   # > ect
@@ -252,7 +251,9 @@ if [ "$1" = build ]; then
   ninja -C build $ect_targets
   cp -r libpng/* build/optipng/libpng # prepare for below other programs
   cp -r mozjpeg/* build/mozjpeg-prefix/src/mozjpeg-build
-  deps_args="-DZLIB_LIBRARY=$(realpath build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath zlib) -DPNG_LIBRARY=$(realpath build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath build/optipng/libpng) -DJPEG_LIBRARY=$(realpath build/mozjpeg-prefix/src/mozjpeg-build/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath build/mozjpeg-prefix/src/mozjpeg-build)"
+  deps_args="-DZLIB_LIBRARY=$(realpath build/zlib/libzlib.a) -DZLIB_INCLUDE_DIR=$(realpath zlib) "
+  deps_args="$deps_args -DPNG_LIBRARY=$(realpath build/optipng/libpng/libpng.a) -DPNG_PNG_INCLUDE_DIR=$(realpath build/optipng/libpng)"
+  deps_args="$deps_args -DJPEG_LIBRARY=$(realpath build/mozjpeg-prefix/src/mozjpeg-build/libjpeg.a) -DJPEG_INCLUDE_DIR=$(realpath build/mozjpeg-prefix/src/mozjpeg-build)"
   cd ..
   # > giflib
   cd giflib
@@ -274,9 +275,9 @@ if [ "$1" = build ]; then
   cd ..
   # > jxl + jpegli
   cd jxl
-  rm -rf build  
-  CXXFLAGS="$CXXFLAGS -DHWY_COMPILE_ONLY_STATIC=ON -DHWY_BASELINE_TARGETS=$(uname -m | awk '/(arm|aarch)/{print "HWY_NEON"}/(x86|amd)/{print "HWY_AVX2"}')" \
+  rm -rf build
   cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF $deps_args \
+    -DCMAKE_CXX_FLAGS="$CXXFLAGS -DHWY_COMPILE_ONLY_STATIC=ON -DHWY_BASELINE_TARGETS=HWY_$(uname -m | awk '/(arm|aarch)/{print "NEON"}/(x86|amd)/{print "AVX2"}')" \
     -DBUILD_TESTING=OFF -DJPEGXL_ENABLE_BENCHMARK=OFF -DJPEGXL_ENABLE_DOXYGEN=OFF -DJPEGXL_ENABLE_MANPAGES=OFF \
     -DJPEGXL_ENABLE_JNI=OFF -DJPEGXL_ENABLE_SJPEG=OFF -DJPEGXL_ENABLE_OPENEXR=OFF -DJPEGXL_ENABLE_TCMALLOC=OFF
   jxl_targets="$(
@@ -306,6 +307,8 @@ if [ "$1" = profile ]; then
   mkdir -p $temp_dir/build
   curl -o sample/vscode-screenshot.png -L "https://github.com/user-attachments/assets/56af271c-949d-454c-a3ea-16188c063414"
   [ $(sha1sum sample/vscode-screenshot.png | cut -d " " -f 1) != 5d387883de3438a6f47e618ba68753036bc6c515 ] && echo mismatch
+  # should includes pictures, office docx, apk, elf
+  # should split the test-suite and trail-suit
   exit
 fi
 
