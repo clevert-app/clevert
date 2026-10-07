@@ -111,9 +111,13 @@ if [ "$1" = prepare ]; then
     #include <errno.h>
     #include <stdint.h>
     #include <stdio.h>
+    #include <unistd.h>
     #include <zlib.h>
     #include <vector>
     #include <cstdlib>
+    #if defined(__APPLE__) || !defined(off64_t)
+    typedef off_t off64_t;
+    #endif
     #define ALOGV(...) ((void)0)
     #define ALOGD(...) ((void)0)
     #define ALOGW(...) fprintf(stderr, __VA_ARGS__)
@@ -234,13 +238,33 @@ if [ "$1" = prepare ]; then
       return 0;
     }
   ' > multicall.cc
+  # < now, pack all to tar
+  tar --zstd -cf $dist_dir/prepare.tar.zst -C .. build
   exit
 fi
 
 if [ "$1" = build ]; then
   # ===== build, should after prepare, without modify source code
   cd $temp_dir/build
-  export CC="gcc" CXX="g++" CFLAGS="-O3 -fomit-frame-pointer -march=x86-64-v3 -flto=auto"
+  export CFLAGS="-O3 -fomit-frame-pointer -flto=auto" # -flto=auto
+  if [ "$(uname) $(uname -m)" = "Linux x86_64" ]; then
+    # curl -O -L https://apt.llvm.org/llvm.sh # install on debian 13
+    # chmod +x llvm.sh
+    # ./llvm.sh 23 -m https://mirrors.nju.edu.cn/llvm-apt
+    # apt-get purge --autoremove lldb-23 clangd-23 # or, only install clang-23 lld-23
+    export LDFLAGS="-fuse-ld=lld-23" CC="clang-23" CXX="clang++-23" CFLAGS="$CFLAGS -march=x86-64-v3"
+  elif [ "$(uname | cut -d "-" -f 1) $(uname -m)" = "MINGW64_NT x86_64" ]; then
+    # C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start
+    export LDFLAGS="-fuse-ld=lld" CC="clang-23" CXX="clang++-23" CFLAGS="$CFLAGS -march=x86-64-v3"
+  elif [ "$(uname) $(uname -m)" = "Darwin arm64" ]; then
+    # brew install llvm@23 lld@23 nasm ninja cmake
+    # proxychains ssh mac@mac-mini-m1.lan
+    export PATH="$(brew --prefix llvm)/bin:$(brew --prefix lld)/bin:$PATH"
+    export LDFLAGS="-fuse-ld=lld" CC="clang" CXX="clang++" CFLAGS="$CFLAGS -mcpu=apple-m1 -mmacosx-version-min=14.0" MACOSX_DEPLOYMENT_TARGET=14.0
+  else
+    uname -a
+    exit 1
+  fi
   export CXXFLAGS="$CFLAGS"
   ninja_targets(){ cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" ; } # # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
   # > ect
@@ -289,15 +313,16 @@ if [ "$1" = build ]; then
   cd ..
   # > zipalign
   cd zipalign
-  $CXX $CXXFLAGS -std=c++17 -I../ect -I../ect/zlib -I./include -c ZipAlignMain.cpp ZipAlign.cpp ZipEntry.cpp ZipFile.cpp
+  $CXX $CXXFLAGS -std=c++17 -I../ect -I../ect/zlib -I./include -c *.cpp
   cd ..
-  # >>> multicall
-  $CXX $CXXFLAGS multicall.cc -Wl,--start-group \
+  # > multicall
+  $CXX $CXXFLAGS $LDFLAGS \
     $(cd ect/build ; realpath $ect_targets) \
     $(cd webp/build ; realpath $webp_targets) \
     $(cd jxl/build ; realpath $jxl_targets) \
     $(cd zipalign ; realpath *.o) \
-    -Wl,--end-group -pthread -lm -o $dist_dir/zcodecs
+    multicall.cc \
+    -o $dist_dir/zcodecs
   strip $dist_dir/zcodecs
   exit
 fi
@@ -305,13 +330,23 @@ fi
 if [ "$1" = profile ]; then
   # === do profile for later pgo, keep below and skip for now
   mkdir -p $temp_dir/build
-  curl -o sample/vscode-screenshot.png -L "https://github.com/user-attachments/assets/56af271c-949d-454c-a3ea-16188c063414"
-  [ $(sha1sum sample/vscode-screenshot.png | cut -d " " -f 1) != 5d387883de3438a6f47e618ba68753036bc6c515 ] && echo mismatch
+  cd $temp_dir/build
   # should includes pictures, office docx, apk, elf
   # should split the test-suite and trail-suit
+
+  curl -o 001.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png # github desktop screenshot with alpha
+  curl -o 002.png -L https://github.com/libjxl/testdata/raw/73695d303670c90e4d506ea89d9901b081385089/jxl/flower/flower.png # jxl flower big size test file
+  curl -o 002.png -L https://github.com/libjxl/testdata/raw/73695d303670c90e4d506ea89d9901b081385089/jxl/hdr_room.png # jxl hdr room test file
+  curl -o 003.apk -L https://github.com/moonlight-stream/moonlight-android/releases/download/v12.2/app-nonRoot-release.apk # moonlight apk
+  tar -cf 004.tar ect/libpng ect/mozjpeg # source code tar
+
+  # use self, libwebp and libpng and more
+  # todo: pictures and more
+
   exit
 fi
 
 exit 1
 
 # https://blog.llvm.org/2019/09/closing-gap-cross-language-lto-between.html
+
