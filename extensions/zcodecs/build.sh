@@ -115,6 +115,11 @@ if [ "$1" = prepare ]; then
     #include <zlib.h>
     #include <vector>
     #include <cstdlib>
+    #include <algorithm>
+    #include <future>
+    #include <thread>
+    #include <deque>
+    #include <memory>
     #if defined(__APPLE__) || !defined(off64_t)
     typedef off_t off64_t;
     #endif
@@ -123,6 +128,7 @@ if [ "$1" = prepare ]; then
     #define ALOGW(...) fprintf(stderr, __VA_ARGS__)
     #define ALOGE(...) fprintf(stderr, __VA_ARGS__)
     #define _Static_assert static_assert
+    #define assert_or_exit(v) if (!(v)) { ALOGW("Zip: assert failed"); exit(1); }
     namespace android {
       typedef int32_t status_t; // from libutils/binder/include/utils/Errors.h
       const status_t OK = 0;
@@ -155,10 +161,7 @@ if [ "$1" = prepare ]; then
           zerr = inflate(&zstream, Z_NO_FLUSH);
         }
         inflateEnd(&zstream);
-        if (zstream.total_out != uncompressed_length || remaining_bytes != 0 || zerr != Z_STREAM_END) {
-          ALOGW("Zip: inflate failed");
-          return 1;
-        }
+        assert_or_exit(zstream.total_out == uncompressed_length && remaining_bytes == 0 && zerr == Z_STREAM_END);
         return 0;
       }
     }
@@ -176,6 +179,60 @@ if [ "$1" = prepare ]; then
     }
     #endif
   ' > compat.h # zlialign needs android libutils, here is our compat implementation
+  echo '
+    using CompressionBuffer = std::unique_ptr<unsigned char, decltype(&free)>;
+    struct CompressedEntry { CompressionBuffer data{nullptr, free}; size_t size = 0; };
+    struct CompressionSlot { CompressedEntry result; std::thread worker; ~CompressionSlot() { if (worker.joinable()) worker.join(); } };
+    static int nextEntry = 0;
+    static const int threads = []() {
+      const char* s = getenv("ZIPALIGN_THREADS");
+      int v = s ? strtol(s, NULL, 10) : 1;
+      return v <= 0 ? std::max((int)std::thread::hardware_concurrency(), 1) : v;
+    }();
+    static std::unique_ptr<CompressionSlot[]> slots(new CompressionSlot[threads]);
+    static size_t head = 0, count = 0;
+    if (count == 0) {
+      nextEntry = 0;
+      while (nextEntry < pSourceZip->getNumEntries() && pSourceZip->getEntryByIndex(nextEntry) != pSourceEntry)
+        nextEntry++;
+    }
+    while (nextEntry < pSourceZip->getNumEntries() && count < threads) {
+      const ZipEntry* entry = pSourceZip->getEntryByIndex(nextEntry++);
+      if (!entry->isCompressed())
+        continue;
+      CompressionBuffer input(static_cast<unsigned char*>(pSourceZip->uncompress(entry)), free);
+      assert_or_exit(input);
+      size_t size = entry->getUncompressedLen();
+      CompressionSlot& slot = slots[(head + count) % threads];
+      slot.worker = std::thread([&slot, input = std::move(input), size]() {
+        CompressedEntry result;
+        if (size == 0) {
+          unsigned char* data = static_cast<unsigned char*>(malloc(2)); // ect has bug on empty entry
+          assert_or_exit(data);
+          data[0] = 0x03, data[1] = 0x00;
+          result.data.reset(data);
+          result.size = 2;
+        } else {
+          ZopfliOptions options;
+          ZopfliInitOptions(&options, getZopfliLevel(), 0, 0);
+          unsigned char bitPointer = 0;
+          unsigned char* output = nullptr;
+          ZopfliDeflate(&options, true, input.get(), size, &bitPointer, &output, &result.size);
+          result.data.reset(output);
+        }
+        slot.result = std::move(result);
+      });
+      count++;
+    }
+    assert_or_exit(count != 0);
+    slots[head].worker.join();
+    CompressedEntry compressed = std::move(slots[head].result);
+    head = (head + 1) % threads;
+    count--;
+    assert_or_exit(compressed.data);
+    assert_or_exit(fwrite(compressed.data.get(), 1, compressed.size, mZipFp) == compressed.size);
+    pEntry->setDataInfo(uncompressedLen, compressed.size, pSourceEntry->getCRC32(), ZipEntry::kCompressDeflated);
+  ' > mt.h
   sed -i -E 's|#include <(utils\|ziparchive)/|#include "compat.h" //|' *.h *.cpp
   sed -i \
     -e 's/mEntries.add(/mEntries.push_back(/g' \
