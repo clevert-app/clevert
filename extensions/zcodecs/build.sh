@@ -415,8 +415,9 @@ if [ "$1" = profile ]; then
     curl -o $dist_dir/pgo_res_bak/002.png -L https://github.com/libjxl/testdata/raw/73695d303670c90e4d506ea89d9901b081385089/jxl/flower/flower.png # jxl flower big size test file
     curl -o $dist_dir/pgo_res_bak/003.png -L https://github.com/libjxl/testdata/raw/73695d303670c90e4d506ea89d9901b081385089/jxl/hdr_room.png # jxl hdr room test file
     curl -o $dist_dir/pgo_res_bak/004.apk -L https://github.com/moonlight-stream/moonlight-android/releases/download/v12.2/app-nonRoot-release.apk # moonlight apk
-    tar -cf $dist_dir/pgo_res_bak/005.tar ect/libpng $dist_dir/pgo_res_bak/001.png # source code tar
+    tar -cf $dist_dir/pgo_res_bak/005.tar ect/libpng/libpng-manual.txt ect/libpng/contrib/testpngs/*.png ect/libpng/contrib/libtests giflib/*.c # source code and some png
     gzip -1 -k $dist_dir/pgo_res_bak/005.tar
+    cp giflib/pic/fire.gif $dist_dir/pgo_res_bak/006.gif
   fi
 
   # truncate --size=1234KiB 5.tar
@@ -427,6 +428,7 @@ if [ "$1" = profile ]; then
   for i in 1 2; do # small files twice is enough
     rm -rf pgo_res
     cp -r $dist_dir/pgo_res_bak pgo_res
+    export LLVM_PROFILE_FILE=pgo/$i.profraw
     profile cwebp -lossless pgo_res/003.png -o pgo_res/003.webp # to webp lossless
     profile cwebp -lossless -sharp_yuv -m 6 pgo_res/001.png -o pgo_res/001.webp
     profile cwebp -crop 100 200 1920 1080 pgo_res/002.png -o pgo_res/002.1.webp # to webp lossy
@@ -437,14 +439,16 @@ if [ "$1" = profile ]; then
     profile cjxl --num_threads=4 -q 100 -e 8 pgo_res/001.png pgo_res/001.jxl # mathematically lossless
     profile cjxl --num_threads=4 -q 68 pgo_res/002.png pgo_res/002.jxl
     profile cjxl --num_threads=4 -q 85 -e 8 pgo_res/003.png pgo_res/003.jxl
+    profile cjxl --num_threads=1 pgo_res/006.gif pgo_res/006.jxl
+    profile djxl --num_threads=1 pgo_res/006.jxl pgo_res/006.jxl.gif
     profile djxl --num_threads=4 --pixels_to_jpeg pgo_res/002.jxl pgo_res/002.jpeg # to normal jpeg
     profile jxlinfo pgo_res/002.jxl
     profile cjpegli -q 75 pgo_res/001.png pgo_res/001.jpegli.jpeg
     profile cjpegli -q 60 pgo_res/002.png pgo_res/002.jpegli.jpeg
     profile cjpegli -q 85 pgo_res/003.png pgo_res/003.jpegli.jpeg
     profile djpegli pgo_res/002.jpegli.jpeg pgo_res/002.jpegli.png
-    profile ect -6 -gzip pgo_res/005.tar.gz # gzip decompress + compress
-    profile ect -5 -zip pgo_res/005.tar
+    profile ect -7 -gzip pgo_res/005.tar.gz # gzip decompress + compress
+    profile ect -3 -zip pgo_res/005.tar
     profile ect -5 pgo_res/001.png pgo_res/003.png # high level recompress
     profile ect -9 pgo_res/002.3.png # very high level recompress
     ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6 profile zipalign -z -f -P 4 4 pgo_res/004.apk pgo_res/004.zipalign.apk
@@ -452,16 +456,17 @@ if [ "$1" = profile ]; then
   llvm-profdata-23 merge -output=pgo/default.profdata pgo/*.profraw
   rm -rf pgo/*.profraw
   exit
+fi
 
+if [ "$1" = test ]; then
   cd $dist_dir
-  i_apk=~/misc/res/pkgs/android/tasker/tasker.6.2.22.forever.v6.apk
-  echo llvm_1 ; time ./zcodecs_llvm zipalign -f -z -P 4 4 $i_apk y_llvm.apk
-  echo gcc_1 ; time ./zcodecs_gcc zipalign -f -z -P 4 4 $i_apk y_gcc.apk
-  echo llvm_mt_4 ; time ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6 ./zcodecs_llvm_mt zipalign -f -z -P 4 4 $i_apk y_llvm_mt_4.apk
-  echo gcc_mt_4 ; time ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6 ./zcodecs_gcc_mt zipalign -f -z -P 4 4 $i_apk y_gcc_mt_4.apk
-  echo llvm_pgo_mt_4 ; time ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6 ./zcodecs_llvm_pgo_mt zipalign -f -z -P 4 4 $i_apk y_llvm_pgo_mt_4.apk
-  echo gcc_pgo_mt_4 ; time ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6 ./zcodecs_gcc_pgo_mt zipalign -f -z -P 4 4 $i_apk y_gcc_pgo_mt_4.apk
-
+  i_apk=~/misc/res/pkgs/android/wps/wps.16.8.6.v2.apk
+  export ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6
+  # mv $dist_dir/zcodecs $dist_dir/zcodecs_gcc_pgo_mt
+  echo llvm_mt_4 ; time ./zcodecs_llvm_mt zipalign -f -z -P 4 4 $i_apk y_llvm_mt_4.apk
+  echo gcc_mt_4 ; time ./zcodecs_gcc_mt zipalign -f -z -P 4 4 $i_apk y_gcc_mt_4.apk
+  echo llvm_pgo_mt_4 ; time ./zcodecs_llvm_pgo_mt zipalign -f -z -P 4 4 $i_apk y_llvm_pgo_mt_4.apk
+  echo gcc_pgo_mt_4 ; time ./zcodecs_gcc_pgo_mt zipalign -f -z -P 4 4 $i_apk y_gcc_pgo_mt_4.apk
   exit
 fi
 

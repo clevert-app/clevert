@@ -1,0 +1,128 @@
+--- a/ect/zopfli/squeeze.c
++++ b/ect/zopfli/squeeze.c
+@@ -256,56 +256,13 @@
+ 
+   /*TODO: Put this in separate function*/
+   float litlentable [259];
+-  float* disttable = (float*)malloc(ZOPFLI_WINDOW_SIZE * sizeof(float));
++  float disttable[30];
+   float* literals = costcontext->ll_symbols;
+-  if (!disttable){
+-    exit(1);
+-  }
+     for (i = 3; i < 259; i++){
+       litlentable[i] = costcontext->ll_symbols[ZopfliGetLengthSymbol(i)] + ZopfliGetLengthExtraBits(i);
+     }
+-    for (i = 1; i < 1025; i++){
+-      disttable[i] = costcontext->d_symbols[ZopfliGetDistSymbol(i)] + ZopfliGetDistExtraBits(i);
+-    }
+-    float counter = costcontext->d_symbols[20] + 9;
+-    for (; i < 1537; i++){
+-      disttable[i] = counter;
+-    }
+-    counter = costcontext->d_symbols[21] + 9;
+-    for (; i < 2049; i++){
+-      disttable[i] = counter;
+-    }
+-    counter = costcontext->d_symbols[22] + 10;
+-    for (; i < 3073; i++){
+-      disttable[i] = counter;
+-    }
+-    counter = costcontext->d_symbols[23] + 10;
+-    for (; i < 4097; i++){
+-      disttable[i] = counter;
+-    }
+-    counter = costcontext->d_symbols[24] + 11;
+-    for (; i < 6145; i++){
+-      disttable[i] = counter;
+-    }
+-    counter = costcontext->d_symbols[25] + 11;
+-    for (; i < 8193; i++){
+-      disttable[i] = counter;
+-    }
+-    counter = costcontext->d_symbols[26] + 12;
+-    for (; i < 12289; i++){
+-      disttable[i] = counter;
+-    }
+-    counter = costcontext->d_symbols[27] + 12;
+-    for (; i < 16385; i++){
+-      disttable[i] = counter;
+-    }
+-    counter = costcontext->d_symbols[28] + 13;
+-    for (; i < 24577; i++){
+-      disttable[i] = counter;
+-    }
+-    counter = costcontext->d_symbols[29] + 13;
+-    for (; i < 32768; i++){
+-      disttable[i] = counter;
++    for (i = 0; i < 30; i++){
++      disttable[i] = costcontext->d_symbols[i] + (i < 4 ? 0 : i / 2 - 1);
+     }
+ 
+   size_t blocksize = inend - instart;
+@@ -353,18 +310,18 @@
+     if (numPairs){
+       const unsigned short * mend = matches + numPairs;
+ 
+-      if (matches[0] == ZOPFLI_MAX_MATCH) {
++      if ((matches[0] & 511) == ZOPFLI_MAX_MATCH) {
+         unsigned dist = matches[1];
+         if (dist == 1) {match_type = ML_RLE;}
+ 
+-        costs[j + ZOPFLI_MAX_MATCH] = costs[j] + disttable[dist] + litlentable[ZOPFLI_MAX_MATCH];
++        costs[j + ZOPFLI_MAX_MATCH] = costs[j] + disttable[matches[0] >> 9] + litlentable[ZOPFLI_MAX_MATCH];
+         length_array[j + ZOPFLI_MAX_MATCH] = ZOPFLI_MAX_MATCH + (dist << 9);
+ 
+       }
+ #if 0 //More speed, less compression.
+-      else if (*(mend - 2) == ZOPFLI_MAX_MATCH){
++      else if ((*(mend - 2) & 511) == ZOPFLI_MAX_MATCH){
+         unsigned dist = matches[numPairs - 1];
+-        costs[j + ZOPFLI_MAX_MATCH] = costs[j] + disttable[dist] + litlentable[ZOPFLI_MAX_MATCH];
++        costs[j + ZOPFLI_MAX_MATCH] = costs[j] + disttable[*(mend - 2) >> 9] + litlentable[ZOPFLI_MAX_MATCH];
+         length_array[j + ZOPFLI_MAX_MATCH] = ZOPFLI_MAX_MATCH + (dist << 9);
+       }
+ #endif
+@@ -374,9 +331,10 @@
+ 
+         unsigned curr = ZOPFLI_MIN_MATCH;
+         while (mp < mend){
+-          unsigned len = *mp++;
++          unsigned encoded_length = *mp++;
++          unsigned len = encoded_length & 511;
+           unsigned dist = *mp++;
+-          float price2 = price + disttable[dist];
++          float price2 = price + disttable[encoded_length >> 9];
+           dist <<=9;
+           for (; curr <= len; curr++) {
+             float x = price2 + litlentable[curr];
+@@ -399,7 +357,6 @@
+ 
+   c->pointer = 0;
+ 
+-  free(disttable);
+   free(costs);
+ }
+ 
+@@ -660,6 +617,12 @@
+       }
+     }
+ 
++    if (storeincache) {
++      for (int pair = 0; pair < numPairs; pair += 2) {
++        matches[pair] |= ZopfliGetDistSymbol(matches[pair + 1]) << 9;
++      }
++    }
++
+     /* Literal. */
+     float newCost = costs[j] + literals[in[i]];
+     if (newCost < costs[j + 1]) {
+@@ -766,7 +729,7 @@
+     unsigned space = allocsize - (*pathsize);
+ 
+ 
+-    while(size > ZOPFLI_MAX_MATCH * 64 && space > 64){
++    while(size > ZOPFLI_MAX_MATCH * 64 + 102 && space > 64){
+       unsigned endsize = (*pathsize) + 64;
+       for (;(*pathsize) < endsize;) {
+         (*path)[*pathsize] = length_array[size];
