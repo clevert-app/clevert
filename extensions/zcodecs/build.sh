@@ -63,6 +63,13 @@ if [ "$1" = prepare ]; then
   echo "" > ect/pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
   echo "#define DCT_ISLOW_SUPPORTED" >> ect/mozjpeg/jmorecfg.h # jxl needs this
   sed -i 's/int main(/extern "C" int cmd_ect_main(/' ect/main.cpp
+  # zopfli_patch="$(cd "$(dirname "$0")" && pwd)/zopfli.patch"
+  # git apply "$zopfli_patch"
+  echo '
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+      set_property(SOURCE squeeze.c APPEND PROPERTY COMPILE_OPTIONS -fno-vectorize)
+    endif()
+  ' >> ect/zopfli/CMakeLists.txt # llvm auto vectorize make this slower
   # > webp
   for applet in webpinfo cwebp dwebp gif2webp img2webp webpmux; do
     sed -i "s/int main(/int cmd_${applet}_main(/" webp/examples/$applet.c
@@ -235,7 +242,7 @@ if [ "$1" = prepare ]; then
     assert_or_exit(compressed.data);
     assert_or_exit(fwrite(compressed.data.get(), 1, compressed.size, mZipFp) == compressed.size);
     pEntry->setDataInfo(uncompressedLen, compressed.size, pSourceEntry->getCRC32(), ZipEntry::kCompressDeflated);
-  ' > mt.h
+  ' > mt.h # todo: multi thread cause overhead and not balanced?
   sed -i -E 's|#include <(utils\|ziparchive)/|#include "compat.h" //|' *.h *.cpp
   sed -i \
     -e 's/mEntries.add(/mEntries.push_back(/g' \
