@@ -314,22 +314,25 @@ fi
 if [ "$1" = build ]; then
   # ===== build, should after prepare, without modify source code # ./build.sh build profile-generate/profile-use
   cd $temp_dir/build
-  export CFLAGS="-O3 -flto=auto" # -flto=auto
+  # CFLAGS : -ffunction-sections -fdata-sections
+  export CC="clang" CXX="clang++" CFLAGS="-O3 -flto=auto" LDFLAGS="-fuse-ld=lld -Wl,--icf=safe -Wl,--gc-sections"
   if [ "$(uname) $(uname -m)" = "Linux x86_64" ]; then
     # curl -O -L https://apt.llvm.org/llvm.sh # install on debian 13
-    # chmod +x llvm.sh
-    # ./llvm.sh 23 -m https://mirrors.nju.edu.cn/llvm-apt
+    # bash llvm.sh 23 -m https://mirrors.nju.edu.cn/llvm-apt
     # apt-get purge --autoremove lldb-23 clangd-23 # or, only install clang-23 lld-23
-    # export LDFLAGS="-fuse-ld=lld-23" CC="clang-23" CXX="clang++-23" CFLAGS="$CFLAGS -march=x86-64-v3 -fprofile-use=$(pwd)/pgo-0.profdata" # -fprofile-use=$(pwd)/pgo-0.profdata
-    export LDFLAGS="" CC="gcc" CXX="g++" CFLAGS="$CFLAGS -march=x86-64-v3 -fprofile-update=atomic -fprofile-dir=$(pwd)/pgo -fprofile-generate" # -fprofile-update=atomic -fprofile-dir=$(pwd)/pgo # -fprofile-generate -fprofile-use
+    export PATH="/usr/lib/llvm-23/bin:$PATH"
+    export CFLAGS="$CFLAGS -march=x86-64-v3 -fprofile-update=atomic -fprofile-generate=$(pwd)/pgo" # pgo:generate
+    export CFLAGS="$CFLAGS -march=x86-64-v3 -fprofile-use=$(pwd)/pgo"
   elif [ "$(uname | cut -d "-" -f 1) $(uname -m)" = "MINGW64_NT x86_64" ]; then
-    # C:\msys64\msys2_shell.cmd -mingw64 -defterm -here -no-start
-    export LDFLAGS="-fuse-ld=lld" CC="clang-23" CXX="clang++-23" CFLAGS="$CFLAGS -march=x86-64-v3" # -fprofile-generate -fprofile-use=$(pwd)/pgo-0.profdata
+    # C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start
+    # pacman -S mingw-w64-clang-x86_64- # clang cmake ninja nasm
+    # tar "C:\Sandbox\klc2u1\DefaultBox\drive\C\twenblock"
+    export CFLAGS="$CFLAGS -march=x86-64-v3" # -fprofile-generate -fprofile-use=$(pwd)/pgo-0.profdata
   elif [ "$(uname) $(uname -m)" = "Darwin arm64" ]; then
-    # brew install llvm@23 lld@23 cmake ninja nasm
     # proxychains ssh mac@mac-mini-m1.lan
+    # brew install llvm@23 lld@23 cmake ninja nasm
     export PATH="$(brew --prefix llvm@23)/bin:$(brew --prefix lld@23)/bin:$PATH"
-    export LDFLAGS="-fuse-ld=lld" CC="clang" CXX="clang++" CFLAGS="$CFLAGS -mcpu=apple-m1 -mmacosx-version-min=14.0" MACOSX_DEPLOYMENT_TARGET=14.0
+    export CFLAGS="$CFLAGS -mcpu=apple-m1 -mmacosx-version-min=14.0" MACOSX_DEPLOYMENT_TARGET=14.0
   else
     uname -a
     exit 1
@@ -394,7 +397,8 @@ if [ "$1" = build ]; then
     -Wl,--end-group \
     multicall.cc \
     -o $dist_dir/zcodecs
-  strip $dist_dir/zcodecs
+  # llvm-objcopy --strip-unneeded # --strip-all
+  # strip $dist_dir/zcodecs
   exit
 fi
 
@@ -418,10 +422,8 @@ if [ "$1" = profile ]; then
   # truncate --size=1234KiB 5.tar
   # cat pgo_res_bak/*.tar pgo_res_bak/2.png > pgo_res_bak/1.bin
 
-  rm -rf *.profraw *.profdata pgo
-  pgo_i=11
-  profile(){ pgo_i=$(( $pgo_i + 1 )) ; time $dist_dir/zcodecs $* ;} # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=47618#c5 # for gcc
-  profile(){ pgo_i=$(( $pgo_i + 1 )) ; time LLVM_PROFILE_FILE="pgo-$pgo_i.profraw" $dist_dir/zcodecs $* ;} # for llvm
+  rm -rf pgo
+  profile() { $dist_dir/zcodecs $* ; }
   for i in 1 2; do # small files twice is enough
     rm -rf pgo_res
     cp -r $dist_dir/pgo_res_bak pgo_res
@@ -447,8 +449,8 @@ if [ "$1" = profile ]; then
     profile ect -9 pgo_res/002.3.png # very high level recompress
     ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6 profile zipalign -z -f -P 4 4 pgo_res/004.apk pgo_res/004.zipalign.apk
   done
-  # llvm-profdata-23 merge -output=pgo-0.profdata *.profraw
-  rm -rf *.profraw
+  llvm-profdata-23 merge -output=pgo/default.profdata pgo/*.profraw
+  rm -rf pgo/*.profraw
   exit
 
   cd $dist_dir
