@@ -64,12 +64,14 @@ fi
 
 if [ "$1" = prepare ]; then
   # === prepare for build, modify the source code, add multicall entries
+  # zopfli_simd_shortest_path_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-simd-shortest-path.patch" # curl -o zopfli-simd-shortest-path.patch https://github.com/happyarts/Efficient-Compression-Tool/commit/54719dfcf0974020a45b1f476d77f2f99a2eb29c.patch
   zopfli_huffman_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-huffman.patch"
   rm -rf $temp_dir/build
   mkdir -p $temp_dir/build
   cd $temp_dir/build
   tar -xf $dist_dir/fetch.tar.zst --strip-components 1
   # > ect
+  # (cd ect ; git apply "$zopfli_simd_shortest_path_patch")
   (cd ect ; git apply "$zopfli_huffman_patch")
   echo '
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
@@ -251,6 +253,7 @@ if [ "$1" = prepare ]; then
     count--;
     assert_or_exit(compressed.data);
     assert_or_exit(fwrite(compressed.data.get(), 1, compressed.size, mZipFp) == compressed.size);
+    pEntry->mCDE.mGPBitFlag &= ~ZipEntry::kUsesDataDescr;
     pEntry->setDataInfo(uncompressedLen, compressed.size, pSourceEntry->getCRC32(), ZipEntry::kCompressDeflated);
   ' > mt.h # todo: multi thread cause overhead and not balanced?
   sed -i -E 's|#include <(utils\|ziparchive)/|#include "compat.h" //|' *.h *.cpp
