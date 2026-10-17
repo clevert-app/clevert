@@ -262,7 +262,7 @@ if [ "$1" = prepare ]; then
     -e 's/mEntries.removeAt(i)/mEntries.erase(mEntries.begin()+i)/g' \
     -e 's/ZopfliInitOptions(&options)/ZopfliInitOptions(\&options,getZopfliLevel(),0,0)/' \
     -e 's/ZopfliDeflate(&options, 2,/ZopfliDeflate(\&options,/' \
-    -e 's/malloc(unlen)/malloc(unlen?unlen:1)/' \
+    -e 's/malloc(unlen)/calloc(unlen + 32, 1)/' \
     -e '/const FileReader reader(mZipFp);/d' \
     -e '/BufferWriter writer(buf, unlen);/d' \
     -e 's/zip_archive::Inflate(reader, clen, unlen, &writer, nullptr)/ZipInflateFile(mZipFp, clen, buf, unlen)/' \
