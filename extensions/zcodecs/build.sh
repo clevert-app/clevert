@@ -332,6 +332,7 @@ if [ "$1" = build ]; then
     tar -xf $dist_dir/prepare.tar.zst -C $temp_dir
   fi
   cd $temp_dir/build
+  # export CC="gcc" CXX="g++" CFLAGS="-O3 -flto=auto" LDFLAGS="-Wl,--gc-sections"
   export CC="clang" CXX="clang++" CFLAGS="-O3 -flto=thin" LDFLAGS="-fuse-ld=lld -Wl,--icf=safe,--gc-sections"
   if [ "$(uname) $(uname -m)" = "Linux x86_64" ]; then
     # curl -O -L https://apt.llvm.org/llvm.sh # install on debian 13
@@ -464,15 +465,23 @@ fi
 
 if [ "$1" = test ]; then
   # === not used currently
-  exit 1
   cd $dist_dir
   i_apk=~/misc/res/pkgs/android/wps/wps.16.8.6.v2.apk
-  export ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6
-  # mv $dist_dir/zcodecs $dist_dir/zcodecs_gcc_pgo_mt
-  echo llvm_mt_4 ; time ./zcodecs_llvm_mt zipalign -f -z -P 4 4 $i_apk y_llvm_mt_4.apk
-  echo gcc_mt_4 ; time ./zcodecs_gcc_mt zipalign -f -z -P 4 4 $i_apk y_gcc_mt_4.apk
-  echo llvm_pgo_mt_4 ; time ./zcodecs_llvm_pgo_mt zipalign -f -z -P 4 4 $i_apk y_llvm_pgo_mt_4.apk
-  echo gcc_pgo_mt_4 ; time ./zcodecs_gcc_pgo_mt zipalign -f -z -P 4 4 $i_apk y_gcc_pgo_mt_4.apk
+  check_y() {
+    du -s y.apk
+    rm -rf y
+    unzip -q -d y y.apk
+    find y -type f -exec sha1sum {} + | sort -k 2 | sha1sum
+  }
+  cp $i_apk y.apk
+  check_y
+  export ZIPALIGN_THREADS=1 ZIPALIGN_ZOPFLI_LEVEL=3
+  for name in zcodecs_gcc_v3_huffman; do
+    echo ==========
+    echo [ $name ]
+    time taskset -c 2 ./$name zipalign -z -f -P 4 4 $i_apk y.apk
+    check_y
+  done
   exit
 fi
 
