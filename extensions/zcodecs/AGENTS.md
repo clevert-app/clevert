@@ -24,8 +24,9 @@ Shell script `./build.sh` patches code then build the multi-call tool.
 - For Windows, start a persistent ssh session with `ssh klc2 -t "C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start"`, then run `mkdir -p /tmp/zcodecs`, `cd /tmp/zcodecs`, and interact with the tty.
 - Run `scp build.sh $dist_dir/prepare.tar.zst klc2:C:/msys64/tmp/zcodecs/` to copy files to Windows.
 
-
 ### Old prompts
+
+Below are old prompts, do not read
 
 ```sh
 cd /media/kkocdko/KK_TMP_1/zcodecs/dist

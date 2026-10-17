@@ -64,22 +64,22 @@ fi
 
 if [ "$1" = prepare ]; then
   # === prepare for build, modify the source code, add multicall entries
+  zopfli_huffman_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-huffman.patch"
   rm -rf $temp_dir/build
   mkdir -p $temp_dir/build
   cd $temp_dir/build
   tar -xf $dist_dir/fetch.tar.zst --strip-components 1
   # > ect
-  mv ect/src/* ect/
-  echo "" > ect/pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
-  echo "#define DCT_ISLOW_SUPPORTED" >> ect/mozjpeg/jmorecfg.h # jxl needs this
-  sed -i 's/int main(/extern "C" int cmd_ect_main(/' ect/main.cpp
-  # zopfli_patch="$(cd "$(dirname "$0")" && pwd)/zopfli.patch"
-  # git apply "$zopfli_patch"
+  (cd ect ; git apply "$zopfli_huffman_patch")
   echo '
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
       set_property(SOURCE squeeze.c APPEND PROPERTY COMPILE_OPTIONS -fno-vectorize)
     endif()
-  ' >> ect/zopfli/CMakeLists.txt # llvm auto vectorize make this slower
+  ' >> ect/src/zopfli/CMakeLists.txt # llvm auto vectorize make this slower
+  mv ect/src/* ect/
+  echo "" > ect/pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
+  echo "#define DCT_ISLOW_SUPPORTED" >> ect/mozjpeg/jmorecfg.h # jxl needs this
+  sed -i 's/int main(/extern "C" int cmd_ect_main(/' ect/main.cpp
   # > webp
   for applet in webpinfo cwebp dwebp gif2webp img2webp webpmux; do
     sed -i "s/int main(/int cmd_${applet}_main(/" webp/examples/$applet.c
