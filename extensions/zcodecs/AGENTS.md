@@ -1,25 +1,24 @@
 # AGENTS.md
 
-This AGENTS.md is for only current dir, not for whole project.
+此 AGENTS.md 只适用于当前目录。也不要尝试去读取其他目录的 AGENTS.md。
 
-你首先完整阅读 ./build.sh , 这是个编译出多合一 multi-call 工具的脚本。里面还包含了一些对代码的修补等。
+Shell 脚本 `./build.sh` 的用途是编译出多合一 multi-call 工具。里面还包含了一些对代码的修补等。
 
-我们现在正在进行 pgo 的工作，希望实现更好的优化。
+用法和概述：
 
-如你所见，我刚才执行了一些编译，profile，然后我编辑 build.sh ，使用之前生成的 profile，再次编译，得到 pgo 之后的程序。
+- 脚本开头定义 `dist_dir` 和 `temp_dir` 变量。约定 `$dist_dir` 存放打包好的源码，编译后的程序；`$temp_dir` 存放临时文件，编译过程中间产物。
+- 使用 `./build.sh fetch` 下载源码，打包到 `$dist_dir/fetch.tar.zst`。确保后续步骤不再需要联网下载源码。此命令和下面的 `prepare` 命令只适配 linux。
+- 运行 `./build.sh prepare` 会解压上个步骤的 tar 包，应用补丁，生成 multi-call 入口等，打包到 `$dist_dir/prepare.tar.zst`。可以将它复制到各个平台上供后续 `build` 命令使用。
+- 在对应平台运行 `./build.sh build`，会解压 `$dist_dir/prepare.tar.zst` 到 `$temp_dir/build` 然后编译。多次运行 `build` 不会重复解压和覆盖。
+- 前一个步骤没有启用 PGO 优化。若要使用 PGO，应当 `./build.sh build profile-generate` 编译出包含插桩的程序；然后 `./build.sh profile` 运行各种工作负载，收集性能数据；最后 `./build.sh build profile-use`。
 
-请不要在不必要的时候执行 ./build.sh prepare ，此命令会清除 build 文件夹。删除生成出的 profiling 文件。
+调试与测试提示：
 
-我在得到 pgo 后的程序 $dist_dir/zcodecs 之后，使用它来测试，也就是 ./build.sh test , 结果发现效果并不显著。
+- WIP
+- 可以在 `$temp_dir/build`
+- 对于 Windows，应当使用 `ssh klc2 -t "C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start"` 环境。持续与会话交互。
 
-由于 pgo 的 profiling 比较慢，编译也慢，所以，请你小心。 ./build.sh profile 可能会需要等待几分钟。
-
-所以，现在你的任务是，帮我分析，尝试调整和优化。我希望能改善性能。另外，我还发现似乎 llvm 编译出的二进制比 gcc 的要慢一些？请你帮我多试错，不要害怕失败。谢谢你。
-
-
-the build.sh is our build script, you should run `./build.sh build` to produce `/media/kkocdko/KK_TMP_1/zcodecs/dist/zcodecs` binary.
-
-Then we can test the zipalign
+scp hi.txt klc2:C:/Users/klc2u1/hi.txt
 
 ```sh
 cd /media/kkocdko/KK_TMP_1/zcodecs/dist
@@ -28,14 +27,6 @@ echo llvm_mt_1 ; time ZIPALIGN_THREADS=1 ./zcodecs zipalign -f -z -P 4 4 y.apk y
 echo llvm_mt_4 ; time ZIPALIGN_THREADS=4 ./zcodecs zipalign -f -z -P 4 4 y.apk y_llvm_mt_4.apk
 ```
 
-my result:
-
-```
-
-```
-
-
-
 the old `zcodecs_llvm` is build without multi-thread patch.
 
 I found that in single thread, old one without multi-thread patch is faster, why, can we improve the implement to fix this issue?
@@ -43,4 +34,3 @@ I found that in single thread, old one without multi-thread patch is faster, why
 Should found the reason, do not simply take a if branch to run non-threaded logic.
 
 You can edit `~/misc/code/clevert/temp/zcodecs/temp/build/zipalign/*.h *.cpp` files on the fly, not need to edit the patch and run `prepare`. Just `build` it.
-

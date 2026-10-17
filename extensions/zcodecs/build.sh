@@ -4,8 +4,8 @@ trap exit INT
 type git tar zstd cmake ninja nasm > /dev/null # apt-get install ccache ninja-build nasm
 dist_dir=/media/kkocdko/KK_TMP_1/zcodecs/dist
 temp_dir=/media/kkocdko/KK_TMP_1/zcodecs/temp
-# dist_dir=$(pwd)
-# temp_dir=$(pwd)
+# dist_dir=$(pwd)/dist
+# temp_dir=$(pwd)/dist/temp
 mkdir -p $dist_dir $temp_dir
 
 export PATH="/usr/lib/ccache:$PATH" CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache # ln -sf /media/kkocdko/KK_TMP_1/home/.cache/ccache ~/.cache/ccache
@@ -27,7 +27,7 @@ if [ "$1" = fetch ]; then
   curl -L https://deb.debian.org/debian/pool/main/g/giflib/giflib_5.2.2.orig.tar.gz | tar -zx
   mv giflib-* giflib
   # > webp
-  curl -L https://github.com/webmproject/libwebp/archive/097153b2a4b33f5e4ffa9f4603f63902bbd79169.tar.gz | tar -zx
+  curl -L https://github.com/webmproject/libwebp/archive/0464ce36981fc8169f69923eb6957dd46848967a.tar.gz | tar -zx
   mv libwebp-* webp
   # > jpegli
   curl -L https://github.com/google/jpegli/archive/031a0077f5799a6041004267fc12b956c1f52a20.tar.gz | tar -zx
@@ -46,9 +46,19 @@ if [ "$1" = fetch ]; then
   git sparse-checkout set tools/zipalign
   rm -rf .git
   cd ..
+  # > pgo resources
+  mkdir pgo_res_bak
+  curl -o pgo_res_bak/001.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png # github desktop screenshot with alpha
+  curl -o pgo_res_bak/002.png -L https://github.com/libjxl/testdata/raw/73695d303670c90e4d506ea89d9901b081385089/jxl/flower/flower.png # jxl flower big size test file
+  curl -o pgo_res_bak/003.png -L https://github.com/libjxl/testdata/raw/73695d303670c90e4d506ea89d9901b081385089/jxl/hdr_room.png # jxl hdr room test file
+  curl -o pgo_res_bak/004.apk -L https://github.com/moonlight-stream/moonlight-android/releases/download/v12.2/app-nonRoot-release.apk # moonlight apk
+  tar -cf pgo_res_bak/005.tar ect/src/libpng/libpng-manual.txt ect/src/libpng/contrib/testpngs/*.png ect/src/libpng/contrib/libtests giflib/*.c # source code and some png
+  gzip -1 -k pgo_res_bak/005.tar
+  cp giflib/pic/fire.gif pgo_res_bak/006.gif
   # < now, pack all to tar
-  tar --zstd -cf $dist_dir/fetch.tar.zst -C .. fetch
-  rm -rf ../fetch/*
+  cd ..
+  tar --zstd -cf $dist_dir/fetch.tar.zst fetch
+  rm -rf fetch
   exit
 fi
 
@@ -307,25 +317,28 @@ if [ "$1" = prepare ]; then
     }
   ' > multicall.cc
   # < now, pack all to tar
-  tar --zstd -cf $dist_dir/prepare.tar.zst -C .. build
+  cd ..
+  tar --zstd -cf $dist_dir/prepare.tar.zst build
+  rm -rf build
   exit
 fi
 
 if [ "$1" = build ]; then
-  # ===== build, should after prepare, without modify source code # ./build.sh build profile-generate/profile-use
+  # === build, should after prepare, without modify source code # ./build.sh build profile-generate/profile-use
+  if [ ! -e $temp_dir/build ]; then
+    tar -xf $dist_dir/prepare.tar.zst -C $temp_dir
+  fi
   cd $temp_dir/build
-  # CFLAGS : -ffunction-sections -fdata-sections
-  export CC="clang" CXX="clang++" CFLAGS="-O3 -flto=auto" LDFLAGS="-fuse-ld=lld -Wl,--icf=safe -Wl,--gc-sections"
+  export CC="clang" CXX="clang++" CFLAGS="-O3 -flto=thin" LDFLAGS="-fuse-ld=lld -Wl,--icf=safe,--gc-sections"
   if [ "$(uname) $(uname -m)" = "Linux x86_64" ]; then
     # curl -O -L https://apt.llvm.org/llvm.sh # install on debian 13
     # bash llvm.sh 23 -m https://mirrors.nju.edu.cn/llvm-apt
     # apt-get purge --autoremove lldb-23 clangd-23 # or, only install clang-23 lld-23
     export PATH="/usr/lib/llvm-23/bin:$PATH"
-    export CFLAGS="$CFLAGS -march=x86-64-v3 -fprofile-update=atomic -fprofile-generate=$(pwd)/pgo" # pgo:generate
-    export CFLAGS="$CFLAGS -march=x86-64-v3 -fprofile-use=$(pwd)/pgo"
+    export CFLAGS="$CFLAGS -march=x86-64-v3"
   elif [ "$(uname | cut -d "-" -f 1) $(uname -m)" = "MINGW64_NT x86_64" ]; then
     # C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start
-    # pacman -S mingw-w64-clang-x86_64- # clang cmake ninja nasm
+    # pacman -S --needed --noconfirm $(echo _clang_cmake_ninja_nasm | sed "s/_/ mingw-w64-clang-x86_64-/g")
     # tar "C:\Sandbox\klc2u1\DefaultBox\drive\C\twenblock"
     export CFLAGS="$CFLAGS -march=x86-64-v3" # -fprofile-generate -fprofile-use=$(pwd)/pgo-0.profdata
   elif [ "$(uname) $(uname -m)" = "Darwin arm64" ]; then
@@ -336,6 +349,14 @@ if [ "$1" = build ]; then
   else
     uname -a
     exit 1
+  fi
+  if [ "$2" = profile-generate ]; then
+    export CFLAGS="$CFLAGS -fprofile-update=atomic -fprofile-generate=$(pwd)/pgo"
+  elif [ "$2" = profile-use ]; then
+    llvm-profdata merge -output=pgo/default.profdata pgo/*.profraw
+    export CFLAGS="$CFLAGS -fprofile-use=$(pwd)/pgo"
+  else
+    echo "pgo not enabled"
   fi
   export CXXFLAGS="$CFLAGS"
   ninja_targets(){ cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" ; } # # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
@@ -403,31 +424,14 @@ if [ "$1" = build ]; then
 fi
 
 if [ "$1" = profile ]; then
-  # === do profile for later pgo, keep below and skip for now
-  mkdir -p $temp_dir/build
+  # === run and collect performance profile
   cd $temp_dir/build
-  # should includes pictures, office docx, apk, elf
-  # should split the test-suite and trail-suit
-
-  if [ ! -e $dist_dir/pgo_res_bak ]; then
-    mkdir -p $dist_dir/pgo_res_bak
-    curl -o $dist_dir/pgo_res_bak/001.png -L https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png # github desktop screenshot with alpha
-    curl -o $dist_dir/pgo_res_bak/002.png -L https://github.com/libjxl/testdata/raw/73695d303670c90e4d506ea89d9901b081385089/jxl/flower/flower.png # jxl flower big size test file
-    curl -o $dist_dir/pgo_res_bak/003.png -L https://github.com/libjxl/testdata/raw/73695d303670c90e4d506ea89d9901b081385089/jxl/hdr_room.png # jxl hdr room test file
-    curl -o $dist_dir/pgo_res_bak/004.apk -L https://github.com/moonlight-stream/moonlight-android/releases/download/v12.2/app-nonRoot-release.apk # moonlight apk
-    tar -cf $dist_dir/pgo_res_bak/005.tar ect/libpng/libpng-manual.txt ect/libpng/contrib/testpngs/*.png ect/libpng/contrib/libtests giflib/*.c # source code and some png
-    gzip -1 -k $dist_dir/pgo_res_bak/005.tar
-    cp giflib/pic/fire.gif $dist_dir/pgo_res_bak/006.gif
-  fi
-
-  # truncate --size=1234KiB 5.tar
-  # cat pgo_res_bak/*.tar pgo_res_bak/2.png > pgo_res_bak/1.bin
-
   rm -rf pgo
-  profile() { $dist_dir/zcodecs $* ; }
+  get_tick_ms() { [ -r /proc/uptime ] && awk '{printf "%.0f\n", $1*1000}' /proc/uptime || perl -MTime::HiRes=time -e 'printf "%.0f\n", time * 1000' ; }
+  profile() { begin=$(get_tick_ms) ; $dist_dir/zcodecs $* ; echo ">>> duration: $(( $(get_tick_ms) - $begin )) ms" ; }
   for i in 1 2; do # small files twice is enough
     rm -rf pgo_res
-    cp -r $dist_dir/pgo_res_bak pgo_res
+    cp -a pgo_res_bak pgo_res
     export LLVM_PROFILE_FILE=pgo/$i.profraw
     profile cwebp -lossless pgo_res/003.png -o pgo_res/003.webp # to webp lossless
     profile cwebp -lossless -sharp_yuv -m 6 pgo_res/001.png -o pgo_res/001.webp
@@ -440,7 +444,6 @@ if [ "$1" = profile ]; then
     profile cjxl --num_threads=4 -q 68 pgo_res/002.png pgo_res/002.jxl
     profile cjxl --num_threads=4 -q 85 -e 8 pgo_res/003.png pgo_res/003.jxl
     profile cjxl --num_threads=1 pgo_res/006.gif pgo_res/006.jxl
-    profile djxl --num_threads=1 pgo_res/006.jxl pgo_res/006.jxl.gif
     profile djxl --num_threads=4 --pixels_to_jpeg pgo_res/002.jxl pgo_res/002.jpeg # to normal jpeg
     profile jxlinfo pgo_res/002.jxl
     profile cjpegli -q 75 pgo_res/001.png pgo_res/001.jpegli.jpeg
@@ -453,12 +456,12 @@ if [ "$1" = profile ]; then
     profile ect -9 pgo_res/002.3.png # very high level recompress
     ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6 profile zipalign -z -f -P 4 4 pgo_res/004.apk pgo_res/004.zipalign.apk
   done
-  llvm-profdata-23 merge -output=pgo/default.profdata pgo/*.profraw
-  rm -rf pgo/*.profraw
   exit
 fi
 
 if [ "$1" = test ]; then
+  # === not used currently
+  exit 1
   cd $dist_dir
   i_apk=~/misc/res/pkgs/android/wps/wps.16.8.6.v2.apk
   export ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6
