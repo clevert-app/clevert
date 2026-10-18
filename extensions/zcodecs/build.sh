@@ -64,7 +64,7 @@ if [ "$1" = prepare ]; then
   # === prepare for build, modify the source code, add multicall entries
   # zopfli_simd_shortest_path_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-simd-shortest-path.patch" # curl -o zopfli-simd-shortest-path.patch https://github.com/happyarts/Efficient-Compression-Tool/commit/54719dfcf0974020a45b1f476d77f2f99a2eb29c.patch
   zopfli_huffman_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-huffman.patch"
-  zopfli_no_useless_vectorize_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-no-useless-vectorize.patch"
+  zopfli_reduce_simd_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-reduce-simd.patch"
   rm -rf $temp_dir/build
   mkdir -p $temp_dir/build
   cd $temp_dir/build
@@ -72,7 +72,7 @@ if [ "$1" = prepare ]; then
   # > ect
   # (cd ect ; git apply "$zopfli_simd_shortest_path_patch") # p3 (patch 3)
   (cd ect ; git apply "$zopfli_huffman_patch") # p1
-  (cd ect ; git apply "$zopfli_no_useless_vectorize_patch") # p2
+  (cd ect ; git apply "$zopfli_reduce_simd_patch") # p2
   sed -i '1i#include <functional>' ect/src/zopfli/deflate.cpp
   mv ect/src/* ect/
   echo "" > ect/pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
@@ -329,7 +329,7 @@ if [ "$1" = build ]; then
     tar -xf $dist_dir/prepare.tar.zst -C $temp_dir
   fi
   cd $temp_dir/build
-  # export CC="gcc" CXX="g++" CFLAGS="-O3 -flto=auto" LDFLAGS="-Wl,--gc-sections"
+  # export CC="gcc" CXX="g++" CFLAGS="-O3 -flto=auto" LDFLAGS="-Wl,--gc-sections" # gcc
   export CC="clang" CXX="clang++" CFLAGS="-O3 -flto=thin" LDFLAGS="-fuse-ld=lld -Wl,--icf=safe,--gc-sections"
   if [ "$(uname) $(uname -m)" = "Linux x86_64" ]; then
     # curl -O -L https://apt.llvm.org/llvm.sh # install on debian 13
@@ -351,11 +351,13 @@ if [ "$1" = build ]; then
     uname -a
     exit 1
   fi
-  if [ "$2" = profile-generate ]; then
+  if [ "$2" = profile-generate ]; then  
+    # export CFLAGS="$CFLAGS -fprofile-update=atomic -fprofile-dir=$(pwd)/pgo -fprofile-generate" # gcc
     export CFLAGS="$CFLAGS -fprofile-update=atomic -fprofile-generate=$(pwd)/pgo"
   elif [ "$2" = profile-use ]; then
-    llvm-profdata merge -output=pgo/default.profdata pgo/*.profraw
+    # export CFLAGS="$CFLAGS -fprofile-update=atomic -fprofile-dir=$(pwd)/pgo -fprofile-use" # gcc
     export CFLAGS="$CFLAGS -fprofile-use=$(pwd)/pgo"
+    llvm-profdata merge -output=pgo/default.profdata pgo/*.profraw
   else
     echo "pgo not enabled"
   fi
