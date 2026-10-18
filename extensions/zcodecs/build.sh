@@ -64,6 +64,7 @@ if [ "$1" = prepare ]; then
   # === prepare for build, modify the source code, add multicall entries
   # zopfli_simd_shortest_path_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-simd-shortest-path.patch" # curl -o zopfli-simd-shortest-path.patch https://github.com/happyarts/Efficient-Compression-Tool/commit/54719dfcf0974020a45b1f476d77f2f99a2eb29c.patch
   zopfli_huffman_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-huffman.patch"
+  zopfli_no_useless_vectorize_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-no-useless-vectorize.patch"
   rm -rf $temp_dir/build
   mkdir -p $temp_dir/build
   cd $temp_dir/build
@@ -71,12 +72,8 @@ if [ "$1" = prepare ]; then
   # > ect
   # (cd ect ; git apply "$zopfli_simd_shortest_path_patch")
   (cd ect ; git apply "$zopfli_huffman_patch")
+  (cd ect ; git apply "$zopfli_no_useless_vectorize_patch")
   sed -i '1i#include <functional>' ect/src/zopfli/deflate.cpp
-  echo '
-    if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
-      set_property(SOURCE squeeze.c APPEND PROPERTY COMPILE_OPTIONS -fno-vectorize)
-    endif()
-  ' >> ect/src/zopfli/CMakeLists.txt # llvm auto vectorize make this slower
   mv ect/src/* ect/
   echo "" > ect/pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
   echo "#define DCT_ISLOW_SUPPORTED" >> ect/mozjpeg/jmorecfg.h # jxl needs this
@@ -437,7 +434,7 @@ if [ "$1" = profile ]; then
   for i in 1 2; do # small files twice is enough
     rm -rf pgo_res
     cp -a pgo_res_bak pgo_res
-    export LLVM_PROFILE_FILE=pgo/$i.profraw
+    export LLVM_PROFILE_FILE=pgo/$i-%m.profraw
     profile cwebp -lossless pgo_res/003.png -o pgo_res/003.webp # to webp lossless
     profile cwebp -lossless -sharp_yuv -m 6 pgo_res/001.png -o pgo_res/001.webp
     profile cwebp -crop 100 200 1920 1080 pgo_res/002.png -o pgo_res/002.1.webp # to webp lossy

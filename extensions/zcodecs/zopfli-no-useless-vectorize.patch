@@ -1,0 +1,24 @@
+llvm auto vectorize make these slower
+
+--- a/src/zopfli/squeeze.c
++++ b/src/zopfli/squeeze.c
+@@ -378,6 +378,9 @@
+           unsigned dist = *mp++;
+           float price2 = price + disttable[dist];
+           dist <<=9;
++#if defined(__clang__) && defined(__x86_64__)
++#pragma clang loop vectorize(disable)
++#endif
+           for (; curr <= len; curr++) {
+             float x = price2 + litlentable[curr];
+             if (x < costs[j + curr]){
+@@ -649,6 +652,9 @@
+             curr = len + 1;
+             continue;
+           }
++#if defined(__clang__) && defined(__x86_64__)
++#pragma clang loop vectorize(disable)
++#endif
+           for (; curr <= len; curr++) {
+             float x = price2 + litlentable[curr];
+             if (x < costs[j + curr]){
