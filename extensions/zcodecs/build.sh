@@ -62,7 +62,7 @@ fi
 
 if [ "$1" = prepare ]; then
   # === prepare for build, modify the source code, add multicall entries
-  # zopfli_simd_shortest_path_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-simd-shortest-path.patch" # curl -o zopfli-simd-shortest-path.patch https://github.com/happyarts/Efficient-Compression-Tool/commit/54719dfcf0974020a45b1f476d77f2f99a2eb29c.patch
+  zopfli_simd_shortest_path_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-simd-shortest-path.patch" # curl -o zopfli-simd-shortest-path.patch https://github.com/happyarts/Efficient-Compression-Tool/commit/54719dfcf0974020a45b1f476d77f2f99a2eb29c.patch
   zopfli_huffman_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-huffman.patch"
   zopfli_reduce_simd_patch="$(cd "$(dirname "$0")" && pwd)/zopfli-reduce-simd.patch"
   rm -rf $temp_dir/build
@@ -70,7 +70,7 @@ if [ "$1" = prepare ]; then
   cd $temp_dir/build
   tar -xf $dist_dir/fetch.tar.zst --strip-components 1
   # > ect
-  # (cd ect ; git apply "$zopfli_simd_shortest_path_patch") # p3 (patch 3)
+  (cd ect ; git apply "$zopfli_simd_shortest_path_patch") # p3 (patch 3)
   (cd ect ; git apply "$zopfli_huffman_patch") # p1
   (cd ect ; git apply "$zopfli_reduce_simd_patch") # p2
   sed -i '1i#include <functional>' ect/src/zopfli/deflate.cpp
