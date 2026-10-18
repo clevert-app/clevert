@@ -70,9 +70,9 @@ if [ "$1" = prepare ]; then
   cd $temp_dir/build
   tar -xf $dist_dir/fetch.tar.zst --strip-components 1
   # > ect
-  # (cd ect ; git apply "$zopfli_simd_shortest_path_patch")
-  (cd ect ; git apply "$zopfli_huffman_patch")
-  (cd ect ; git apply "$zopfli_no_useless_vectorize_patch")
+  # (cd ect ; git apply "$zopfli_simd_shortest_path_patch") # p3 (patch 3)
+  (cd ect ; git apply "$zopfli_huffman_patch") # p1
+  (cd ect ; git apply "$zopfli_no_useless_vectorize_patch") # p2
   sed -i '1i#include <functional>' ect/src/zopfli/deflate.cpp
   mv ect/src/* ect/
   echo "" > ect/pngusr.h # the ect disabled some libpng features to reduce size, but other programs require full-featured libpng
@@ -468,7 +468,7 @@ if [ "$1" = measure ]; then
     # curl -o test_1.bak.jpeg --skip-existing -L 'https://cn.bing.com/th?id=OHR.ArtemisRocket_EN-US5256990037_UHD.jpg&rf=LaDigue_UHD.jpg&pid=hp&w=3840&h=2160&rs=1&c=4'
     tar -O -xf $dist_dir/prepare.tar.zst build/pgo_res_bak/001.png > test_1.bak.png # 001=screenshot 002=flower 003=hdrroom
     # cp -a '/media/kkocdko/KK_TMP_1/zcodecs/dist/Screenshot From 2026-10-18 14-13-18.png' test_1.bak.png
-    for name in zcodecs_v3_huffman zcodecs_v3_huffman_pgo; do
+    for name in zcodecs_p1p2_v1_pgo zcodecs_p1p2_v3_pgo; do
       echo ==========
       echo [ $name ]
       cp -a test_1.bak.png test_1.png
@@ -490,7 +490,7 @@ if [ "$1" = measure ]; then
     cp $i_apk y.apk
     check_y
     export ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6
-    for name in zcodecs_v3_huffman zcodecs_v3_huffman_pgo; do
+    for name in zcodecs_p1p2_v1_pgo zcodecs_p1p2_v3_pgo; do
       echo ==========
       echo [ $name ]
       time -p taskset -c 2,4,6,8 ./$name zipalign -z -f -P 4 4 $i_apk y.apk
