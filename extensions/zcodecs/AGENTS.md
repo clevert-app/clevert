@@ -42,3 +42,5 @@ I found that in single thread, old one without multi-thread patch is faster, why
 Should found the reason, do not simply take a if branch to run non-threaded logic.
 
 You can edit `~/misc/code/clevert/temp/zcodecs/temp/build/zipalign/*.h *.cpp` files on the fly, not need to edit the patch and run `prepare`. Just `build` it.
+
+Provide `jxltran` command?

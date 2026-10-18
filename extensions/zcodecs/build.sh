@@ -1,14 +1,12 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 trap exit INT
-type git tar zstd cmake ninja nasm > /dev/null # apt-get install ccache ninja-build nasm
+type git tar zstd make cmake ninja nasm > /dev/null # apt-get install ccache ninja-build nasm
 dist_dir=/media/kkocdko/KK_TMP_1/zcodecs/dist
 temp_dir=/media/kkocdko/KK_TMP_1/zcodecs/temp
-# dist_dir=$(pwd)/dist
-# temp_dir=$(pwd)/dist/temp
+# dist_dir=$(pwd)
+# temp_dir=$(pwd)/temp
 mkdir -p $dist_dir $temp_dir
-
-export PATH="/usr/lib/ccache:$PATH" CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache # ln -sf /media/kkocdko/KK_TMP_1/home/.cache/ccache ~/.cache/ccache
 
 # goal: combine many modern codecs, into a single multi-call binary
 # - use intel iccx? skip for now.
@@ -73,6 +71,7 @@ if [ "$1" = prepare ]; then
   # > ect
   # (cd ect ; git apply "$zopfli_simd_shortest_path_patch")
   (cd ect ; git apply "$zopfli_huffman_patch")
+  sed -i '1i#include <functional>' ect/src/zopfli/deflate.cpp
   echo '
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
       set_property(SOURCE squeeze.c APPEND PROPERTY COMPILE_OPTIONS -fno-vectorize)
@@ -130,6 +129,7 @@ if [ "$1" = prepare ]; then
   echo '
     #ifndef ZIPALIGN_COMPAT_H_
     #define ZIPALIGN_COMPAT_H_
+    #define _FILE_OFFSET_BITS 64
     #include <errno.h>
     #include <stdint.h>
     #include <stdio.h>
@@ -321,7 +321,7 @@ if [ "$1" = prepare ]; then
   ' > multicall.cc
   # < now, pack all to tar
   cd ..
-  tar --zstd -cf $dist_dir/prepare.tar.zst build
+  tar --zstd --dereference -cf $dist_dir/prepare.tar.zst build
   rm -rf build
   exit
 fi
@@ -342,9 +342,9 @@ if [ "$1" = build ]; then
     export CFLAGS="$CFLAGS -march=x86-64-v3"
   elif [ "$(uname | cut -d "-" -f 1) $(uname -m)" = "MINGW64_NT x86_64" ]; then
     # C:\msys64\msys2_shell.cmd -clang64 -defterm -here -no-start
-    # pacman -S --needed --noconfirm $(echo _clang_cmake_ninja_nasm | sed "s/_/ mingw-w64-clang-x86_64-/g")
-    # tar "C:\Sandbox\klc2u1\DefaultBox\drive\C\twenblock"
-    export CFLAGS="$CFLAGS -march=x86-64-v3" # -fprofile-generate -fprofile-use=$(pwd)/pgo-0.profdata
+    # pacman -S --needed --noconfirm $(echo _zstd_clang_ccache_make_cmake_ninja_nasm | sed "s/_/ mingw-w64-clang-x86_64-/g")
+    export CFLAGS="$CFLAGS -march=x86-64-v3"
+    export LDFLAGS="$LDFLAGS -static -lole32 -lshlwapi"
   elif [ "$(uname) $(uname -m)" = "Darwin arm64" ]; then
     # proxychains ssh mac@mac-mini-m1.lan
     # brew install llvm@23 lld@23 cmake ninja nasm
@@ -363,6 +363,7 @@ if [ "$1" = build ]; then
     echo "pgo not enabled"
   fi
   export CXXFLAGS="$CFLAGS"
+  export PATH="/usr/lib/ccache:$PATH" CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache # ln -sf /media/kkocdko/KK_TMP_1/home/.cache/ccache ~/.cache/ccache
   ninja_targets(){ cat build/build.ninja | grep $1 | sed -e 's|\$||g' -e 's/|/ /g' | cut -d " " -f 4- | tr " " "\n" | grep -E "\.[^\\/]+$" ; } # # get targets built by $1, fix msys2 paths like "D$:/a.o", remove target head and '|' char, exclude targets without extension name
   # > ect
   cd ect
@@ -404,7 +405,7 @@ if [ "$1" = build ]; then
   jxl_targets="$(
     for applet in jxlinfo cjxl djxl cjpegli djpegli; do
       ninja_targets CXX_EXECUTABLE_LINKER__${applet}_Release
-    done | tr ' ' '\n' | awk '!a[$0]++' | grep -v _nocodec # keep order dedup, then exclude nocodecs stub implements
+    done | tr ' ' '\n' | awk '!a[$0]++' | grep -vE '_nocodec|/[cd]jxl\.dir/utf8\.rc\.' # keep order dedup, then exclude nocodecs stub implements
   )"
   ninja -C build $jxl_targets
   cd ..
@@ -424,6 +425,7 @@ if [ "$1" = build ]; then
     -o $dist_dir/zcodecs
   # llvm-objcopy --strip-unneeded # --strip-all
   # strip $dist_dir/zcodecs
+  ldd $dist_dir/zcodecs
   exit
 fi
 
@@ -431,8 +433,7 @@ if [ "$1" = profile ]; then
   # === run and collect performance profile
   cd $temp_dir/build
   rm -rf pgo
-  get_tick_ms() { [ -r /proc/uptime ] && awk '{printf "%.0f\n", $1*1000}' /proc/uptime || perl -MTime::HiRes=time -e 'printf "%.0f\n", time * 1000' ; }
-  profile() { begin=$(get_tick_ms) ; $dist_dir/zcodecs $* ; echo ">>> duration: $(( $(get_tick_ms) - $begin )) ms" ; }
+  profile() { time -p $dist_dir/zcodecs "$@" ; }
   for i in 1 2; do # small files twice is enough
     rm -rf pgo_res
     cp -a pgo_res_bak pgo_res
@@ -456,33 +457,50 @@ if [ "$1" = profile ]; then
     profile djpegli pgo_res/002.jpegli.jpeg pgo_res/002.jpegli.png
     profile ect -7 -gzip pgo_res/005.tar.gz # gzip decompress + compress
     profile ect -3 -zip pgo_res/005.tar
-    profile ect -5 pgo_res/001.png pgo_res/003.png # high level recompress
+    profile ect -6 pgo_res/001.png pgo_res/003.png # high level recompress
     profile ect -9 pgo_res/002.3.png # very high level recompress
     ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6 profile zipalign -z -f -P 4 4 pgo_res/004.apk pgo_res/004.zipalign.apk
   done
   exit
 fi
 
-if [ "$1" = test ]; then
-  # === not used currently
+if [ "$1" = measure ]; then
+  # === to measure the result
   cd $dist_dir
-  i_apk=~/misc/res/pkgs/android/wps/wps.16.8.6.v2.apk
-  check_y() {
-    du -s y.apk
-    rm -rf y
-    unzip -q -d y y.apk
-    find y -type f -exec sha1sum {} + | sort -k 2 | sha1sum
-  }
-  cp $i_apk y.apk
-  check_y
-  export ZIPALIGN_THREADS=1 ZIPALIGN_ZOPFLI_LEVEL=3
-  for name in zcodecs_gcc_v3_huffman; do
-    echo ==========
-    echo [ $name ]
-    time taskset -c 2 ./$name zipalign -z -f -P 4 4 $i_apk y.apk
+  if [ "$2" = png ]; then
+    # curl -o test_1.bak.jpeg --skip-existing -L 'https://cn.bing.com/th?id=OHR.ArtemisRocket_EN-US5256990037_UHD.jpg&rf=LaDigue_UHD.jpg&pid=hp&w=3840&h=2160&rs=1&c=4'
+    tar -O -xf $dist_dir/prepare.tar.zst build/pgo_res_bak/001.png > test_1.bak.png # 001=screenshot 002=flower 003=hdrroom
+    # cp -a '/media/kkocdko/KK_TMP_1/zcodecs/dist/Screenshot From 2026-10-18 14-13-18.png' test_1.bak.png
+    for name in zcodecs_v3_huffman zcodecs_v3_huffman_pgo; do
+      echo ==========
+      echo [ $name ]
+      cp -a test_1.bak.png test_1.png
+      time -p taskset -c 2,4,6,8 ./$name ect -6 test_1.png
+    done
+    exit
+  fi
+  if [ "$2" = apk ]; then
+    i_apk=/media/kkocdko/KK_TMP_1/zcodecs/temp/build.bak/pgo_res_bak/004.apk
+    i_apk=~/misc/res/pkgs/android/wps/wps.16.8.6.v2.apk
+    i_apk=~/misc/res/pkgs/android/tasker/tasker.6.2.22.forever.v6.apk
+    i_apk=~/misc/res/pkgs/android/tasker/tasker.6.2.22.apk
+    check_y() {
+      du -s y.apk
+      rm -rf y
+      unzip -q -d y y.apk
+      find y -type f -exec sha1sum {} + | sort -k 2 | sha1sum
+    }
+    cp $i_apk y.apk
     check_y
-  done
-  exit
+    export ZIPALIGN_THREADS=4 ZIPALIGN_ZOPFLI_LEVEL=6
+    for name in zcodecs_v3_huffman zcodecs_v3_huffman_pgo; do
+      echo ==========
+      echo [ $name ]
+      time -p taskset -c 2,4,6,8 ./$name zipalign -z -f -P 4 4 $i_apk y.apk
+      check_y
+    done
+    exit
+  fi
 fi
 
 exit 1
