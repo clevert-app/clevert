@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="270 160 370 360" style="background: #567">
+  <path
+    fill="none"
+    stroke="#eca"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="10"
+    d="
+      M 440,410
+      A 16,16 0 0,0 424,394
+      A 26,26 0 0,0 450,368
+      A 42,42 0 0,0 492,410
+      A 68,68 0 0,0 424,478
+      A 110,110 0 0,0 314,368
+      A 178,178 0 0,0 492,190
+      A 288,288 0 0,0 780,478
+    "
+  />
+</svg>
